@@ -2,9 +2,10 @@ using System;
 
 namespace NoLock.Social.Core.Storage
 {
-    public class ContentEntry
+    internal class StoredContent
     {
         public string Hash { get; set; } = string.Empty;
         public byte[] Content { get; set; } = Array.Empty<byte>();
+        public ContentMetadata Metadata { get; set; } = new ContentMetadata();
     }
 }

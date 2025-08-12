@@ -30,7 +30,7 @@ namespace NoLock.Social.Core.Storage
                 return hash;
             }
 
-            var entry = new ContentEntry
+            var storedContent = new StoredContent
             {
                 Hash = hash,
                 Content = content,
@@ -45,10 +45,10 @@ namespace NoLock.Social.Core.Storage
                 }
             };
 
-            var record = new StoreRecord<ContentEntry>
+            var record = new StoreRecord<StoredContent>
             {
                 Storename = _storeName,
-                Data = entry
+                Data = storedContent
             };
 
             await _dbManager.AddRecord(record);
@@ -60,11 +60,11 @@ namespace NoLock.Social.Core.Storage
             var bytes = Encoding.UTF8.GetBytes(content);
             var hash = await StoreAsync(bytes);
             
-            var entry = await GetEntryAsync(hash);
-            if (entry != null && entry.Metadata.AccessCount == 0)
+            var storedContent = await GetStoredContentAsync(hash);
+            if (storedContent != null && storedContent.Metadata.AccessCount == 0)
             {
-                entry.Metadata.ContentType = "text/plain";
-                await UpdateEntryAsync(entry);
+                storedContent.Metadata.ContentType = "text/plain";
+                await UpdateStoredContentAsync(storedContent);
             }
             
             return hash;
@@ -73,11 +73,11 @@ namespace NoLock.Social.Core.Storage
         public async Task<byte[]?> GetAsync(string hash)
         {
             
-            var entry = await GetEntryAsync(hash);
-            if (entry != null)
+            var storedContent = await GetStoredContentAsync(hash);
+            if (storedContent != null)
             {
                 await UpdateAccessTimeAsync(hash);
-                return entry.Content;
+                return storedContent.Content;
             }
             
             return null;
@@ -94,8 +94,8 @@ namespace NoLock.Social.Core.Storage
             
             try
             {
-                var entry = await _dbManager.GetRecordById<string, ContentEntry>(_storeName, hash);
-                return entry != null;
+                var storedContent = await _dbManager.GetRecordById<string, StoredContent>(_storeName, hash);
+                return storedContent != null;
             }
             catch
             {
@@ -120,8 +120,8 @@ namespace NoLock.Social.Core.Storage
         public async Task<IEnumerable<string>> GetAllHashesAsync()
         {
             
-            var allEntries = await _dbManager.GetRecords<ContentEntry>(_storeName);
-            return allEntries?.Select(e => e.Hash) ?? Enumerable.Empty<string>();
+            var allStoredContent = await _dbManager.GetRecords<StoredContent>(_storeName);
+            return allStoredContent?.Select(s => s.Hash) ?? Enumerable.Empty<string>();
         }
 
         public async Task<long> GetSizeAsync(string hash)
@@ -134,8 +134,8 @@ namespace NoLock.Social.Core.Storage
         public async Task<long> GetTotalSizeAsync()
         {
             
-            var allEntries = await _dbManager.GetRecords<ContentEntry>(_storeName);
-            return allEntries?.Sum(e => e.Metadata.Size) ?? 0;
+            var allStoredContent = await _dbManager.GetRecords<StoredContent>(_storeName);
+            return allStoredContent?.Sum(s => s.Metadata.Size) ?? 0;
         }
 
         public async Task ClearAsync()
@@ -146,22 +146,22 @@ namespace NoLock.Social.Core.Storage
         public async Task<ContentMetadata?> GetMetadataAsync(string hash)
         {
             
-            var entry = await GetEntryAsync(hash);
-            return entry?.Metadata;
+            var storedContent = await GetStoredContentAsync(hash);
+            return storedContent?.Metadata;
         }
 
         public async Task<IEnumerable<ContentMetadata>> GetAllMetadataAsync()
         {
             
-            var allEntries = await _dbManager.GetRecords<ContentEntry>(_storeName);
-            return allEntries?.Select(e => e.Metadata) ?? Enumerable.Empty<ContentMetadata>();
+            var allStoredContent = await _dbManager.GetRecords<StoredContent>(_storeName);
+            return allStoredContent?.Select(s => s.Metadata) ?? Enumerable.Empty<ContentMetadata>();
         }
 
-        private async Task<ContentEntry?> GetEntryAsync(string hash)
+        private async Task<StoredContent?> GetStoredContentAsync(string hash)
         {
             try
             {
-                return await _dbManager.GetRecordById<string, ContentEntry>(_storeName, hash);
+                return await _dbManager.GetRecordById<string, StoredContent>(_storeName, hash);
             }
             catch
             {
@@ -169,12 +169,12 @@ namespace NoLock.Social.Core.Storage
             }
         }
 
-        private async Task UpdateEntryAsync(ContentEntry entry)
+        private async Task UpdateStoredContentAsync(StoredContent storedContent)
         {
-            var record = new StoreRecord<ContentEntry>
+            var record = new StoreRecord<StoredContent>
             {
                 Storename = _storeName,
-                Data = entry
+                Data = storedContent
             };
             
             await _dbManager.UpdateRecord(record);
@@ -182,12 +182,12 @@ namespace NoLock.Social.Core.Storage
 
         private async Task UpdateAccessTimeAsync(string hash)
         {
-            var entry = await GetEntryAsync(hash);
-            if (entry != null)
+            var storedContent = await GetStoredContentAsync(hash);
+            if (storedContent != null)
             {
-                entry.Metadata.LastAccessedAt = DateTime.UtcNow;
-                entry.Metadata.AccessCount++;
-                await UpdateEntryAsync(entry);
+                storedContent.Metadata.LastAccessedAt = DateTime.UtcNow;
+                storedContent.Metadata.AccessCount++;
+                await UpdateStoredContentAsync(storedContent);
             }
         }
 
