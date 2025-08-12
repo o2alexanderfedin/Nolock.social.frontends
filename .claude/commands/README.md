@@ -1,6 +1,8 @@
 # Git Flow Slash Command
 
-A single, comprehensive Git Flow command that handles the complete workflow: commit, push, and finish/release automatically.
+A single, comprehensive Git Flow command that handles the complete workflow using `git flow` commands: commit, push, and finish/release automatically.
+
+**Prerequisites:** Requires `git flow` to be installed and initialized.
 
 ## Command: `/gf`
 
@@ -11,32 +13,29 @@ A single, comprehensive Git Flow command that handles the complete workflow: com
 
 ### What it does
 
-The `/gf` command automatically:
+The `/gf` command automatically uses `git flow` commands to:
 
 1. **Detects your current branch type** (feature, hotfix, release, develop, or main)
 2. **Commits all changes** with your message (or auto-generates one)
 3. **Pushes to origin**
-4. **Completes the Git Flow workflow** based on branch type:
+4. **Executes proper git flow commands** based on branch type:
 
 #### On Feature Branch (`feature/*`)
 - Commits and pushes changes
-- Finishes feature (merges to develop)
+- Runs `git flow feature finish <name>`
 - Pushes develop branch
-- Deletes feature branch
 
 #### On Hotfix Branch (`hotfix/*`)
 - Commits and pushes changes
-- Finishes hotfix (merges to main AND develop)
+- Runs `git flow hotfix finish <name>`
 - Creates version tag
 - Pushes main, develop, and tags
-- Deletes hotfix branch
 
 #### On Release Branch (`release/*`)
 - Commits and pushes changes
-- Finishes release (merges to main AND develop)
+- Runs `git flow release finish <version>`
 - Creates version tag
 - Pushes main, develop, and tags
-- Deletes release branch
 
 #### On Develop Branch
 - Commits and pushes changes
@@ -49,17 +48,17 @@ The `/gf` command automatically:
 ### Examples
 
 ```bash
-# Finish current feature with auto-generated message
-/gf
+# On develop: start a new feature
+/gf feature user-auth
 
-# Finish current feature with custom message
+# On feature branch: finish with commit message
 /gf feat: add user authentication
 
-# Complete release with version message
-/gf chore: release version 1.2.0
+# On develop: start a release
+/gf release 1.2.0
 
-# Finish hotfix with descriptive message
-/gf fix: resolve critical payment bug
+# On release/hotfix: finish with tag message
+/gf Release version 1.2.0
 ```
 
 ### Solo Developer Optimized
