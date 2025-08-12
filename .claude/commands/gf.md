@@ -1,49 +1,52 @@
 ---
-description: Complete Git Flow workflow - commit, push, and finish/release in one command
-argument-hint: [commit message] - Auto-detects branch type and completes the flow
+description: Complete Git Flow automation - commits, pushes, finishes, or starts branches
+argument-hint: [action/message] - "feature name", "release 1.0", "hotfix bug", or commit message
 ---
 
-# Git Flow Complete Workflow
+# Git Flow Automation
 
-I'll handle the complete Git Flow workflow: commit, push, and finish/release based on your current branch.
+I'll handle the complete Git Flow workflow automatically based on your current branch and the arguments provided.
 
-## Current Status
+## Checking current status...
+
 !git rev-parse --abbrev-ref HEAD
-!git status --short
+!git status --porcelain
 
-## Analyzing Branch and Executing Workflow
+## Executing Git Flow Workflow
 
-Let me detect your current branch type and execute the appropriate workflow:
+Based on the current branch and arguments "$ARGUMENTS", I will:
 
-1. **If on a feature branch**: 
-   - Commit all changes
-   - Push to origin
-   - Finish feature (merge to develop)
-   - Push develop
+### If on develop branch:
+- If arguments start with "feature": Start new feature branch
+- If arguments start with "release": Start new release branch  
+- If arguments start with "hotfix": Switch to main and start hotfix
+- Otherwise: Commit and push any changes
 
-2. **If on a hotfix branch**:
-   - Commit all changes  
-   - Push to origin
-   - Finish hotfix (merge to main and develop)
-   - Create tag
-   - Push main, develop, and tags
+### If on main branch:
+- If arguments start with "hotfix": Start new hotfix branch
+- Otherwise: Commit and push any changes
 
-3. **If on a release branch**:
-   - Commit all changes
-   - Push to origin
-   - Finish release (merge to main and develop)
-   - Create version tag
-   - Push main, develop, and tags
+### If on feature/* branch:
+- Commit all changes (using arguments as message or auto-generate)
+- Push to origin
+- Finish feature (merge to develop)
+- Delete feature branch
+- Push develop
 
-4. **If on develop**:
-   - Commit all changes
-   - Push to origin
-   - Optionally start a new release if requested
+### If on release/* branch:
+- Commit all changes
+- Push to origin
+- Finish release (merge to main and develop)
+- Create version tag
+- Delete release branch
+- Push main, develop, and tags
 
-5. **If on main**:
-   - Commit all changes
-   - Push to origin
+### If on hotfix/* branch:
+- Commit all changes
+- Push to origin
+- Finish hotfix (merge to main and develop)
+- Create version tag
+- Delete hotfix branch
+- Push main, develop, and tags
 
-The commit message will be: $ARGUMENTS (or auto-generated based on changes if not provided)
-
-Let me execute this workflow now.
+Let me execute the appropriate workflow now...
