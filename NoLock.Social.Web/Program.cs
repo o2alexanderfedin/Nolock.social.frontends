@@ -14,18 +14,12 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 builder.Services.AddIndexedDB(dbStore =>
 {
     dbStore.DbName = "NoLockSocialDB";
-    dbStore.Version = 1;
+    dbStore.Version = 2;
     
     dbStore.Stores.Add(new StoreSchema
     {
         Name = "content_addressable_storage",
-        PrimaryKey = new IndexSpec { Name = "hash", KeyPath = "hash", Unique = true },
-        Indexes = new List<IndexSpec>
-        {
-            new IndexSpec { Name = "createdAt", KeyPath = "metadata.createdAt" },
-            new IndexSpec { Name = "size", KeyPath = "metadata.size" },
-            new IndexSpec { Name = "contentType", KeyPath = "metadata.contentType" }
-        }
+        PrimaryKey = new IndexSpec { Name = "hash", KeyPath = "hash", Unique = true }
     });
 });
 

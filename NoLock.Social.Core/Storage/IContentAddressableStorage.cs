@@ -25,9 +25,5 @@ namespace NoLock.Social.Core.Storage
         ValueTask<long> GetTotalSizeAsync();
         
         ValueTask ClearAsync();
-        
-        ValueTask<ContentMetadata?> GetMetadataAsync(string hash);
-        
-        ValueTask<IEnumerable<ContentMetadata>> GetAllMetadataAsync();
     }
 }
