@@ -8,11 +8,7 @@ namespace NoLock.Social.Core.Storage
     {
         ValueTask<string> StoreAsync(byte[] content);
         
-        ValueTask<string> StoreAsync(string content);
-        
         ValueTask<byte[]?> GetAsync(string hash);
-        
-        ValueTask<string?> GetStringAsync(string hash);
         
         ValueTask<bool> ExistsAsync(string hash);
         

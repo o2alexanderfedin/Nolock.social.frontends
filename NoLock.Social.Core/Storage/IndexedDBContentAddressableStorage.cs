@@ -46,12 +46,6 @@ namespace NoLock.Social.Core.Storage
             return hash;
         }
 
-        public async ValueTask<string> StoreAsync(string content)
-        {
-            var bytes = Encoding.UTF8.GetBytes(content);
-            return await StoreAsync(bytes);
-        }
-
         public async ValueTask<byte[]?> GetAsync(string hash)
         {
             try
@@ -63,12 +57,6 @@ namespace NoLock.Social.Core.Storage
             {
                 return null;
             }
-        }
-
-        public async ValueTask<string?> GetStringAsync(string hash)
-        {
-            var bytes = await GetAsync(hash);
-            return bytes != null ? Encoding.UTF8.GetString(bytes) : null;
         }
 
         public async ValueTask<bool> ExistsAsync(string hash)
