@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Components", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Core", "NoLock.Social.Core\NoLock.Social.Core.csproj", "{E9D9F66B-8327-4B05-BE24-8E659E4397B8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Core.Tests", "NoLock.Social.Core.Tests\NoLock.Social.Core.Tests.csproj", "{46CA1C11-8231-470F-A069-FAB223CC3CDB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Components.Tests", "NoLock.Social.Components.Tests\NoLock.Social.Components.Tests.csproj", "{66407566-C887-4456-95FC-7B5BCC4D3206}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +34,13 @@ Global
 		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{46CA1C11-8231-470F-A069-FAB223CC3CDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{46CA1C11-8231-470F-A069-FAB223CC3CDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{46CA1C11-8231-470F-A069-FAB223CC3CDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{46CA1C11-8231-470F-A069-FAB223CC3CDB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66407566-C887-4456-95FC-7B5BCC4D3206}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66407566-C887-4456-95FC-7B5BCC4D3206}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66407566-C887-4456-95FC-7B5BCC4D3206}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66407566-C887-4456-95FC-7B5BCC4D3206}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
