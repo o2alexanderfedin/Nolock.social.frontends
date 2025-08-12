@@ -11,11 +11,11 @@ namespace NoLock.Social.Core.Storage
 {
     public class IndexedDBContentAddressableStorage : IContentAddressableStorage
     {
-        private readonly IndexedDBManager _dbManager;
+        private readonly IIndexedDBManagerWrapper _dbManager;
         private readonly IHashAlgorithm _hashAlgorithm;
         private readonly string _storeName = "content_addressable_storage";
 
-        public IndexedDBContentAddressableStorage(IndexedDBManager dbManager, IHashAlgorithm hashAlgorithm)
+        public IndexedDBContentAddressableStorage(IIndexedDBManagerWrapper dbManager, IHashAlgorithm hashAlgorithm)
         {
             _dbManager = dbManager;
             _hashAlgorithm = hashAlgorithm;
