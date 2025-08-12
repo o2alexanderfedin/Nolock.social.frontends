@@ -16,4 +16,9 @@
     <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\NoLock.Social.Components\NoLock.Social.Components.csproj" />
+    <ProjectReference Include="..\NoLock.Social.Core\NoLock.Social.Core.csproj" />
+  </ItemGroup>
+
 </Project>

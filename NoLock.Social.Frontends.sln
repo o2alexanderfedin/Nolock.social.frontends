@@ -5,6 +5,10 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Web", "NoLock.Social.Web\NoLock.Social.Web.csproj", "{389BC594-EBD9-4B96-97F9-5A5A23FAF590}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Components", "NoLock.Social.Components\NoLock.Social.Components.csproj", "{4B7EED43-C876-4B59-BADD-DFA1DBA626F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoLock.Social.Core", "NoLock.Social.Core\NoLock.Social.Core.csproj", "{E9D9F66B-8327-4B05-BE24-8E659E4397B8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{389BC594-EBD9-4B96-97F9-5A5A23FAF590}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{389BC594-EBD9-4B96-97F9-5A5A23FAF590}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{389BC594-EBD9-4B96-97F9-5A5A23FAF590}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B7EED43-C876-4B59-BADD-DFA1DBA626F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B7EED43-C876-4B59-BADD-DFA1DBA626F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B7EED43-C876-4B59-BADD-DFA1DBA626F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B7EED43-C876-4B59-BADD-DFA1DBA626F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9D9F66B-8327-4B05-BE24-8E659E4397B8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
