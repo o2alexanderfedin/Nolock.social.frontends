@@ -1,128 +1,152 @@
 ---
-description: Complete Git Flow automation - commits, pushes, and finishes everything in one shot
-argument-hint: [action/message] - "feature name", "release 1.0", "hotfix bug", or commit message
+description: Simple Git Flow workflow - executes commands step by step
+argument-hint: [message or action] - commit message, or "feature name", "release 1.0", "hotfix bug"
 ---
 
-# Git Flow Complete Automation
+# Git Flow Step-by-Step Execution
 
-I'll execute the complete Git Flow workflow in one shot based on your current branch.
+I'll execute simple Git Flow commands step by step.
 
-## Current Status
+## Step 1: Check status
+!git status
 
+## Step 2: Get current branch
 !git rev-parse --abbrev-ref HEAD
-!git status --porcelain
 
-## Executing Complete Workflow
+## Step 3: Execute workflow based on branch
 
-Let me analyze the current branch and execute the full workflow:
+!CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD) && echo "Working on: $CURRENT_BRANCH"
 
-!CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD) && echo "Current branch: $CURRENT_BRANCH"
-
-Based on the branch "$CURRENT_BRANCH" and arguments "$ARGUMENTS", I'll now execute:
-
-### If on develop branch with arguments:
-- **"feature <name>"**: Run `git flow feature start <name>`
-- **"release <version>"**: Run `git flow release start <version>`  
-- **"hotfix <name>"**: Run `git checkout main && git flow hotfix start <name>`
-- **Otherwise**: Commit with message and push
-
-### If on main branch with arguments:
-- **"hotfix <name>"**: Run `git flow hotfix start <name>`
-- **Otherwise**: Commit and push
-
-### If on feature/* branch:
-!if [[ "$CURRENT_BRANCH" == feature/* ]]; then
+### For feature branches:
+!if [[ $CURRENT_BRANCH == feature/* ]]; then
   FEATURE_NAME=${CURRENT_BRANCH#feature/}
-  echo "Finishing feature: $FEATURE_NAME"
+  echo "=== Feature: $FEATURE_NAME ==="
   
-  # Commit any changes
-  if [[ -n $(git status --porcelain) ]]; then
-    git add -A
-    git commit -m "${ARGUMENTS:-feat: complete $FEATURE_NAME}"
-  fi
+  echo "Step 1: Add all changes"
+  git add -A
   
-  # Push feature branch
-  git push -u origin "$CURRENT_BRANCH"
+  echo "Step 2: Commit changes"
+  git commit -m "${ARGUMENTS:-feat: complete $FEATURE_NAME}"
   
-  # Finish feature (non-interactive, no-edit)
-  git flow feature finish -F "$FEATURE_NAME"
+  echo "Step 3: Push feature branch"
+  git push -u origin $CURRENT_BRANCH
   
-  # Push develop
+  echo "Step 4: Finish feature"
+  git flow feature finish -F $FEATURE_NAME
+  
+  echo "Step 5: Push develop"
   git push origin develop
 fi
 
-### If on release/* branch:
-!if [[ "$CURRENT_BRANCH" == release/* ]]; then
+### For release branches:
+!if [[ $CURRENT_BRANCH == release/* ]]; then
   RELEASE_VERSION=${CURRENT_BRANCH#release/}
-  echo "Finishing release: $RELEASE_VERSION"
+  echo "=== Release: $RELEASE_VERSION ==="
   
-  # Commit any changes
-  if [[ -n $(git status --porcelain) ]]; then
-    git add -A
-    git commit -m "${ARGUMENTS:-chore: release $RELEASE_VERSION}"
-  fi
+  echo "Step 1: Add all changes"
+  git add -A
   
-  # Push release branch
-  git push -u origin "$CURRENT_BRANCH"
+  echo "Step 2: Commit changes"
+  git commit -m "${ARGUMENTS:-chore: release $RELEASE_VERSION}"
   
-  # Finish release (non-interactive with message)
-  git flow release finish -F -m "Release $RELEASE_VERSION" "$RELEASE_VERSION"
+  echo "Step 3: Push release branch"
+  git push -u origin $CURRENT_BRANCH
   
-  # Push everything
+  echo "Step 4: Finish release"
+  git flow release finish -F -m "Release $RELEASE_VERSION" $RELEASE_VERSION
+  
+  echo "Step 5: Push main"
   git push origin main
+  
+  echo "Step 6: Push develop"
   git push origin develop
+  
+  echo "Step 7: Push tags"
   git push --tags
 fi
 
-### If on hotfix/* branch:
-!if [[ "$CURRENT_BRANCH" == hotfix/* ]]; then
+### For hotfix branches:
+!if [[ $CURRENT_BRANCH == hotfix/* ]]; then
   HOTFIX_NAME=${CURRENT_BRANCH#hotfix/}
-  echo "Finishing hotfix: $HOTFIX_NAME"
+  echo "=== Hotfix: $HOTFIX_NAME ==="
   
-  # Commit any changes
-  if [[ -n $(git status --porcelain) ]]; then
-    git add -A
-    git commit -m "${ARGUMENTS:-fix: $HOTFIX_NAME}"
-  fi
+  echo "Step 1: Add all changes"
+  git add -A
   
-  # Push hotfix branch
-  git push -u origin "$CURRENT_BRANCH"
+  echo "Step 2: Commit changes"
+  git commit -m "${ARGUMENTS:-fix: $HOTFIX_NAME}"
   
-  # Finish hotfix (non-interactive with message)
-  git flow hotfix finish -F -m "Hotfix $HOTFIX_NAME" "$HOTFIX_NAME"
+  echo "Step 3: Push hotfix branch"
+  git push -u origin $CURRENT_BRANCH
   
-  # Push everything
+  echo "Step 4: Finish hotfix"
+  git flow hotfix finish -F -m "Hotfix $HOTFIX_NAME" $HOTFIX_NAME
+  
+  echo "Step 5: Push main"
   git push origin main
+  
+  echo "Step 6: Push develop"
   git push origin develop
+  
+  echo "Step 7: Push tags"
   git push --tags
 fi
 
-### If on develop/main and just need to commit:
-!if [[ "$CURRENT_BRANCH" == "develop" ]] || [[ "$CURRENT_BRANCH" == "main" ]]; then
-  # Parse arguments for branch creation
+### For develop branch:
+!if [[ $CURRENT_BRANCH == develop ]]; then
+  echo "=== On develop branch ==="
+  
+  # Start new branch if requested
   if [[ "$ARGUMENTS" =~ ^feature[[:space:]]+(.*) ]]; then
     FEATURE_NAME="${BASH_REMATCH[1]}"
     echo "Starting feature: $FEATURE_NAME"
-    git flow feature start "$FEATURE_NAME"
+    git flow feature start $FEATURE_NAME
   elif [[ "$ARGUMENTS" =~ ^release[[:space:]]+(.*) ]]; then
     RELEASE_VERSION="${BASH_REMATCH[1]}"
     echo "Starting release: $RELEASE_VERSION"
-    git flow release start "$RELEASE_VERSION"
+    git flow release start $RELEASE_VERSION
   elif [[ "$ARGUMENTS" =~ ^hotfix[[:space:]]+(.*) ]]; then
     HOTFIX_NAME="${BASH_REMATCH[1]}"
+    echo "Switching to main for hotfix"
+    git checkout main
     echo "Starting hotfix: $HOTFIX_NAME"
-    [[ "$CURRENT_BRANCH" != "main" ]] && git checkout main
-    git flow hotfix start "$HOTFIX_NAME"
+    git flow hotfix start $HOTFIX_NAME
   else
-    # Just commit and push if there are changes
+    # Just commit and push if changes exist
     if [[ -n $(git status --porcelain) ]]; then
+      echo "Step 1: Add all changes"
       git add -A
-      git commit -m "${ARGUMENTS:-chore: update $CURRENT_BRANCH}"
-      git push origin "$CURRENT_BRANCH"
+      echo "Step 2: Commit changes"
+      git commit -m "${ARGUMENTS:-chore: update develop}"
+      echo "Step 3: Push develop"
+      git push origin develop
     else
-      echo "No changes to commit on $CURRENT_BRANCH"
+      echo "No changes to commit"
     fi
   fi
 fi
 
-Done! The workflow has been completed automatically.
+### For main branch:
+!if [[ $CURRENT_BRANCH == main ]]; then
+  echo "=== On main branch ==="
+  
+  if [[ "$ARGUMENTS" =~ ^hotfix[[:space:]]+(.*) ]]; then
+    HOTFIX_NAME="${BASH_REMATCH[1]}"
+    echo "Starting hotfix: $HOTFIX_NAME"
+    git flow hotfix start $HOTFIX_NAME
+  else
+    # Just commit and push if changes exist
+    if [[ -n $(git status --porcelain) ]]; then
+      echo "Step 1: Add all changes"
+      git add -A
+      echo "Step 2: Commit changes"
+      git commit -m "${ARGUMENTS:-chore: update main}"
+      echo "Step 3: Push main"
+      git push origin main
+    else
+      echo "No changes to commit"
+    fi
+  fi
+fi
+
+Done!
