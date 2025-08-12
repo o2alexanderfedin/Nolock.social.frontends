@@ -98,10 +98,16 @@ namespace NoLock.Social.Core.Storage
             }
         }
 
-        public async ValueTask<IEnumerable<string>> GetAllHashesAsync()
+        public async IAsyncEnumerable<string> GetAllHashesAsync()
         {
             var allContent = await _dbManager.GetRecords<ContentEntry>(_storeName);
-            return allContent?.Select(c => c.Hash) ?? Enumerable.Empty<string>();
+            if (allContent != null)
+            {
+                foreach (var content in allContent)
+                {
+                    yield return content.Hash;
+                }
+            }
         }
 
         public async ValueTask<long> GetSizeAsync(string hash)

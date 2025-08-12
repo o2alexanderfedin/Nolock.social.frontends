@@ -18,7 +18,7 @@ namespace NoLock.Social.Core.Storage
         
         ValueTask<bool> DeleteAsync(string hash);
         
-        ValueTask<IEnumerable<string>> GetAllHashesAsync();
+        IAsyncEnumerable<string> GetAllHashesAsync();
         
         ValueTask<long> GetSizeAsync(string hash);
         
