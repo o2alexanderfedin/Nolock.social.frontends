@@ -1,90 +1,89 @@
-# Git Flow Slash Commands
+# Git Flow Slash Command
 
-Custom slash commands for Git Flow workflow management in Claude Code.
+A single, comprehensive Git Flow command that handles the complete workflow: commit, push, and finish/release automatically.
 
-## Available Commands
+## Command: `/gf`
 
-### `/gitflow <action> [type] [name]`
-General Git Flow management command.
+### Usage
+```
+/gf [commit message]
+```
 
-**Examples:**
-- `/gitflow start feature user-auth` - Start a new feature
-- `/gitflow finish feature` - Finish current feature
-- `/gitflow start release 1.2.0` - Start a release
-- `/gitflow status` - Show Git Flow status
+### What it does
 
-### `/feature <action> [name]`
-Manage feature branches.
+The `/gf` command automatically:
 
-**Examples:**
-- `/feature start authentication` - Start feature/authentication branch
-- `/feature finish` - Finish current feature and merge to develop
+1. **Detects your current branch type** (feature, hotfix, release, develop, or main)
+2. **Commits all changes** with your message (or auto-generates one)
+3. **Pushes to origin**
+4. **Completes the Git Flow workflow** based on branch type:
 
-### `/release <action> [version]`
-Manage release branches.
+#### On Feature Branch (`feature/*`)
+- Commits and pushes changes
+- Finishes feature (merges to develop)
+- Pushes develop branch
+- Deletes feature branch
 
-**Examples:**
-- `/release start 1.2.0` - Start release/1.2.0 branch
-- `/release finish` - Finish release, merge to main and develop, create tag
-
-### `/hotfix <action> [name]`
-Manage hotfix branches for production issues.
-
-**Examples:**
-- `/hotfix start critical-bug` - Start hotfix/critical-bug from main
-- `/hotfix finish` - Finish hotfix, merge to main and develop, create tag
-
-### `/flow-status`
-Display current Git Flow status.
-
-Shows:
-- Current branch
-- Uncommitted changes
-- Active feature/hotfix/release branches
-- Recent version tags
-- Git Flow configuration
-
-## Git Flow Workflow
-
-### Features
-- Created from: `develop`
-- Merged to: `develop`
-- Purpose: New functionality
-
-### Releases
-- Created from: `develop`
-- Merged to: `main` and `develop`
-- Purpose: Prepare new production release
+#### On Hotfix Branch (`hotfix/*`)
+- Commits and pushes changes
+- Finishes hotfix (merges to main AND develop)
 - Creates version tag
+- Pushes main, develop, and tags
+- Deletes hotfix branch
 
-### Hotfixes
-- Created from: `main`
-- Merged to: `main` and `develop`
-- Purpose: Emergency production fixes
+#### On Release Branch (`release/*`)
+- Commits and pushes changes
+- Finishes release (merges to main AND develop)
 - Creates version tag
+- Pushes main, develop, and tags
+- Deletes release branch
 
-## Automatic Actions
+#### On Develop Branch
+- Commits and pushes changes
+- Ready for next feature or release
 
-All commands automatically:
-1. Initialize Git Flow if needed
-2. Commit uncommitted changes with appropriate messages
-3. Push branches to origin
-4. Create tags for releases and hotfixes
-5. Clean up completed branches
+#### On Main Branch
+- Commits and pushes changes
+- Production branch updated
 
-## Configuration
+### Examples
 
-Git Flow uses these branch names:
-- Production: `main`
-- Development: `develop`
-- Features: `feature/*`
-- Releases: `release/*`
-- Hotfixes: `hotfix/*`
+```bash
+# Finish current feature with auto-generated message
+/gf
 
-## Solo Developer Mode
+# Finish current feature with custom message
+/gf feat: add user authentication
 
-These commands are optimized for solo development:
-- No pull requests required
-- Automatic pushing to origin
-- Direct merging without review
-- Simplified commit messages
+# Complete release with version message
+/gf chore: release version 1.2.0
+
+# Finish hotfix with descriptive message
+/gf fix: resolve critical payment bug
+```
+
+### Solo Developer Optimized
+
+- **No Pull Requests** - Direct merging
+- **Automatic Push** - All branches pushed to origin
+- **Smart Detection** - Knows what to do based on current branch
+- **One Command** - Complete workflow in a single step
+
+### Git Flow Branch Structure
+
+```
+main (production)
+├── hotfix/* (emergency fixes)
+└── release/* (version releases)
+
+develop (next release)
+└── feature/* (new features)
+```
+
+### Workflow Philosophy
+
+This command embodies the "commit and ship" philosophy:
+- Make changes
+- Run `/gf` with a message
+- Everything else happens automatically
+- No manual branch management needed
