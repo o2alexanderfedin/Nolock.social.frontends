@@ -6,28 +6,28 @@ namespace NoLock.Social.Core.Storage
 {
     public interface IContentAddressableStorage
     {
-        Task<string> StoreAsync(byte[] content);
+        ValueTask<string> StoreAsync(byte[] content);
         
-        Task<string> StoreAsync(string content);
+        ValueTask<string> StoreAsync(string content);
         
-        Task<byte[]?> GetAsync(string hash);
+        ValueTask<byte[]?> GetAsync(string hash);
         
-        Task<string?> GetStringAsync(string hash);
+        ValueTask<string?> GetStringAsync(string hash);
         
-        Task<bool> ExistsAsync(string hash);
+        ValueTask<bool> ExistsAsync(string hash);
         
-        Task<bool> DeleteAsync(string hash);
+        ValueTask<bool> DeleteAsync(string hash);
         
-        Task<IEnumerable<string>> GetAllHashesAsync();
+        ValueTask<IEnumerable<string>> GetAllHashesAsync();
         
-        Task<long> GetSizeAsync(string hash);
+        ValueTask<long> GetSizeAsync(string hash);
         
-        Task<long> GetTotalSizeAsync();
+        ValueTask<long> GetTotalSizeAsync();
         
-        Task ClearAsync();
+        ValueTask ClearAsync();
         
-        Task<ContentMetadata?> GetMetadataAsync(string hash);
+        ValueTask<ContentMetadata?> GetMetadataAsync(string hash);
         
-        Task<IEnumerable<ContentMetadata>> GetAllMetadataAsync();
+        ValueTask<IEnumerable<ContentMetadata>> GetAllMetadataAsync();
     }
 }

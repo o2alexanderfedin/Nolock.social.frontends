@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using NoLock.Social.Core.Storage;
+using NoLock.Social.Core.Hashing;
 
 namespace NoLock.Social.Core.Extensions
 {
@@ -7,6 +8,7 @@ namespace NoLock.Social.Core.Extensions
     {
         public static IServiceCollection AddContentAddressableStorage(this IServiceCollection services)
         {
+            services.AddScoped<IHashAlgorithm, SHA256HashAlgorithm>();
             services.AddScoped<IContentAddressableStorage, IndexedDBContentAddressableStorage>();
             return services;
         }
