@@ -52,7 +52,7 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
         public int Iterations { get; } = 3;
         public int Parallelism { get; } = 1; // WASM constraint
         public int HashLength { get; } = 32; // bytes
-        public string Algorithm { get; } = "Argon2id";
+        public string Algorithm { get; } = "PBKDF2";
         public string Version { get; } = "1.3";
     }
 

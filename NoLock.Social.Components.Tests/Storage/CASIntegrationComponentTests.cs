@@ -74,7 +74,7 @@ namespace NoLock.Social.Components.Tests.Storage
             // Arrange
             var mockSecureBuffer = new Mock<ISecureBuffer>();
             var privateKeyData = new byte[32];
-            for (int i = 0; i < 32; i++)
+            for (var i = 0; i < 32; i++)
                 privateKeyData[i] = 0xFF;
             mockSecureBuffer.Setup(x => x.Data)
                 .Returns(privateKeyData);
@@ -370,7 +370,7 @@ namespace NoLock.Social.Components.Tests.Storage
             // Arrange
             var mockSecureBuffer = new Mock<ISecureBuffer>();
             var privateKeyData = new byte[32];
-            for (int i = 0; i < 32; i++)
+            for (var i = 0; i < 32; i++)
                 privateKeyData[i] = 0xFF;
             mockSecureBuffer.Setup(x => x.Data)
                 .Returns(privateKeyData);

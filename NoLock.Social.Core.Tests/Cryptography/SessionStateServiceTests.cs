@@ -13,12 +13,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
     {
         private readonly SessionStateService _sut;
         private readonly Mock<ISecureMemoryManager> _secureMemoryManagerMock;
-        private readonly Mock<ICryptoJSInteropService> _cryptoInteropMock;
+        private readonly Mock<IWebCryptoService> _cryptoInteropMock;
 
         public SessionStateServiceTests()
         {
             _secureMemoryManagerMock = new Mock<ISecureMemoryManager>();
-            _cryptoInteropMock = new Mock<ICryptoJSInteropService>();
+            _cryptoInteropMock = new Mock<IWebCryptoService>();
             _sut = new SessionStateService(_secureMemoryManagerMock.Object, _cryptoInteropMock.Object);
         }
 
@@ -236,11 +236,14 @@ namespace NoLock.Social.Core.Tests.Cryptography
             
             // Setup the crypto interop to return matching key for unlock
             _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase, username))
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(new byte[32]);
             _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(It.IsAny<byte[]>()))
-                .ReturnsAsync(keyPair);
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
+                .ReturnsAsync(new byte[32]);
+            _cryptoInteropMock
+                .Setup(c => c.GenerateECDSAKeyPairAsync("P-256"))
+                .ReturnsAsync(new ECDSAKeyPair { PublicKey = keyPair.PublicKey, PrivateKey = keyPair.PrivateKey });
 
             await _sut.StartSessionAsync(username, keyPair, privateKeyBuffer);
             await _sut.LockSessionAsync();
@@ -275,11 +278,14 @@ namespace NoLock.Social.Core.Tests.Cryptography
             
             // Setup the crypto interop to return different keys for wrong passphrase
             _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(wrongPassphrase, username))
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
+            _cryptoInteropMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 });
             _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(It.IsAny<byte[]>()))
-                .ReturnsAsync(wrongKeyPair);
+                .Setup(c => c.GenerateECDSAKeyPairAsync("P-256"))
+                .ReturnsAsync(new ECDSAKeyPair { PublicKey = wrongKeyPair.PublicKey, PrivateKey = wrongKeyPair.PrivateKey });
 
             await _sut.StartSessionAsync(username, keyPair, privateKeyBuffer);
             await _sut.LockSessionAsync();

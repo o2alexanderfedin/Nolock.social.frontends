@@ -24,8 +24,8 @@ namespace NoLock.Social.Core.Extensions
             // Browser compatibility
             services.AddScoped<IBrowserCompatibilityService, BrowserCompatibilityService>();
             
-            // JavaScript interop for crypto operations
-            services.AddScoped<ICryptoJSInteropService, CryptoJSInteropService>();
+            // Web Crypto API interop
+            services.AddScoped<IWebCryptoService, WebCryptoService>();
             
             // Secure memory management
             services.AddSingleton<ISecureMemoryManager, SecureMemoryManager>();

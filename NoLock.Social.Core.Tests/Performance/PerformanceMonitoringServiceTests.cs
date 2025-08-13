@@ -210,12 +210,12 @@ public class PerformanceMonitoringServiceTests
         const string operationName = "SuccessRateOp";
         
         // Act - 3 successes, 2 failures
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             using (_service.StartOperation(operationName)) { }
         }
         
-        for (int i = 0; i < 2; i++)
+        for (var i = 0; i < 2; i++)
         {
             using (var timer = _service.StartOperation(operationName))
             {
