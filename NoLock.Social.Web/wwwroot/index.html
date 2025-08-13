@@ -5,8 +5,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NoLock.Social.Web</title>
+    
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: https:; font-src 'self' data:; object-src 'none'; media-src 'self'; frame-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests;" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Permissions-Policy" content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" />
     <base href="/" />
-    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" integrity="" crossorigin="anonymous" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="NoLock.Social.Web.styles.css" rel="stylesheet" />
@@ -29,9 +37,9 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
-    <script src="_framework/blazor.webassembly.js"></script>
-    <script src="_content/TG.Blazor.IndexedDB/indexedDb.Blazor.js"></script>
-    <script src="js/crypto-interop.js"></script>
+    <script src="_framework/blazor.webassembly.js" integrity="" crossorigin="anonymous"></script>
+    <script src="_content/TG.Blazor.IndexedDB/indexedDb.Blazor.js" integrity="" crossorigin="anonymous"></script>
+    <script src="js/crypto-interop.js" integrity="" crossorigin="anonymous"></script>
     <script>navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 

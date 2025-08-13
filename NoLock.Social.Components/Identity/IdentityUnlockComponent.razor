@@ -1,0 +1,165 @@
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using NoLock.Social.Core.Cryptography
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
+@using System.ComponentModel.DataAnnotations
+@inject IKeyDerivationService KeyDerivationService
+@inject ISessionStateService SessionStateService
+@inject ILogger<IdentityUnlockComponent> Logger
+
+<div class="identity-unlock-container">
+    <div class="unlock-card">
+        <h3 class="unlock-title">Unlock Your Identity</h3>
+        
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                @_errorMessage
+            </div>
+        }
+
+        <EditForm Model="@_unlockModel" OnValidSubmit="@HandleUnlock">
+            <DataAnnotationsValidator />
+            
+            <div class="form-group">
+                <label for="username">Username</label>
+                <InputText id="username" class="form-control" @bind-Value="_unlockModel.Username" 
+                           placeholder="Enter your username" disabled="@_isProcessing" />
+                <ValidationMessage For="@(() => _unlockModel.Username)" />
+            </div>
+
+            <div class="form-group">
+                <label for="passphrase">Passphrase</label>
+                <InputText id="passphrase" type="password" class="form-control" 
+                           @bind-Value="_unlockModel.Passphrase" 
+                           placeholder="Enter your secure passphrase" 
+                           disabled="@_isProcessing" />
+                <ValidationMessage For="@(() => _unlockModel.Passphrase)" />
+            </div>
+
+            @if (_isProcessing)
+            {
+                <div class="progress-container">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: 100%"
+                             aria-valuenow="100" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            Deriving keys...
+                        </div>
+                    </div>
+                    <small class="text-muted">This may take a few seconds for security</small>
+                </div>
+            }
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" disabled="@_isProcessing">
+                    @if (_isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Unlocking...</span>
+                    }
+                    else
+                    {
+                        <span>Unlock Identity</span>
+                    }
+                </button>
+            </div>
+        </EditForm>
+
+        <div class="security-note">
+            <small class="text-muted">
+                <strong>Security Note:</strong> Your passphrase is never stored or transmitted. 
+                It is used locally to derive your cryptographic keys using Argon2id.
+            </small>
+        </div>
+    </div>
+</div>
+
+@code {
+    private UnlockModel _unlockModel = new();
+    private bool _isProcessing = false;
+    private string _errorMessage = "";
+
+    [Parameter] public EventCallback<IdentitySession> OnIdentityUnlocked { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Component initialization
+    }
+
+    private async Task HandleUnlock()
+    {
+        _isProcessing = true;
+        _errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            Logger.LogInformation("Starting identity unlock for user: {Username}", _unlockModel.Username);
+
+            // Derive identity from passphrase and username
+            var (keyPair, privateKeyBuffer) = await KeyDerivationService.DeriveIdentityAsync(
+                _unlockModel.Passphrase, 
+                _unlockModel.Username);
+
+            // Start session with derived keys
+            var success = await SessionStateService.StartSessionAsync(
+                _unlockModel.Username,
+                keyPair,
+                privateKeyBuffer);
+
+            if (success)
+            {
+                Logger.LogInformation("Identity successfully unlocked for user: {Username}", _unlockModel.Username);
+                
+                // Clear the form
+                _unlockModel = new UnlockModel();
+                
+                // Notify parent component
+                if (OnIdentityUnlocked.HasDelegate)
+                {
+                    await OnIdentityUnlocked.InvokeAsync(SessionStateService.CurrentSession);
+                }
+            }
+            else
+            {
+                _errorMessage = "Failed to unlock identity. Please try again.";
+                Logger.LogWarning("Failed to start session for user: {Username}", _unlockModel.Username);
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            _errorMessage = $"Invalid input: {ex.Message}";
+            Logger.LogError(ex, "Invalid input during unlock");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An unexpected error occurred. Please try again.";
+            Logger.LogError(ex, "Error during identity unlock");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+
+    private class UnlockModel
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "Passphrase is required")]
+        [StringLength(200, MinimumLength = 12, ErrorMessage = "Passphrase must be at least 12 characters")]
+        public string Passphrase { get; set; } = "";
+    }
+}

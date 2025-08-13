@@ -1,7 +1,38 @@
 ﻿@page "/"
+@using NoLock.Social.Components.Identity
+@using NoLock.Social.Components.Content
+@using NoLock.Social.Components.Storage
 
-<PageTitle>Home</PageTitle>
+<PageTitle>NoLock Social - Decentralized Identity Platform</PageTitle>
 
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+<div class="container-fluid">
+    <h1>NoLock Social Platform</h1>
+    <p class="lead">A decentralized identity and content management system with cryptographic security.</p>
+    
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <IdentityStatusComponent />
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <IdentityUnlockComponent />
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <ContentSigningComponent />
+        </div>
+        <div class="col-md-6 mb-4">
+            <SignatureVerificationComponent />
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <CASIntegrationComponent />
+        </div>
+    </div>
+</div>
