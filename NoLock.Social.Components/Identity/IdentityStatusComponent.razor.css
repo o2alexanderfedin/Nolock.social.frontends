@@ -1,0 +1,105 @@
+.identity-status-container {
+    padding: 1rem;
+}
+
+.identity-card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.identity-card.unlocked {
+    border-color: #28a745;
+}
+
+.identity-card.locked {
+    border-color: #dc3545;
+}
+
+.status-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 0.75rem;
+}
+
+.status-unlocked {
+    background-color: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.status-locked {
+    background-color: #dc3545;
+}
+
+::deep @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+.identity-details {
+    margin-bottom: 1.5rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #495057;
+}
+
+.detail-value {
+    color: #212529;
+    font-family: monospace;
+}
+
+.public-key {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.copy-toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: #28a745;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.25rem;
+    animation: slideIn 0.3s ease-out;
+    z-index: 1000;
+}
+
+::deep @keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}

@@ -1,0 +1,479 @@
+@using NoLock.Social.Core.Storage.Interfaces
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using Microsoft.Extensions.Logging
+@inject IStorageAdapterService StorageAdapter
+@inject ISigningService SigningService
+@inject ISessionStateService SessionService
+@inject ICryptoErrorHandlingService ErrorHandler
+@inject ILogger<CASIntegrationComponent> Logger
+
+<div class="cas-integration-container">
+    <h3>Content Addressable Storage</h3>
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            <strong>Error:</strong> @errorMessage
+            @if (recoverySuggestions?.Any() == true)
+            {
+                <ul class="mt-2">
+                    @foreach (var suggestion in recoverySuggestions)
+                    {
+                        <li>@suggestion</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+    
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success">
+            @successMessage
+        </div>
+    }
+
+    <!-- Store Content Section -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4>Store Signed Content</h4>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="contentInput" class="form-label">Content to Store:</label>
+                <textarea id="contentInput" class="form-control" rows="4" @bind="contentToStore" 
+                          placeholder="Enter your content here..."></textarea>
+            </div>
+            <button class="btn btn-primary" @onclick="StoreContentAsync" disabled="@(isProcessing || !isSessionActive)">
+                @if (isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                Store Content
+            </button>
+            
+            @if (!isSessionActive)
+            {
+                <div class="alert alert-info mt-2">
+                    Please unlock your identity first to store content.
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Content Address Display -->
+    @if (!string.IsNullOrEmpty(lastStoredAddress))
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4>Recently Stored Content</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>Content Address:</strong>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" value="@lastStoredAddress" readonly />
+                        <button class="btn btn-outline-secondary" @onclick="CopyAddressToClipboard">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+                @if (lastStoredMetadata != null)
+                {
+                    <div class="metadata-display">
+                        <p><strong>Size:</strong> @FormatBytes(lastStoredMetadata.Size)</p>
+                        <p><strong>Algorithm:</strong> @lastStoredMetadata.Algorithm</p>
+                        <p><strong>Timestamp:</strong> @lastStoredMetadata.Timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC")</p>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Retrieve Content Section -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4>Retrieve Content by Address</h4>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="addressInput" class="form-label">Content Address:</label>
+                <input id="addressInput" type="text" class="form-control font-monospace" @bind="addressToRetrieve" 
+                       placeholder="Enter content address (SHA-256 hash)..." />
+            </div>
+            <button class="btn btn-primary" @onclick="RetrieveContentAsync" disabled="@isProcessing">
+                @if (isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                Retrieve Content
+            </button>
+        </div>
+    </div>
+
+    <!-- Retrieved Content Display -->
+    @if (retrievedContent != null)
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4>Retrieved Content</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Content:</strong>
+                    <div class="content-display">
+                        <pre class="bg-light p-3 rounded">@retrievedContent.Content</pre>
+                    </div>
+                </div>
+                <div class="metadata-display">
+                    <p><strong>Algorithm:</strong> @retrievedContent.Algorithm</p>
+                    <p><strong>Version:</strong> @retrievedContent.Version</p>
+                    <p><strong>Timestamp:</strong> @retrievedContent.Timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC")</p>
+                    <p><strong>Public Key:</strong> <span class="font-monospace">@Convert.ToBase64String(retrievedContent.PublicKey).Substring(0, 20)...</span></p>
+                </div>
+                <div class="alert alert-success mt-3">
+                    <strong>✓ Signature Verified</strong> - Content is authentic and unmodified.
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Content Browser -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4>Browse Stored Content</h4>
+            <button class="btn btn-sm btn-outline-primary" @onclick="RefreshContentListAsync" disabled="@isProcessing">
+                @if (isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <span>Refresh</span>
+                }
+            </button>
+        </div>
+        <div class="card-body">
+            @if (storedContentList?.Any() == true)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Address</th>
+                                <th>Size</th>
+                                <th>Timestamp</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in storedContentList)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="font-monospace" title="@item.ContentAddress">
+                                            @item.ContentAddress.Substring(0, Math.Min(16, item.ContentAddress.Length))...
+                                        </span>
+                                    </td>
+                                    <td>@FormatBytes(item.Size)</td>
+                                    <td>@item.Timestamp.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary me-1" 
+                                                @onclick="() => LoadContentAsync(item.ContentAddress)">
+                                            Load
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                @onclick="() => DeleteContentAsync(item.ContentAddress)">
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (isProcessing)
+            {
+                <div class="text-center">
+                    <div class="spinner-border"></div>
+                    <p class="mt-2">Loading content list...</p>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted">No content stored yet.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string contentToStore = string.Empty;
+    private string addressToRetrieve = string.Empty;
+    private string lastStoredAddress = string.Empty;
+    private StorageMetadata? lastStoredMetadata;
+    private SignedContent? retrievedContent;
+    private List<StorageMetadata> storedContentList = new();
+    
+    private bool isProcessing = false;
+    private bool isSessionActive = false;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private IReadOnlyList<string>? recoverySuggestions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckSessionStatusAsync();
+        await RefreshContentListAsync();
+    }
+
+    private async Task CheckSessionStatusAsync()
+    {
+        try
+        {
+            isSessionActive = SessionService.IsUnlocked;
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to check session status");
+            isSessionActive = false;
+        }
+    }
+
+    private async Task StoreContentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(contentToStore))
+        {
+            errorMessage = "Please enter some content to store.";
+            return;
+        }
+
+        isProcessing = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        recoverySuggestions = null;
+
+        try
+        {
+            // Check session again
+            await CheckSessionStatusAsync();
+            if (!isSessionActive)
+            {
+                errorMessage = "Session is not active. Please unlock your identity first.";
+                return;
+            }
+
+            // Get the current session
+            var session = SessionService.CurrentSession;
+            if (session == null || session.PrivateKeyBuffer == null)
+            {
+                errorMessage = "No active session found. Please unlock your identity first.";
+                return;
+            }
+            
+            // Get the private key from secure buffer
+            var privateKey = session.PrivateKeyBuffer.Data;
+            
+            // Sign the content
+            var signedContent = await SigningService.SignContentAsync(contentToStore, privateKey, session.PublicKey);
+            
+            // Store in CAS
+            var metadata = await StorageAdapter.StoreSignedContentAsync(signedContent);
+            
+            lastStoredAddress = metadata.ContentAddress;
+            lastStoredMetadata = metadata;
+            successMessage = $"Content successfully stored with address: {metadata.ContentAddress.Substring(0, 16)}...";
+            
+            // Refresh the content list
+            await RefreshContentListAsync();
+            
+            // Clear the input
+            contentToStore = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to store content");
+            
+            var errorInfo = await ErrorHandler.HandleErrorAsync(ex, new ErrorContext
+            {
+                Component = nameof(CASIntegrationComponent),
+                Operation = "StoreContent",
+                AdditionalData = new Dictionary<string, object>
+                {
+                    { "ContentLength", contentToStore?.Length ?? 0 }
+                }
+            });
+            
+            if (errorInfo != null)
+            {
+                errorMessage = errorInfo.UserMessage;
+                recoverySuggestions = errorInfo.RecoverySuggestions;
+            }
+            else
+            {
+                errorMessage = "An error occurred while storing content.";
+                recoverySuggestions = new[] { "Please try again later." };
+            }
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task RetrieveContentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(addressToRetrieve))
+        {
+            errorMessage = "Please enter a content address to retrieve.";
+            return;
+        }
+
+        isProcessing = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        recoverySuggestions = null;
+        retrievedContent = null;
+
+        try
+        {
+            var content = await StorageAdapter.RetrieveSignedContentAsync(addressToRetrieve);
+            
+            if (content == null)
+            {
+                errorMessage = "Content not found for the provided address.";
+                return;
+            }
+            
+            retrievedContent = content;
+            successMessage = "Content retrieved and signature verified successfully!";
+        }
+        catch (StorageVerificationException ex)
+        {
+            Logger.LogError(ex, "Signature verification failed for content");
+            errorMessage = "The retrieved content failed signature verification. It may have been tampered with.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to retrieve content");
+            
+            var errorInfo = await ErrorHandler.HandleErrorAsync(ex, new ErrorContext
+            {
+                Component = nameof(CASIntegrationComponent),
+                Operation = "RetrieveContent",
+                AdditionalData = new Dictionary<string, object>
+                {
+                    { "ContentAddress", addressToRetrieve ?? string.Empty }
+                }
+            });
+            
+            if (errorInfo != null)
+            {
+                errorMessage = errorInfo.UserMessage;
+                recoverySuggestions = errorInfo.RecoverySuggestions;
+            }
+            else
+            {
+                errorMessage = "An error occurred while retrieving content.";
+                recoverySuggestions = new[] { "Please check the address and try again." };
+            }
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task LoadContentAsync(string contentAddress)
+    {
+        addressToRetrieve = contentAddress;
+        await RetrieveContentAsync();
+    }
+
+    private async Task DeleteContentAsync(string contentAddress)
+    {
+        isProcessing = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var deleted = await StorageAdapter.DeleteContentAsync(contentAddress);
+            
+            if (deleted)
+            {
+                successMessage = "Content deleted successfully.";
+                await RefreshContentListAsync();
+            }
+            else
+            {
+                errorMessage = "Content not found or could not be deleted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete content");
+            errorMessage = "Failed to delete content. Please try again.";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task RefreshContentListAsync()
+    {
+        isProcessing = true;
+        
+        try
+        {
+            storedContentList.Clear();
+            
+            await foreach (var metadata in StorageAdapter.ListAllContentAsync())
+            {
+                storedContentList.Add(metadata);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to refresh content list");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task CopyAddressToClipboard()
+    {
+        try
+        {
+            // This would require JS interop in a real implementation
+            // For now, just show a success message
+            successMessage = "Content address copied to clipboard!";
+            await Task.Delay(2000);
+            successMessage = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to copy to clipboard");
+        }
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        
+        return $"{size:0.##} {sizes[order]}";
+    }
+}

@@ -67,5 +67,10 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
         /// Gets the remaining time before session timeout
         /// </summary>
         TimeSpan GetRemainingTime();
+
+        /// <summary>
+        /// Extends the current session by resetting the timeout
+        /// </summary>
+        Task ExtendSessionAsync();
     }
 }

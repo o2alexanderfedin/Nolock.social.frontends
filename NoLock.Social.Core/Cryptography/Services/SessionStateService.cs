@@ -30,6 +30,9 @@ namespace NoLock.Social.Core.Cryptography.Services
         {
             get
             {
+                if (_disposed)
+                    return SessionState.Locked;
+                    
                 _lock.EnterReadLock();
                 try
                 {
@@ -42,6 +45,9 @@ namespace NoLock.Social.Core.Cryptography.Services
             }
             private set
             {
+                if (_disposed)
+                    return;
+                    
                 _lock.EnterWriteLock();
                 try
                 {
@@ -58,6 +64,9 @@ namespace NoLock.Social.Core.Cryptography.Services
         {
             get
             {
+                if (_disposed)
+                    return null;
+                    
                 _lock.EnterReadLock();
                 try
                 {
@@ -370,6 +379,15 @@ namespace NoLock.Social.Core.Cryptography.Services
                 NewState = newState,
                 Reason = reason
             });
+        }
+
+        public async Task ExtendSessionAsync()
+        {
+            if (CurrentState != SessionState.Unlocked || _currentSession == null)
+                return;
+
+            UpdateActivity();
+            await Task.CompletedTask;
         }
 
         public void Dispose()

@@ -1,0 +1,301 @@
+@namespace NoLock.Social.Components.Content
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@inject IVerificationService VerificationService
+@inject ILogger<SignatureVerificationComponent> Logger
+
+<div class="signature-verification-container">
+    <div class="verification-card">
+        <h3 class="verification-title">Verify Signature</h3>
+        
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                @_errorMessage
+            </div>
+        }
+        
+        @if (_verificationResult.HasValue)
+        {
+            @if (_verificationResult.Value)
+            {
+                <div class="alert alert-success" role="alert">
+                    <strong>Signature is valid!</strong> The signature was successfully verified against the content and public key.
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger" role="alert">
+                    <strong>Signature is invalid!</strong> The signature does not match the content or public key.
+                </div>
+            }
+        }
+
+        <div class="input-method-tabs">
+            <button type="button" class="tab-button @(_inputMethod == InputMethod.Manual ? "active" : "")" 
+                    @onclick="() => SetInputMethod(InputMethod.Manual)">
+                Manual Input
+            </button>
+            <button type="button" class="tab-button @(_inputMethod == InputMethod.JSON ? "active" : "")"
+                    @onclick="() => SetInputMethod(InputMethod.JSON)"
+                    id="paste-json">
+                Paste JSON
+            </button>
+        </div>
+
+        @if (_inputMethod == InputMethod.Manual)
+        {
+            <EditForm Model="@_verificationModel" OnValidSubmit="@HandleVerifySignature">
+                <DataAnnotationsValidator />
+                
+                <div class="form-group">
+                    <label for="content">Content</label>
+                    <textarea id="content" 
+                              class="form-control" 
+                              rows="4"
+                              @bind="_verificationModel.Content"
+                              @bind:event="oninput"
+                              @bind:after="ClearResult"
+                              placeholder="Enter the original content that was signed"
+                              disabled="@_isProcessing">
+                    </textarea>
+                    <ValidationMessage For="@(() => _verificationModel.Content)" />
+                </div>
+
+                <div class="form-group">
+                    <label for="signature">Signature (Base64)</label>
+                    <input id="signature" 
+                           type="text" 
+                           class="form-control"
+                           @bind="_verificationModel.Signature"
+                           @bind:event="oninput"
+                           @bind:after="ClearResult"
+                           placeholder="Enter the Ed25519 signature in Base64 format"
+                           disabled="@_isProcessing" />
+                    <ValidationMessage For="@(() => _verificationModel.Signature)" />
+                </div>
+
+                <div class="form-group">
+                    <label for="publickey">Public Key (Base64)</label>
+                    <input id="publickey" 
+                           type="text" 
+                           class="form-control"
+                           @bind="_verificationModel.PublicKey"
+                           @bind:event="oninput"
+                           @bind:after="ClearResult"
+                           placeholder="Enter the Ed25519 public key in Base64 format"
+                           disabled="@_isProcessing" />
+                    <ValidationMessage For="@(() => _verificationModel.PublicKey)" />
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" 
+                            class="btn btn-primary" 
+                            disabled="@(_isProcessing || !IsFormValid())">
+                        @if (_isProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span>Verifying...</span>
+                        }
+                        else
+                        {
+                            <span>Verify Signature</span>
+                        }
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else
+        {
+            <div class="json-input-section">
+                <div class="form-group">
+                    <label for="json-input">Paste Signed Content JSON</label>
+                    <textarea id="json-input" 
+                              class="form-control json-textarea" 
+                              rows="8"
+                              @bind="_jsonInput"
+                              @bind:event="oninput"
+                              placeholder='Paste JSON in format:
+{
+  "content": "...",
+  "signature": "...",
+  "publicKey": "..."
+}'
+                              disabled="@_isProcessing">
+                    </textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" 
+                            id="parse-json"
+                            class="btn btn-secondary"
+                            @onclick="ParseJsonInput"
+                            disabled="@(_isProcessing || string.IsNullOrWhiteSpace(_jsonInput))">
+                        Parse JSON
+                    </button>
+                </div>
+                
+                @if (_jsonParsed)
+                {
+                    <div class="parsed-info mt-3">
+                        <small class="text-success">JSON parsed successfully! Click "Manual Input" tab to see the values.</small>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="info-section">
+            <h4>How to Use</h4>
+            <ol>
+                <li>Enter the original content that was signed</li>
+                <li>Paste the Ed25519 signature (Base64 encoded)</li>
+                <li>Paste the public key used for signing (Base64 encoded)</li>
+                <li>Click "Verify Signature" to validate</li>
+            </ol>
+            <p class="text-muted">
+                Alternatively, you can paste the full JSON output from the signing component using the "Paste JSON" tab.
+            </p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private VerificationModel _verificationModel = new();
+    private bool _isProcessing = false;
+    private string _errorMessage = "";
+    private bool? _verificationResult = null;
+    private InputMethod _inputMethod = InputMethod.Manual;
+    private string _jsonInput = "";
+    private bool _jsonParsed = false;
+
+    private enum InputMethod
+    {
+        Manual,
+        JSON
+    }
+
+    [Parameter] public EventCallback<bool> OnVerificationComplete { get; set; }
+
+    private void SetInputMethod(InputMethod method)
+    {
+        _inputMethod = method;
+        _jsonParsed = false;
+        ClearResult();
+    }
+
+    private void ClearResult()
+    {
+        _verificationResult = null;
+        _errorMessage = "";
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(_verificationModel.Content) &&
+               !string.IsNullOrWhiteSpace(_verificationModel.Signature) &&
+               !string.IsNullOrWhiteSpace(_verificationModel.PublicKey);
+    }
+
+    private void ParseJsonInput()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            
+            var parsed = JsonSerializer.Deserialize<SignatureJsonModel>(_jsonInput, options);
+            
+            if (parsed != null)
+            {
+                _verificationModel.Content = parsed.Content ?? "";
+                _verificationModel.Signature = parsed.Signature ?? parsed.SignatureBase64 ?? "";
+                _verificationModel.PublicKey = parsed.PublicKey ?? parsed.PublicKeyBase64 ?? "";
+                
+                _jsonParsed = true;
+                _inputMethod = InputMethod.Manual; // Switch to manual to show the parsed values
+                StateHasChanged();
+            }
+        }
+        catch (JsonException ex)
+        {
+            _errorMessage = $"Invalid JSON format: {ex.Message}";
+            Logger.LogError(ex, "Failed to parse JSON input");
+        }
+    }
+
+    private async Task HandleVerifySignature()
+    {
+        if (!IsFormValid())
+            return;
+
+        _isProcessing = true;
+        _errorMessage = "";
+        _verificationResult = null;
+        StateHasChanged();
+
+        try
+        {
+            Logger.LogInformation("Starting signature verification");
+
+            // Verify the signature
+            _verificationResult = await VerificationService.VerifySignatureAsync(
+                _verificationModel.Content,
+                _verificationModel.Signature,
+                _verificationModel.PublicKey);
+
+            Logger.LogInformation("Signature verification completed: {Result}", 
+                _verificationResult.Value ? "Valid" : "Invalid");
+            
+            // Notify parent component if needed
+            if (OnVerificationComplete.HasDelegate)
+            {
+                await OnVerificationComplete.InvokeAsync(_verificationResult.Value);
+            }
+        }
+        catch (FormatException ex)
+        {
+            _errorMessage = "Invalid Base64 format. Please check your signature and public key.";
+            Logger.LogError(ex, "Base64 format error during verification");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "Failed to verify signature. Please check your inputs and try again.";
+            Logger.LogError(ex, "Error during signature verification");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private class VerificationModel
+    {
+        [Required(ErrorMessage = "Content is required")]
+        public string Content { get; set; } = "";
+
+        [Required(ErrorMessage = "Signature is required")]
+        public string Signature { get; set; } = "";
+
+        [Required(ErrorMessage = "Public key is required")]
+        public string PublicKey { get; set; } = "";
+    }
+
+    private class SignatureJsonModel
+    {
+        public string? Content { get; set; }
+        public string? Signature { get; set; }
+        public string? SignatureBase64 { get; set; }
+        public string? PublicKey { get; set; }
+        public string? PublicKeyBase64 { get; set; }
+        public string? ContentHash { get; set; }
+        public string? Algorithm { get; set; }
+        public string? Version { get; set; }
+        public DateTime? Timestamp { get; set; }
+    }
+}

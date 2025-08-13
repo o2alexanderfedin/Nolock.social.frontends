@@ -1,0 +1,286 @@
+@namespace NoLock.Social.Components.Content
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using NoLock.Social.Core.Cryptography
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject ISigningService SigningService
+@inject ISessionStateService SessionStateService
+@inject ILogger<ContentSigningComponent> Logger
+@inject IJSRuntime JSRuntime
+
+<div class="content-signing-container">
+    @if (!SessionStateService.IsUnlocked)
+    {
+        <div class="alert alert-warning" role="alert">
+            <h4 class="alert-heading">Session is locked</h4>
+            <p>You must unlock your identity first to sign content.</p>
+        </div>
+    }
+    else
+    {
+        <div class="signing-card">
+            <h3 class="signing-title">Sign Content</h3>
+            
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger" role="alert">
+                    @_errorMessage
+                </div>
+            }
+
+            <EditForm Model="@_signingModel" OnValidSubmit="@HandleSignContent">
+                <DataAnnotationsValidator />
+                
+                <div class="form-group">
+                    <label for="content">Content to Sign</label>
+                    <textarea id="content" 
+                              class="form-control" 
+                              rows="6"
+                              @bind="_signingModel.Content"
+                              @bind:event="oninput"
+                              placeholder="Enter content to sign"
+                              disabled="@_isProcessing">
+                    </textarea>
+                    <ValidationMessage For="@(() => _signingModel.Content)" />
+                    <small class="text-muted">
+                        @(_signingModel.Content?.Length ?? 0) characters
+                    </small>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" 
+                            class="btn btn-primary" 
+                            disabled="@(_isProcessing || string.IsNullOrWhiteSpace(_signingModel.Content))">
+                        @if (_isProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span>Signing...</span>
+                        }
+                        else
+                        {
+                            <span>Sign Content</span>
+                        }
+                    </button>
+                </div>
+            </EditForm>
+
+            @if (_signatureResult != null)
+            {
+                <div class="signature-result mt-4">
+                    <h4>Signature Result</h4>
+                    
+                    <div class="result-section">
+                        <label>Algorithm:</label>
+                        <div class="result-value">@_signatureResult.Algorithm</div>
+                    </div>
+
+                    <div class="result-section">
+                        <label>Version:</label>
+                        <div class="result-value">@_signatureResult.Version</div>
+                    </div>
+
+                    <div class="result-section">
+                        <label>Timestamp:</label>
+                        <div class="result-value">@_signatureResult.Timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC")</div>
+                    </div>
+
+                    <div class="result-section">
+                        <label>Content Hash (SHA-256):</label>
+                        <div class="result-value-container">
+                            <code class="result-value">@_contentHashBase64</code>
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                    @onclick="() => CopyToClipboard(_contentHashBase64)">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="result-section">
+                        <label>Signature (Ed25519):</label>
+                        <div class="result-value-container">
+                            <code class="result-value signature-text">@_signatureBase64</code>
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                    @onclick="() => CopyToClipboard(_signatureBase64)">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="result-section">
+                        <label>Public Key:</label>
+                        <div class="result-value-container">
+                            <code class="result-value">@_publicKeyBase64</code>
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                    @onclick="() => CopyToClipboard(_publicKeyBase64)">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="result-section mt-3">
+                        <button class="btn btn-outline-primary" 
+                                @onclick="CopyFullSignature">
+                            Copy Full Signature JSON
+                        </button>
+                    </div>
+
+                    @if (_copySuccess)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
+                            Copied to clipboard!
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private SigningModel _signingModel = new();
+    private bool _isProcessing = false;
+    private string _errorMessage = "";
+    private SignedContent? _signatureResult = null;
+    private string _signatureBase64 = "";
+    private string _contentHashBase64 = "";
+    private string _publicKeyBase64 = "";
+    private bool _copySuccess = false;
+
+    [Parameter] public EventCallback<SignedContent> OnContentSigned { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to session state changes
+        SessionStateService.SessionStateChanged += OnSessionStateChanged;
+    }
+
+    private async Task HandleSignContent()
+    {
+        if (string.IsNullOrWhiteSpace(_signingModel.Content))
+            return;
+
+        _isProcessing = true;
+        _errorMessage = "";
+        _copySuccess = false;
+        StateHasChanged();
+
+        try
+        {
+            var session = SessionStateService.CurrentSession;
+            if (session == null || session.PrivateKeyBuffer == null)
+            {
+                _errorMessage = "Session is not properly initialized. Please unlock your identity.";
+                return;
+            }
+
+            Logger.LogInformation("Starting content signing for user: {Username}", session.Username);
+
+            // Get the private key from secure buffer
+            var privateKey = session.PrivateKeyBuffer.Data;
+            
+            // Sign the content
+            _signatureResult = await SigningService.SignContentAsync(
+                _signingModel.Content,
+                privateKey,
+                session.PublicKey);
+
+            // Convert to base64 for display
+            _signatureBase64 = Convert.ToBase64String(_signatureResult.Signature);
+            _contentHashBase64 = Convert.ToBase64String(_signatureResult.ContentHash);
+            _publicKeyBase64 = Convert.ToBase64String(_signatureResult.PublicKey);
+
+            Logger.LogInformation("Content successfully signed for user: {Username}", session.Username);
+            
+            // Clear the form
+            _signingModel.Content = "";
+            
+            // Notify parent component if needed
+            if (OnContentSigned.HasDelegate)
+            {
+                await OnContentSigned.InvokeAsync(_signatureResult);
+            }
+        }
+        catch (CryptoException ex)
+        {
+            _errorMessage = $"Failed to sign content: {ex.Message}";
+            Logger.LogError(ex, "Cryptographic error during content signing");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An unexpected error occurred. Please try again.";
+            Logger.LogError(ex, "Error during content signing");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _copySuccess = true;
+            StateHasChanged();
+            
+            // Hide success message after 2 seconds
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(2000);
+                _copySuccess = false;
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to copy to clipboard");
+        }
+    }
+
+    private async Task CopyFullSignature()
+    {
+        if (_signatureResult == null)
+            return;
+
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            content = _signatureResult.Content,
+            contentHash = _contentHashBase64,
+            signature = _signatureBase64,
+            publicKey = _publicKeyBase64,
+            algorithm = _signatureResult.Algorithm,
+            version = _signatureResult.Version,
+            timestamp = _signatureResult.Timestamp
+        }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+        await CopyToClipboard(json);
+    }
+
+    private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+    {
+        if (e.NewState == SessionState.Locked || e.NewState == SessionState.Expired)
+        {
+            _signatureResult = null;
+            _signingModel = new SigningModel();
+            _errorMessage = "";
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SessionStateService.SessionStateChanged -= OnSessionStateChanged;
+    }
+
+    private class SigningModel
+    {
+        [Required(ErrorMessage = "Content is required")]
+        [MinLength(1, ErrorMessage = "Content cannot be empty")]
+        public string Content { get; set; } = "";
+    }
+}

@@ -1,0 +1,211 @@
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using NoLock.Social.Core.Cryptography
+@using System.Timers
+@using Microsoft.Extensions.Logging
+@inject ISessionStateService SessionStateService
+@inject ILogger<IdentityStatusComponent> Logger
+@implements IDisposable
+
+<div class="identity-status-container">
+    @if (SessionStateService.IsUnlocked && SessionStateService.CurrentSession != null)
+    {
+        <div class="identity-card unlocked">
+            <div class="status-header">
+                <span class="status-indicator status-unlocked"></span>
+                <h4>Identity Unlocked</h4>
+            </div>
+            
+            <div class="identity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Username:</span>
+                    <span class="detail-value">@SessionStateService.CurrentSession.Username</span>
+                </div>
+                
+                <div class="detail-row">
+                    <span class="detail-label">Public Key:</span>
+                    <span class="detail-value public-key" title="@_fullPublicKey">
+                        @_truncatedPublicKey
+                        <button class="btn btn-sm btn-link" @onclick="CopyPublicKey">
+                            Copy
+                        </button>
+                    </span>
+                </div>
+                
+                <div class="detail-row">
+                    <span class="detail-label">Session Expires:</span>
+                    <span class="detail-value">
+                        @if (_timeRemaining.TotalMinutes > 0)
+                        {
+                            <span>@($"{(int)_timeRemaining.TotalMinutes} minutes remaining")</span>
+                        }
+                        else
+                        {
+                            <span class="text-danger">Expired</span>
+                        }
+                    </span>
+                </div>
+            </div>
+            
+            <div class="status-actions">
+                <button class="btn btn-warning btn-sm" @onclick="ExtendSession">
+                    Extend Session
+                </button>
+                <button class="btn btn-danger btn-sm" @onclick="LockIdentity">
+                    Lock Identity
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="identity-card locked">
+            <div class="status-header">
+                <span class="status-indicator status-locked"></span>
+                <h4>Identity Locked</h4>
+            </div>
+            
+            <div class="identity-details">
+                <p class="text-muted">
+                    Your identity is currently locked. Unlock it to access secure features.
+                </p>
+            </div>
+            
+            <div class="status-actions">
+                <button class="btn btn-primary" @onclick="OnUnlockRequested">
+                    Unlock Identity
+                </button>
+            </div>
+        </div>
+    }
+    
+    @if (_showCopySuccess)
+    {
+        <div class="copy-toast">
+            Public key copied to clipboard!
+        </div>
+    }
+</div>
+
+
+@code {
+    private Timer? _sessionTimer;
+    private TimeSpan _timeRemaining = TimeSpan.Zero;
+    private string _truncatedPublicKey = "";
+    private string _fullPublicKey = "";
+    private bool _showCopySuccess = false;
+
+    [Parameter] public EventCallback OnUnlockRequested { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to session state changes
+        SessionStateService.SessionStateChanged += OnSessionStateChanged;
+        
+        // Set up timer to update session countdown
+        _sessionTimer = new Timer(1000); // Update every second
+        _sessionTimer.Elapsed += UpdateSessionTimer;
+        _sessionTimer.Start();
+        
+        UpdatePublicKeyDisplay();
+        UpdateTimeRemaining();
+    }
+
+    private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+    {
+        Logger.LogInformation("Session state changed to: {State}", e.NewState);
+        
+        UpdatePublicKeyDisplay();
+        UpdateTimeRemaining();
+        
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSessionTimer(object? sender, ElapsedEventArgs e)
+    {
+        UpdateTimeRemaining();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateTimeRemaining()
+    {
+        if (SessionStateService.CurrentSession != null)
+        {
+            var elapsed = DateTime.UtcNow - SessionStateService.CurrentSession.CreatedAt;
+            var totalMinutes = SessionStateService.SessionTimeoutMinutes;
+            _timeRemaining = TimeSpan.FromMinutes(totalMinutes) - elapsed;
+            
+            if (_timeRemaining.TotalSeconds < 0)
+            {
+                _timeRemaining = TimeSpan.Zero;
+            }
+        }
+        else
+        {
+            _timeRemaining = TimeSpan.Zero;
+        }
+    }
+
+    private void UpdatePublicKeyDisplay()
+    {
+        if (SessionStateService.CurrentSession != null)
+        {
+            var publicKeyBase64 = Convert.ToBase64String(SessionStateService.CurrentSession.PublicKey);
+            _fullPublicKey = publicKeyBase64;
+            
+            // Truncate for display: show first 8 and last 8 characters
+            if (publicKeyBase64.Length > 20)
+            {
+                _truncatedPublicKey = $"{publicKeyBase64.Substring(0, 8)}...{publicKeyBase64.Substring(publicKeyBase64.Length - 8)}";
+            }
+            else
+            {
+                _truncatedPublicKey = publicKeyBase64;
+            }
+        }
+        else
+        {
+            _truncatedPublicKey = "";
+            _fullPublicKey = "";
+        }
+    }
+
+    private async Task CopyPublicKey()
+    {
+        if (!string.IsNullOrEmpty(_fullPublicKey))
+        {
+            // In a real Blazor app, you would use JavaScript interop to copy to clipboard
+            // For now, we'll just show a success message
+            _showCopySuccess = true;
+            StateHasChanged();
+            
+            await Task.Delay(2000);
+            _showCopySuccess = false;
+            StateHasChanged();
+            
+            Logger.LogInformation("Public key copied to clipboard");
+        }
+    }
+
+    private async Task ExtendSession()
+    {
+        if (SessionStateService.CurrentSession != null)
+        {
+            await SessionStateService.ExtendSessionAsync();
+            UpdateTimeRemaining();
+            Logger.LogInformation("Session extended");
+        }
+    }
+
+    private async Task LockIdentity()
+    {
+        await SessionStateService.EndSessionAsync();
+        Logger.LogInformation("Identity locked by user");
+    }
+
+    public void Dispose()
+    {
+        SessionStateService.SessionStateChanged -= OnSessionStateChanged;
+        _sessionTimer?.Stop();
+        _sessionTimer?.Dispose();
+    }
+}

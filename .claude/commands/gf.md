@@ -2,7 +2,6 @@
 description: Automated git flow with intelligent branch detection, commit, release, and push - uses git-flow-automation agent
 allowed-tools: Task, Bash, Read, Grep, Glob, LS
 argument-hint: [optional: commit message or feature name]
-model: inherit
 ---
 
 Launch the git-flow-automation agent to execute a complete automated git flow workflow for solo development (no PRs).
