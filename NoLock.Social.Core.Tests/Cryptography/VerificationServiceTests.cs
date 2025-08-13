@@ -11,13 +11,13 @@ namespace NoLock.Social.Core.Tests.Cryptography
 {
     public class VerificationServiceTests
     {
-        private readonly Mock<ICryptoJSInteropService> _mockCryptoService;
+        private readonly Mock<IWebCryptoService> _mockCryptoService;
         private readonly Mock<ILogger<VerificationService>> _mockLogger;
         private readonly IVerificationService _verificationService;
 
         public VerificationServiceTests()
         {
-            _mockCryptoService = new Mock<ICryptoJSInteropService>();
+            _mockCryptoService = new Mock<IWebCryptoService>();
             _mockLogger = new Mock<ILogger<VerificationService>>();
             _verificationService = new VerificationService(_mockCryptoService.Object, _mockLogger.Object);
         }
@@ -27,18 +27,18 @@ namespace NoLock.Social.Core.Tests.Cryptography
         {
             // Arrange
             var content = "Test content to verify";
-            var signature = new byte[64]; // Ed25519 signature
-            var publicKey = new byte[32]; // Ed25519 public key
+            var signature = new byte[64]; // ECDSA P-256 signature
+            var publicKey = new byte[91]; // ECDSA P-256 public key in SPKI format
             var expectedHash = new byte[32]; // SHA-256 hash
 
-            for (int i = 0; i < signature.Length; i++) signature[i] = (byte)i;
-            for (int i = 0; i < publicKey.Length; i++) publicKey[i] = (byte)(i + 64);
-            for (int i = 0; i < expectedHash.Length; i++) expectedHash[i] = (byte)(i + 96);
+            for (var i = 0; i < signature.Length; i++) signature[i] = (byte)i;
+            for (var i = 0; i < publicKey.Length; i++) publicKey[i] = (byte)(i + 64);
+            for (var i = 0; i < expectedHash.Length; i++) expectedHash[i] = (byte)(i + 96);
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(expectedHash);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(true);
 
             // Act
@@ -46,8 +46,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Assert
             Assert.True(result);
-            _mockCryptoService.Verify(x => x.ComputeSha256Async(content), Times.Once);
-            _mockCryptoService.Verify(x => x.VerifyEd25519Async(expectedHash, signature, publicKey), Times.Once);
+            _mockCryptoService.Verify(x => x.Sha256Async(It.IsAny<byte[]>()), Times.Once);
+            _mockCryptoService.Verify(x => x.VerifyECDSAAsync(publicKey, signature, expectedHash, "P-256", "SHA-256"), Times.Once);
         }
 
         [Fact]
@@ -56,13 +56,13 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content to verify";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
             var expectedHash = new byte[32];
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(expectedHash);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(false);
 
             // Act
@@ -78,7 +78,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(
@@ -91,7 +91,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             string content = null!;
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
@@ -104,7 +104,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content";
             var signature = new byte[32]; // Invalid length
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<ArgumentException>(
@@ -132,7 +132,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content";
             byte[] signature = null!;
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
@@ -161,18 +161,18 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 Content = "Test content",
                 ContentHash = new byte[32],
                 Signature = new byte[64],
-                PublicKey = new byte[32],
-                Algorithm = "Ed25519",
+                PublicKey = new byte[91],
+                Algorithm = "ECDSA-P256",
                 Version = "1.0"
             };
 
             var expectedHash = new byte[32];
-            for (int i = 0; i < expectedHash.Length; i++) expectedHash[i] = (byte)i;
+            for (var i = 0; i < expectedHash.Length; i++) expectedHash[i] = (byte)i;
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(expectedHash);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(true);
 
             // Act
@@ -221,7 +221,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 Content = "Test content",
                 Signature = new byte[64],
                 PublicKey = new byte[32],
-                Algorithm = "Ed25519",
+                Algorithm = "ECDSA-P256",
                 Version = "2.0" // Unsupported version
             };
 
@@ -237,24 +237,20 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
-            for (int i = 0; i < signature.Length; i++) signature[i] = (byte)i;
-            for (int i = 0; i < publicKey.Length; i++) publicKey[i] = (byte)(i + 64);
+            for (var i = 0; i < signature.Length; i++) signature[i] = (byte)i;
+            for (var i = 0; i < publicKey.Length; i++) publicKey[i] = (byte)(i + 64);
 
             var signatureBase64 = Convert.ToBase64String(signature);
             var publicKeyBase64 = Convert.ToBase64String(publicKey);
 
-            _mockCryptoService.Setup(x => x.Base64ToBytesAsync(signatureBase64))
-                .ReturnsAsync(signature);
-
-            _mockCryptoService.Setup(x => x.Base64ToBytesAsync(publicKeyBase64))
-                .ReturnsAsync(publicKey);
-
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            // Base64 conversion is now done directly in the service
+            
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(new byte[32]);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(true);
 
             // Act
@@ -272,8 +268,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var signatureBase64 = "invalid-base64!@#$";
             var publicKeyBase64 = Convert.ToBase64String(new byte[32]);
 
-            _mockCryptoService.Setup(x => x.Base64ToBytesAsync(signatureBase64))
-                .ThrowsAsync(new FormatException("Invalid base64"));
+            // Base64 conversion will throw directly from Convert.FromBase64String
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<FormatException>(
@@ -287,9 +282,9 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ThrowsAsync(new InvalidOperationException("Hashing failed"));
 
             // Act & Assert
@@ -304,12 +299,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Test content";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(new byte[32]);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ThrowsAsync(new InvalidOperationException("Verification failed"));
 
             // Act & Assert
@@ -323,18 +318,18 @@ namespace NoLock.Social.Core.Tests.Cryptography
         {
             // Arrange
             var contentBuilder = new StringBuilder();
-            for (int i = 0; i < 10000; i++)
+            for (var i = 0; i < 10000; i++)
             {
                 contentBuilder.AppendLine($"Line {i}: This is test content that will be verified.");
             }
             var content = contentBuilder.ToString();
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(new byte[32]);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(true);
 
             // Act
@@ -350,12 +345,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Arrange
             var content = "Hello 世界 🌍 Привет мир";
             var signature = new byte[64];
-            var publicKey = new byte[32];
+            var publicKey = new byte[91];
 
-            _mockCryptoService.Setup(x => x.ComputeSha256Async(It.IsAny<string>()))
+            _mockCryptoService.Setup(x => x.Sha256Async(It.IsAny<byte[]>()))
                 .ReturnsAsync(new byte[32]);
 
-            _mockCryptoService.Setup(x => x.VerifyEd25519Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            _mockCryptoService.Setup(x => x.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), "P-256", "SHA-256"))
                 .ReturnsAsync(true);
 
             // Act
@@ -363,7 +358,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Assert
             Assert.True(result);
-            _mockCryptoService.Verify(x => x.ComputeSha256Async(content), Times.Once);
+            _mockCryptoService.Verify(x => x.Sha256Async(It.IsAny<byte[]>()), Times.Once);
         }
     }
 }

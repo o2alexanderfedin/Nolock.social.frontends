@@ -6,6 +6,7 @@
 @inject ISessionStateService SessionService
 @inject ICryptoErrorHandlingService ErrorHandler
 @inject ILogger<CASIntegrationComponent> Logger
+@implements IDisposable
 
 <div class="cas-integration-container">
     <h3>Content Addressable Storage</h3>
@@ -224,8 +225,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Subscribe to session state changes
+        SessionService.SessionStateChanged += OnSessionStateChanged;
+        
         await CheckSessionStatusAsync();
         await RefreshContentListAsync();
+    }
+
+    private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+    {
+        // Update the session active state when it changes
+        isSessionActive = e.NewState == SessionState.Unlocked;
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task CheckSessionStatusAsync()
@@ -240,6 +251,12 @@
             Logger.LogError(ex, "Failed to check session status");
             isSessionActive = false;
         }
+    }
+    
+    public void Dispose()
+    {
+        // Unsubscribe from session state changes
+        SessionService.SessionStateChanged -= OnSessionStateChanged;
     }
 
     private async Task StoreContentAsync()
@@ -465,7 +482,7 @@
     private string FormatBytes(long bytes)
     {
         string[] sizes = { "B", "KB", "MB", "GB" };
-        int order = 0;
+        var order = 0;
         double size = bytes;
         
         while (size >= 1024 && order < sizes.Length - 1)

@@ -30,34 +30,16 @@ builder.Services.AddPerformanceMonitoring();
 
 var app = builder.Build();
 
-// Apply security headers on startup
-var securityService = app.Services.GetRequiredService<NoLock.Social.Core.Security.ISecurityService>();
-await securityService.ApplySecurityHeadersAsync();
-await securityService.ConfigureSecureCookiesAsync();
-
-// Validate CSP
-var cspValid = await securityService.ValidateCspAsync();
-if (!cspValid)
+// Check Web Crypto API availability
+var webCrypto = app.Services.GetRequiredService<NoLock.Social.Core.Cryptography.Interfaces.IWebCryptoService>();
+var webCryptoAvailable = await webCrypto.IsAvailableAsync();
+if (!webCryptoAvailable)
 {
-    Console.WriteLine("Warning: Content Security Policy validation failed");
+    Console.WriteLine("Warning: Web Crypto API is not available. This application requires a modern browser with HTTPS.");
 }
-
-// Configure performance monitoring thresholds
-var performanceService = app.Services.GetRequiredService<NoLock.Social.Core.Performance.IPerformanceMonitoringService>();
-
-// Set thresholds for critical operations
-performanceService.SetThresholds("ContentSigning", new NoLock.Social.Core.Performance.PerformanceThresholds
+else
 {
-    MaxDuration = TimeSpan.FromMilliseconds(500),
-    MaxMemoryBytes = 10 * 1024 * 1024, // 10MB
-    MinSuccessRate = 95
-});
-
-performanceService.SetThresholds("SignatureVerification", new NoLock.Social.Core.Performance.PerformanceThresholds
-{
-    MaxDuration = TimeSpan.FromMilliseconds(200),
-    MaxMemoryBytes = 5 * 1024 * 1024, // 5MB
-    MinSuccessRate = 99
-});
+    Console.WriteLine("Web Crypto API is available and ready");
+}
 
 await app.RunAsync();

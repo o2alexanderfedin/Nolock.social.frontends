@@ -13,14 +13,14 @@ namespace NoLock.Social.Core.Tests.Cryptography
     public class KeyDerivationServiceTests : IDisposable
     {
         private readonly KeyDerivationService _sut;
-        private readonly Mock<ICryptoJSInteropService> _cryptoInteropMock;
+        private readonly Mock<IWebCryptoService> _webCryptoMock;
         private readonly Mock<ISecureMemoryManager> _secureMemoryManagerMock;
 
         public KeyDerivationServiceTests()
         {
-            _cryptoInteropMock = new Mock<ICryptoJSInteropService>();
+            _webCryptoMock = new Mock<IWebCryptoService>();
             _secureMemoryManagerMock = new Mock<ISecureMemoryManager>();
-            _sut = new KeyDerivationService(_cryptoInteropMock.Object, _secureMemoryManagerMock.Object);
+            _sut = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object);
         }
 
         public void Dispose()
@@ -40,7 +40,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             parameters.Iterations.Should().Be(3);
             parameters.Parallelism.Should().Be(1); // WASM constraint
             parameters.HashLength.Should().Be(32);
-            parameters.Algorithm.Should().Be("Argon2id");
+            parameters.Algorithm.Should().Be("PBKDF2");
             parameters.Version.Should().Be("1.3");
         }
 
@@ -56,8 +56,16 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var secureBufferMock = new Mock<ISecureBuffer>();
             secureBufferMock.Setup(b => b.Data).Returns(expectedDerivedKey);
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase, username.ToLowerInvariant()))
+            var saltData = System.Text.Encoding.UTF8.GetBytes(username.ToLowerInvariant());
+            var salt = new byte[32];
+            Random.Shared.NextBytes(salt);
+            
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(salt);
+            
+            _webCryptoMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(expectedDerivedKey);
             
             _secureMemoryManagerMock
@@ -74,8 +82,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
             result.Should().NotBeNull();
             result.Should().Be(secureBufferMock.Object);
             
-            // Verify username was lowercased
-            _cryptoInteropMock.Verify(c => c.DeriveKeyArgon2idAsync(passphrase, "testuser"), Times.Once);
+            // Verify PBKDF2 was called
+            _webCryptoMock.Verify(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"), Times.Once);
             
             // Verify progress was reported
             capturedProgress.Should().NotBeNull();
@@ -89,8 +97,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var username = "TestUser123";
             var expectedDerivedKey = new byte[32];
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(It.IsAny<string>(), It.IsAny<string>()))
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
+            
+            _webCryptoMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(expectedDerivedKey);
             
             _secureMemoryManagerMock
@@ -100,8 +112,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Act
             await _sut.DeriveMasterKeyAsync(passphrase, username);
 
-            // Assert - verify username was normalized to lowercase
-            _cryptoInteropMock.Verify(c => c.DeriveKeyArgon2idAsync(passphrase, "testuser123"), Times.Once);
+            // Assert - verify PBKDF2 was called
+            _webCryptoMock.Verify(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"), Times.Once);
         }
 
         [Fact]
@@ -140,16 +152,16 @@ namespace NoLock.Social.Core.Tests.Cryptography
             secureBufferMock.Setup(b => b.Data).Returns(seed);
             secureBufferMock.Setup(b => b.Size).Returns(32);
             
-            var expectedKeyPair = new Ed25519KeyPair
+            var expectedKeyPair = new ECDSAKeyPair
             {
-                PublicKey = new byte[32],
-                PrivateKey = new byte[32]
+                PublicKey = new byte[65],  // ECDSA P-256 public key size
+                PrivateKey = new byte[32]   // ECDSA P-256 private key size
             };
             Random.Shared.NextBytes(expectedKeyPair.PublicKey);
             Random.Shared.NextBytes(expectedKeyPair.PrivateKey);
             
-            _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(seed))
+            _webCryptoMock
+                .Setup(c => c.GenerateECDSAKeyPairAsync("P-256"))
                 .ReturnsAsync(expectedKeyPair);
 
             // Act
@@ -185,10 +197,10 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var derivedKey = new byte[32];
             Random.Shared.NextBytes(derivedKey);
             
-            var expectedKeyPair = new Ed25519KeyPair
+            var expectedKeyPair = new ECDSAKeyPair
             {
-                PublicKey = new byte[32],
-                PrivateKey = new byte[32]
+                PublicKey = new byte[65],  // ECDSA P-256 public key size
+                PrivateKey = new byte[32]   // ECDSA P-256 private key size
             };
             Random.Shared.NextBytes(expectedKeyPair.PublicKey);
             Random.Shared.NextBytes(expectedKeyPair.PrivateKey);
@@ -200,12 +212,16 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var privateKeyBufferMock = new Mock<ISecureBuffer>();
             privateKeyBufferMock.Setup(b => b.Data).Returns(expectedKeyPair.PrivateKey);
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase, "testuser"))
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
+            
+            _webCryptoMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(derivedKey);
             
-            _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(derivedKey))
+            _webCryptoMock
+                .Setup(c => c.GenerateECDSAKeyPairAsync("P-256"))
                 .ReturnsAsync(expectedKeyPair);
             
             _secureMemoryManagerMock
@@ -233,8 +249,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var username = "testuser";
             var derivedKey = new byte[32];
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(It.IsAny<string>(), It.IsAny<string>()))
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
+            
+            _webCryptoMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(derivedKey);
             
             _secureMemoryManagerMock
@@ -264,8 +284,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var bufferMock2 = new Mock<ISecureBuffer>();
             bufferMock2.Setup(b => b.Data).Returns(expectedKey);
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase, "testuser"))
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
+            
+            _webCryptoMock
+                .Setup(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
                 .ReturnsAsync(expectedKey);
             
             _secureMemoryManagerMock
@@ -300,23 +324,23 @@ namespace NoLock.Social.Core.Tests.Cryptography
             Random.Shared.NextBytes(privateKey1);
             Random.Shared.NextBytes(privateKey2);
             
-            var keyPair1 = new Ed25519KeyPair { PublicKey = new byte[] { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, PrivateKey = privateKey1 };
-            var keyPair2 = new Ed25519KeyPair { PublicKey = new byte[] { 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, PrivateKey = privateKey2 };
+            var keyPair1 = new ECDSAKeyPair { PublicKey = new byte[65], PrivateKey = privateKey1 };
+            var keyPair2 = new ECDSAKeyPair { PublicKey = new byte[65], PrivateKey = privateKey2 };
+            keyPair1.PublicKey[0] = 1;
+            keyPair2.PublicKey[0] = 2;
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase1, "testuser"))
-                .ReturnsAsync(key1);
+            _webCryptoMock
+                .Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(new byte[32]);
             
-            _cryptoInteropMock
-                .Setup(c => c.DeriveKeyArgon2idAsync(passphrase2, "testuser"))
+            _webCryptoMock
+                .SetupSequence(c => c.Pbkdf2Async(It.IsAny<byte[]>(), It.IsAny<byte[]>(), 600000, 32, "SHA-256"))
+                .ReturnsAsync(key1)
                 .ReturnsAsync(key2);
             
-            _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(It.Is<byte[]>(k => k[0] == 1)))
-                .ReturnsAsync(keyPair1);
-            
-            _cryptoInteropMock
-                .Setup(c => c.GenerateEd25519KeyPairFromSeedAsync(It.Is<byte[]>(k => k[0] == 32)))
+            _webCryptoMock
+                .SetupSequence(c => c.GenerateECDSAKeyPairAsync("P-256"))
+                .ReturnsAsync(keyPair1)
                 .ReturnsAsync(keyPair2);
             
             // Setup master key buffers and private key buffers for each passphrase

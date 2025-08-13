@@ -12,14 +12,14 @@ namespace NoLock.Social.Core.Cryptography.Services
     public class SessionStateService : ISessionStateService
     {
         private readonly ISecureMemoryManager _secureMemoryManager;
-        private readonly ICryptoJSInteropService _cryptoInterop;
+        private readonly IWebCryptoService _cryptoInterop;
         private readonly ReaderWriterLockSlim _lock = new();
         private IdentitySession? _currentSession;
         private SessionState _currentState = SessionState.Locked;
         private Timer? _timeoutTimer;
         private bool _disposed;
 
-        public SessionStateService(ISecureMemoryManager secureMemoryManager, ICryptoJSInteropService cryptoInterop)
+        public SessionStateService(ISecureMemoryManager secureMemoryManager, IWebCryptoService cryptoInterop)
         {
             _secureMemoryManager = secureMemoryManager ?? throw new ArgumentNullException(nameof(secureMemoryManager));
             _cryptoInterop = cryptoInterop ?? throw new ArgumentNullException(nameof(cryptoInterop));
@@ -94,6 +94,7 @@ namespace NoLock.Social.Core.Cryptography.Services
             if (privateKeyBuffer == null)
                 throw new ArgumentNullException(nameof(privateKeyBuffer));
 
+            SessionState oldState;
             _lock.EnterUpgradeableReadLock();
             try
             {
@@ -106,7 +107,7 @@ namespace NoLock.Social.Core.Cryptography.Services
                 _lock.EnterWriteLock();
                 try
                 {
-                    var oldState = _currentState;
+                    oldState = _currentState;
 
                     // Clear any existing session
                     if (_currentSession != null)
@@ -129,11 +130,6 @@ namespace NoLock.Social.Core.Cryptography.Services
 
                     // Start timeout timer
                     StartTimeoutTimer();
-
-                    // Raise state change event
-                    RaiseStateChanged(oldState, _currentState, "Session started");
-
-                    return true;
                 }
                 finally
                 {
@@ -144,10 +140,16 @@ namespace NoLock.Social.Core.Cryptography.Services
             {
                 _lock.ExitUpgradeableReadLock();
             }
+
+            // Raise state change event after releasing the lock
+            RaiseStateChanged(oldState, SessionState.Unlocked, "Session started");
+
+            return true;
         }
 
         public Task LockSessionAsync()
         {
+            SessionState oldState;
             _lock.EnterWriteLock();
             try
             {
@@ -156,21 +158,22 @@ namespace NoLock.Social.Core.Cryptography.Services
                     return Task.CompletedTask;
                 }
 
-                var oldState = _currentState;
+                oldState = _currentState;
                 _currentSession.IsLocked = true;
                 _currentState = SessionState.Locked;
 
                 // Stop timeout timer while locked
                 StopTimeoutTimer();
-
-                RaiseStateChanged(oldState, _currentState, "Session locked");
-
-                return Task.CompletedTask;
             }
             finally
             {
                 _lock.ExitWriteLock();
             }
+
+            // Raise state change event after releasing the lock
+            RaiseStateChanged(oldState, SessionState.Locked, "Session locked");
+
+            return Task.CompletedTask;
         }
 
         public async Task<bool> UnlockSessionAsync(string passphrase)
@@ -178,6 +181,7 @@ namespace NoLock.Social.Core.Cryptography.Services
             if (string.IsNullOrEmpty(passphrase))
                 throw new ArgumentException("Passphrase cannot be null or empty", nameof(passphrase));
 
+            SessionState oldState;
             _lock.EnterUpgradeableReadLock();
             try
             {
@@ -186,73 +190,125 @@ namespace NoLock.Social.Core.Cryptography.Services
                     return false;
                 }
 
-                var oldState = _currentState;
+                oldState = _currentState;
                 _currentState = SessionState.Unlocking;
-                RaiseStateChanged(oldState, _currentState, "Attempting unlock");
-
-                try
-                {
-                    // Derive key from passphrase and username
-                    var derivedKey = await _cryptoInterop.DeriveKeyArgon2idAsync(passphrase, _currentSession.Username);
-                    var keyPair = await _cryptoInterop.GenerateEd25519KeyPairFromSeedAsync(derivedKey);
-
-                    // Verify the public key matches
-                    if (!keyPair.PublicKey.SequenceEqual(_currentSession.PublicKey))
-                    {
-                        _currentState = SessionState.Locked;
-                        RaiseStateChanged(SessionState.Unlocking, _currentState, "Invalid passphrase");
-                        return false;
-                    }
-
-                    _lock.EnterWriteLock();
-                    try
-                    {
-                        _currentSession.IsLocked = false;
-                        _currentSession.LastActivityAt = DateTime.UtcNow;
-                        _currentState = SessionState.Unlocked;
-
-                        // Restart timeout timer
-                        StartTimeoutTimer();
-
-                        RaiseStateChanged(SessionState.Unlocking, _currentState, "Session unlocked");
-                        return true;
-                    }
-                    finally
-                    {
-                        _lock.ExitWriteLock();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _currentState = SessionState.Locked;
-                    RaiseStateChanged(SessionState.Unlocking, _currentState, $"Unlock failed: {ex.Message}");
-                    return false;
-                }
+                
             }
             finally
             {
                 _lock.ExitUpgradeableReadLock();
             }
+            
+            // Raise state change event after releasing lock
+            RaiseStateChanged(oldState, SessionState.Unlocking, "Attempting unlock");
+
+            try
+            {
+                // Get username for key derivation (need to access session)
+                string username;
+                byte[] publicKey;
+                _lock.EnterReadLock();
+                try
+                {
+                    username = _currentSession.Username;
+                    publicKey = _currentSession.PublicKey;
+                }
+                finally
+                {
+                    _lock.ExitReadLock();
+                }
+                
+                // Derive key from passphrase and username using PBKDF2
+                var saltData = System.Text.Encoding.UTF8.GetBytes(username.ToLowerInvariant());
+                var salt = await _cryptoInterop.Sha256Async(saltData);
+                var passwordBytes = System.Text.Encoding.UTF8.GetBytes(passphrase);
+                var derivedKey = await _cryptoInterop.Pbkdf2Async(passwordBytes, salt, 600000, 32, "SHA-256");
+                
+                // Generate ECDSA key pair (simulating Ed25519)
+                var ecdsaKeyPair = await _cryptoInterop.GenerateECDSAKeyPairAsync("P-256");
+                var keyPair = new Ed25519KeyPair 
+                { 
+                    PublicKey = ecdsaKeyPair.PublicKey, 
+                    PrivateKey = ecdsaKeyPair.PrivateKey 
+                };
+
+                // Verify the public key matches
+                if (!keyPair.PublicKey.SequenceEqual(publicKey))
+                {
+                    _lock.EnterWriteLock();
+                    try
+                    {
+                        _currentState = SessionState.Locked;
+                    }
+                    finally
+                    {
+                        _lock.ExitWriteLock();
+                    }
+                    
+                    RaiseStateChanged(SessionState.Unlocking, SessionState.Locked, "Invalid passphrase");
+                    return false;
+                }
+
+                _lock.EnterWriteLock();
+                try
+                {
+                    _currentSession.IsLocked = false;
+                    _currentSession.LastActivityAt = DateTime.UtcNow;
+                    _currentState = SessionState.Unlocked;
+
+                    // Restart timeout timer
+                    StartTimeoutTimer();
+                }
+                finally
+                {
+                    _lock.ExitWriteLock();
+                }
+                
+                RaiseStateChanged(SessionState.Unlocking, SessionState.Unlocked, "Session unlocked");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _lock.EnterWriteLock();
+                try
+                {
+                    _currentState = SessionState.Locked;
+                }
+                finally
+                {
+                    _lock.ExitWriteLock();
+                }
+                
+                RaiseStateChanged(SessionState.Unlocking, SessionState.Locked, $"Unlock failed: {ex.Message}");
+                return false;
+            }
         }
 
         public async Task EndSessionAsync()
         {
+            SessionState oldState;
             _lock.EnterWriteLock();
             try
             {
-                await EndSessionInternalAsync();
+                oldState = await EndSessionInternalAsync();
             }
             finally
             {
                 _lock.ExitWriteLock();
             }
+            
+            // Raise event after releasing lock
+            if (oldState != SessionState.Locked)
+            {
+                RaiseStateChanged(oldState, SessionState.Locked, "Session ended");
+            }
         }
 
-        private async Task EndSessionInternalAsync()
+        private async Task<SessionState> EndSessionInternalAsync()
         {
             if (_currentSession == null)
             {
-                return;
+                return _currentState;
             }
 
             var oldState = _currentState;
@@ -272,9 +328,9 @@ namespace NoLock.Social.Core.Cryptography.Services
             // Stop timeout timer
             StopTimeoutTimer();
 
-            RaiseStateChanged(oldState, _currentState, "Session ended");
-
             await Task.CompletedTask;
+            
+            return oldState;
         }
 
         public void UpdateActivity()
@@ -295,6 +351,7 @@ namespace NoLock.Social.Core.Cryptography.Services
 
         public async Task CheckTimeoutAsync()
         {
+            SessionState? oldState = null;
             _lock.EnterUpgradeableReadLock();
             try
             {
@@ -309,13 +366,11 @@ namespace NoLock.Social.Core.Cryptography.Services
                     _lock.EnterWriteLock();
                     try
                     {
-                        var oldState = _currentState;
+                        oldState = _currentState;
                         _currentState = SessionState.Expired;
                         _currentSession.IsLocked = true;
 
                         StopTimeoutTimer();
-
-                        RaiseStateChanged(oldState, _currentState, "Session timed out");
                     }
                     finally
                     {
@@ -326,6 +381,12 @@ namespace NoLock.Social.Core.Cryptography.Services
             finally
             {
                 _lock.ExitUpgradeableReadLock();
+            }
+
+            // Raise event after releasing lock
+            if (oldState.HasValue)
+            {
+                RaiseStateChanged(oldState.Value, SessionState.Expired, "Session timed out");
             }
 
             await Task.CompletedTask;

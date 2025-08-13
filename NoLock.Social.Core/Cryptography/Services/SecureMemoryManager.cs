@@ -128,9 +128,9 @@ namespace NoLock.Social.Core.Cryptography.Services
                     if (_data != null && !_cleared)
                     {
                         // Multiple passes for better security
-                        for (int pass = 0; pass < 3; pass++)
+                        for (var pass = 0; pass < 3; pass++)
                         {
-                            for (int i = 0; i < _data.Length; i++)
+                            for (var i = 0; i < _data.Length; i++)
                             {
                                 _data[i] = (byte)(pass % 2 == 0 ? 0x00 : 0xFF);
                             }

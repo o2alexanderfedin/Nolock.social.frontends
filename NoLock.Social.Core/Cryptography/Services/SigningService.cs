@@ -11,14 +11,16 @@ namespace NoLock.Social.Core.Cryptography.Services
     /// </summary>
     public class SigningService : ISigningService
     {
-        private readonly ICryptoJSInteropService _cryptoService;
+        private readonly IWebCryptoService _cryptoService;
         private readonly ILogger<SigningService> _logger;
 
-        private const int ED25519_PRIVATE_KEY_SIZE = 32;
-        private const int ED25519_PUBLIC_KEY_SIZE = 32;
-        private const int ED25519_SIGNATURE_SIZE = 64;
+        // PKCS8 format for P-256 private key is ~138 bytes
+        // SPKI format for P-256 public key is ~91 bytes
+        private const int ECDSA_MIN_PRIVATE_KEY_SIZE = 100;  // PKCS8 format
+        private const int ECDSA_MIN_PUBLIC_KEY_SIZE = 80;    // SPKI format
+        private const int ECDSA_MIN_SIGNATURE_SIZE = 64;     // P-256 signature size
 
-        public SigningService(ICryptoJSInteropService cryptoService, ILogger<SigningService> logger)
+        public SigningService(IWebCryptoService cryptoService, ILogger<SigningService> logger)
         {
             _cryptoService = cryptoService ?? throw new ArgumentNullException(nameof(cryptoService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -48,14 +50,14 @@ namespace NoLock.Social.Core.Cryptography.Services
                 throw new ArgumentNullException(nameof(publicKey));
             }
 
-            if (privateKey.Length != ED25519_PRIVATE_KEY_SIZE)
+            if (privateKey.Length < ECDSA_MIN_PRIVATE_KEY_SIZE)
             {
-                throw new ArgumentException($"Private key must be {ED25519_PRIVATE_KEY_SIZE} bytes for Ed25519", nameof(privateKey));
+                throw new ArgumentException($"Private key must be at least {ECDSA_MIN_PRIVATE_KEY_SIZE} bytes for ECDSA P-256 PKCS8 format", nameof(privateKey));
             }
 
-            if (publicKey.Length != ED25519_PUBLIC_KEY_SIZE)
+            if (publicKey.Length < ECDSA_MIN_PUBLIC_KEY_SIZE)
             {
-                throw new ArgumentException($"Public key must be {ED25519_PUBLIC_KEY_SIZE} bytes for Ed25519", nameof(publicKey));
+                throw new ArgumentException($"Public key must be at least {ECDSA_MIN_PUBLIC_KEY_SIZE} bytes for ECDSA P-256 SPKI format", nameof(publicKey));
             }
 
             try
@@ -64,20 +66,21 @@ namespace NoLock.Social.Core.Cryptography.Services
 
                 // Step 1: Hash the content using SHA-256
                 _logger.LogDebug("Computing SHA-256 hash of content");
-                var contentHash = await _cryptoService.ComputeSha256Async(content);
+                var contentBytes = Encoding.UTF8.GetBytes(content);
+                var contentHash = await _cryptoService.Sha256Async(contentBytes);
 
                 if (contentHash == null || contentHash.Length != 32)
                 {
                     throw new CryptoException("Failed to compute SHA-256 hash");
                 }
 
-                // Step 2: Sign the hash with Ed25519
-                _logger.LogDebug("Signing content hash with Ed25519");
-                var signature = await _cryptoService.SignEd25519Async(contentHash, privateKey);
+                // Step 2: Sign the hash with ECDSA P-256
+                _logger.LogDebug("Signing content hash with ECDSA P-256");
+                var signature = await _cryptoService.SignECDSAAsync(privateKey, contentHash, "P-256", "SHA-256");
 
-                if (signature == null || signature.Length != ED25519_SIGNATURE_SIZE)
+                if (signature == null || signature.Length < ECDSA_MIN_SIGNATURE_SIZE)
                 {
-                    throw new CryptoException($"Invalid signature size. Expected {ED25519_SIGNATURE_SIZE} bytes");
+                    throw new CryptoException($"Invalid signature size. Expected at least {ECDSA_MIN_SIGNATURE_SIZE} bytes");
                 }
 
                 // Step 3: Create signed content object
@@ -87,7 +90,7 @@ namespace NoLock.Social.Core.Cryptography.Services
                     ContentHash = contentHash,
                     Signature = signature,
                     PublicKey = publicKey,
-                    Algorithm = "Ed25519",
+                    Algorithm = "ECDSA-P256",
                     Version = "1.0",
                     Timestamp = DateTime.UtcNow
                 };

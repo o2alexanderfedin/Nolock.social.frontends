@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Cryptography.Interfaces;
@@ -10,14 +11,14 @@ namespace NoLock.Social.Core.Cryptography.Services
     /// </summary>
     public class VerificationService : IVerificationService
     {
-        private readonly ICryptoJSInteropService _cryptoService;
+        private readonly IWebCryptoService _cryptoService;
         private readonly ILogger<VerificationService> _logger;
 
-        private const int ED25519_PUBLIC_KEY_SIZE = 32;
-        private const int ED25519_SIGNATURE_SIZE = 64;
+        private const int ECDSA_MIN_PUBLIC_KEY_SIZE = 80;   // SPKI format
+        private const int ECDSA_MIN_SIGNATURE_SIZE = 64;    // P-256 signature size
         private const int SHA256_HASH_SIZE = 32;
 
-        public VerificationService(ICryptoJSInteropService cryptoService, ILogger<VerificationService> logger)
+        public VerificationService(IWebCryptoService cryptoService, ILogger<VerificationService> logger)
         {
             _cryptoService = cryptoService ?? throw new ArgumentNullException(nameof(cryptoService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -47,14 +48,14 @@ namespace NoLock.Social.Core.Cryptography.Services
                 throw new ArgumentNullException(nameof(publicKey));
             }
 
-            if (signature.Length != ED25519_SIGNATURE_SIZE)
+            if (signature.Length < ECDSA_MIN_SIGNATURE_SIZE)
             {
-                throw new ArgumentException($"Signature must be {ED25519_SIGNATURE_SIZE} bytes for Ed25519", nameof(signature));
+                throw new ArgumentException($"Signature must be at least {ECDSA_MIN_SIGNATURE_SIZE} bytes for ECDSA P-256", nameof(signature));
             }
 
-            if (publicKey.Length != ED25519_PUBLIC_KEY_SIZE)
+            if (publicKey.Length < ECDSA_MIN_PUBLIC_KEY_SIZE)
             {
-                throw new ArgumentException($"Public key must be {ED25519_PUBLIC_KEY_SIZE} bytes for Ed25519", nameof(publicKey));
+                throw new ArgumentException($"Public key must be at least {ECDSA_MIN_PUBLIC_KEY_SIZE} bytes for ECDSA P-256 SPKI format", nameof(publicKey));
             }
 
             try
@@ -63,16 +64,17 @@ namespace NoLock.Social.Core.Cryptography.Services
 
                 // Step 1: Hash the content using SHA-256
                 _logger.LogDebug("Computing SHA-256 hash of content");
-                var contentHash = await _cryptoService.ComputeSha256Async(content);
+                var contentBytes = Encoding.UTF8.GetBytes(content);
+                var contentHash = await _cryptoService.Sha256Async(contentBytes);
 
                 if (contentHash == null || contentHash.Length != SHA256_HASH_SIZE)
                 {
                     throw new CryptoException("Failed to compute SHA-256 hash");
                 }
 
-                // Step 2: Verify the signature using Ed25519
-                _logger.LogDebug("Verifying Ed25519 signature");
-                var isValid = await _cryptoService.VerifyEd25519Async(contentHash, signature, publicKey);
+                // Step 2: Verify the signature using ECDSA P-256
+                _logger.LogDebug("Verifying ECDSA P-256 signature");
+                var isValid = await _cryptoService.VerifyECDSAAsync(publicKey, signature, contentHash, "P-256", "SHA-256");
 
                 if (isValid)
                 {
@@ -128,8 +130,8 @@ namespace NoLock.Social.Core.Cryptography.Services
                 _logger.LogDebug("Converting base64 values to bytes");
                 
                 // Convert base64 strings to byte arrays
-                var signature = await _cryptoService.Base64ToBytesAsync(signatureBase64);
-                var publicKey = await _cryptoService.Base64ToBytesAsync(publicKeyBase64);
+                var signature = Convert.FromBase64String(signatureBase64);
+                var publicKey = Convert.FromBase64String(publicKeyBase64);
 
                 // Verify using the byte array method
                 return await VerifySignatureAsync(content, signature, publicKey);
@@ -150,9 +152,9 @@ namespace NoLock.Social.Core.Cryptography.Services
             }
 
             // Validate algorithm
-            if (signedContent.Algorithm != "Ed25519")
+            if (signedContent.Algorithm != "ECDSA-P256")
             {
-                throw new NotSupportedException($"Algorithm '{signedContent.Algorithm}' is not supported. Only Ed25519 is supported.");
+                throw new NotSupportedException($"Algorithm '{signedContent.Algorithm}' is not supported. Only ECDSA-P256 is supported.");
             }
 
             // Validate version
