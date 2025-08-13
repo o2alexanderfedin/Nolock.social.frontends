@@ -24,5 +24,6 @@ builder.Services.AddIndexedDB(dbStore =>
 });
 
 builder.Services.AddContentAddressableStorage();
+builder.Services.AddCryptographicServices();
 
 await builder.Build().RunAsync();

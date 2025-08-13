@@ -56,7 +56,11 @@ Each agent can:
 2. **Clear task definition** - Provide specific, measurable goals
 3. **Let agents iterate** - Allow multiple rounds for complex tasks
 4. **Trust the process** - Agents will coordinate naturally
-5. **Track progress** - Agents use TodoWrite to maintain a shared task list throughout the collaboration
+5. **Dynamic task management** - Agents use TodoWrite to:
+   - Maintain a shared task list throughout collaboration
+   - Add new todo items as they discover additional work
+   - Track progress across all todos (original and newly added)
+   - Continue iterating until all todos are complete
 
 ## How It Works
 
@@ -75,15 +79,22 @@ Agents work in rounds, each:
 - Adding their specialized expertise
 - Suggesting improvements
 - Building on others' work
+- **Dynamically expanding the todo list** when discovering additional subtasks
 
-**Important**: Agents maintain task progress using TodoWrite tool, creating bullet points for each step in the loop to track what's been done and what remains.
+**Important**: Agents maintain task progress using TodoWrite tool throughout the collaboration:
+- Create initial todo items during planning phase
+- Mark items as in_progress when starting work
+- Mark items as completed when done
+- **Add new todo items dynamically** as they discover additional work needed
+- Continue the loop until all todos (including newly added ones) are complete
 
 ### Phase 3: Consensus & Completion
 When an agent believes the task is complete:
+- All todos (original and dynamically added) must be marked complete
 - They declare "TASK COMPLETE"
 - Other agents review and confirm
 - Consensus required from all agents
-- Maximum 10 rounds to prevent infinite loops
+- Maximum 100 rounds to prevent infinite loops
 
 ### Example Flow Diagram
 
@@ -109,14 +120,17 @@ Each agent receives context including:
 - All previous work from all agents
 - Current round number
 - List of participating agents
-- Current todo list status
+- Current todo list status (including dynamically added items)
 
 Agents communicate through:
 - Structured work products
 - Clear status declarations
 - Consensus confirmations
 - Improvement suggestions
-- Todo list updates (marking items complete, adding new items)
+- Todo list updates:
+  - Marking items as in_progress/complete
+  - **Adding new todo items when discovering additional work**
+  - Tracking overall progress across all todos
 
 ## Advanced Usage
 
@@ -156,7 +170,7 @@ Agents communicate through:
 
 ## Limitations
 
-1. **Max 10 rounds** - Prevents infinite loops
+1. **Max 100 rounds** - Prevents infinite loops
 2. **Agents must reach consensus** - All agents must agree task is complete
 3. **Sequential execution** - Agents work in turns, not parallel
 4. **Context limits** - Very large tasks may exceed context
