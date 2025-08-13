@@ -24,7 +24,8 @@ builder.Services.AddIndexedDB(dbStore =>
 });
 
 builder.Services.AddContentAddressableStorage();
-builder.Services.AddCryptographicServices();
+// Use reactive version of cryptographic services
+builder.Services.AddCryptographicServices(useReactive: true);
 builder.Services.AddSecurityServices();
 builder.Services.AddPerformanceMonitoring();
 

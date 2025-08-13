@@ -1,0 +1,261 @@
+@using System.Reactive.Linq
+@using System.Reactive.Disposables
+@using NoLock.Social.Core.Cryptography.Interfaces
+@using NoLock.Social.Core.Cryptography.Extensions
+@inject IReactiveSessionStateService SessionService
+@implements IDisposable
+
+<div class="session-monitor">
+    <div class="card">
+        <div class="card-header">
+            <h5>Session Monitor (Reactive)</h5>
+        </div>
+        <div class="card-body">
+            <!-- Current State Display -->
+            <div class="mb-3">
+                <strong>Current State:</strong>
+                <span class="badge @GetStateBadgeClass()">@currentState</span>
+            </div>
+
+            <!-- Session Info -->
+            @if (isUnlocked)
+            {
+                <div class="mb-3">
+                    <strong>User:</strong> @username
+                </div>
+
+                <!-- Timeout Progress -->
+                <div class="mb-3">
+                    <strong>Session Timeout:</strong>
+                    <div class="progress">
+                        <div class="progress-bar @GetProgressBarClass()" 
+                             role="progressbar" 
+                             style="width: @GetProgressPercentage()%"
+                             aria-valuenow="@GetProgressPercentage()" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            @FormatRemainingTime()
+                        </div>
+                    </div>
+                </div>
+
+                @if (showTimeoutWarning)
+                {
+                    <div class="alert alert-warning" role="alert">
+                        <strong>Warning!</strong> Your session will timeout in less than 1 minute.
+                        <button class="btn btn-sm btn-warning ms-2" @onclick="ExtendSession">
+                            Extend Session
+                        </button>
+                    </div>
+                }
+            }
+
+            <!-- State History -->
+            <div class="mb-3">
+                <strong>State History:</strong>
+                <div class="state-history">
+                    @foreach (var transition in stateHistory.TakeLast(5))
+                    {
+                        <div class="small text-muted">
+                            @transition.Timestamp.ToString("HH:mm:ss") - 
+                            @transition.OldState → @transition.NewState
+                            @if (!string.IsNullOrEmpty(transition.Reason))
+                            {
+                                <span class="ms-1">(@transition.Reason)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Activity Monitor -->
+            @if (isUnlocked)
+            {
+                <div class="mb-3">
+                    <strong>Last Activity:</strong> @lastActivityTime.ToString("HH:mm:ss")
+                    <button class="btn btn-sm btn-outline-primary ms-2" @onclick="UpdateActivity">
+                        Update Activity
+                    </button>
+                </div>
+            }
+
+            <!-- Reactive Stream Stats -->
+            <div class="mb-3">
+                <strong>Stream Statistics:</strong>
+                <div class="small">
+                    <div>State Changes: @stateChangeCount</div>
+                    <div>Timeout Warnings: @timeoutWarningCount</div>
+                    <div>Updates per Minute: @updatesPerMinute</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private CompositeDisposable _disposables = new();
+    
+    private SessionState currentState = SessionState.Locked;
+    private bool isUnlocked = false;
+    private string username = string.Empty;
+    private TimeSpan remainingTime = TimeSpan.Zero;
+    private bool showTimeoutWarning = false;
+    private DateTime lastActivityTime = DateTime.Now;
+    
+    private List<StateTransition> stateHistory = new();
+    private int stateChangeCount = 0;
+    private int timeoutWarningCount = 0;
+    private double updatesPerMinute = 0;
+    private DateTime startTime = DateTime.Now;
+    private int totalUpdates = 0;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to state stream with automatic UI updates
+        SessionService.StateStream
+            .DistinctUntilChanged()
+            .Subscribe(state =>
+            {
+                currentState = state;
+                isUnlocked = state == SessionState.Unlocked;
+                InvokeAsync(StateHasChanged);
+            })
+            .AddTo(_disposables);
+
+        // Subscribe to state changes for history
+        SessionService.SessionStateChanges
+            .Subscribe(args =>
+            {
+                stateChangeCount++;
+                stateHistory.Add(new StateTransition
+                {
+                    Timestamp = DateTime.Now,
+                    OldState = args.OldState,
+                    NewState = args.NewState,
+                    Reason = args.Reason
+                });
+                
+                if (args.NewState == SessionState.Unlocked)
+                {
+                    var session = SessionService.CurrentSession;
+                    username = session?.Username ?? "Unknown";
+                }
+                
+                InvokeAsync(StateHasChanged);
+            })
+            .AddTo(_disposables);
+
+        // Subscribe to remaining time updates with throttling
+        SessionService.RemainingTimeStream
+            .Sample(TimeSpan.FromSeconds(1)) // Update UI every second
+            .Subscribe(time =>
+            {
+                remainingTime = time;
+                totalUpdates++;
+                UpdateStatistics();
+                InvokeAsync(StateHasChanged);
+            })
+            .AddTo(_disposables);
+
+        // Subscribe to timeout warnings
+        SessionService.TimeoutWarningStream
+            .Subscribe(time =>
+            {
+                showTimeoutWarning = true;
+                timeoutWarningCount++;
+                InvokeAsync(StateHasChanged);
+                
+                // Auto-hide warning after session is extended
+                Observable.Timer(TimeSpan.FromSeconds(5))
+                    .Subscribe(_ =>
+                    {
+                        showTimeoutWarning = false;
+                        InvokeAsync(StateHasChanged);
+                    });
+            })
+            .AddTo(_disposables);
+
+        // Create a heartbeat that updates activity time
+        Observable.Interval(TimeSpan.FromSeconds(10))
+            .Where(_ => isUnlocked)
+            .Subscribe(_ =>
+            {
+                lastActivityTime = DateTime.Now;
+                InvokeAsync(StateHasChanged);
+            })
+            .AddTo(_disposables);
+    }
+
+    private void UpdateStatistics()
+    {
+        var elapsed = DateTime.Now - startTime;
+        if (elapsed.TotalMinutes > 0)
+        {
+            updatesPerMinute = totalUpdates / elapsed.TotalMinutes;
+        }
+    }
+
+    private string GetStateBadgeClass()
+    {
+        return currentState switch
+        {
+            SessionState.Unlocked => "bg-success",
+            SessionState.Locked => "bg-warning",
+            SessionState.Expired => "bg-secondary",
+            _ => "bg-dark"
+        };
+    }
+
+    private string GetProgressBarClass()
+    {
+        var percentage = GetProgressPercentage();
+        if (percentage > 50) return "bg-success";
+        if (percentage > 20) return "bg-warning";
+        return "bg-danger";
+    }
+
+    private double GetProgressPercentage()
+    {
+        if (SessionService.SessionTimeoutMinutes == 0) return 100;
+        
+        var totalMinutes = SessionService.SessionTimeoutMinutes;
+        var remainingMinutes = remainingTime.TotalMinutes;
+        
+        return Math.Max(0, Math.Min(100, (remainingMinutes / totalMinutes) * 100));
+    }
+
+    private string FormatRemainingTime()
+    {
+        if (remainingTime.TotalHours >= 1)
+            return $"{(int)remainingTime.TotalHours}h {remainingTime.Minutes}m";
+        if (remainingTime.TotalMinutes >= 1)
+            return $"{(int)remainingTime.TotalMinutes}m {remainingTime.Seconds}s";
+        return $"{remainingTime.Seconds}s";
+    }
+
+    private async Task ExtendSession()
+    {
+        await SessionService.ExtendSessionAsync();
+        showTimeoutWarning = false;
+    }
+
+    private void UpdateActivity()
+    {
+        SessionService.UpdateActivity();
+        lastActivityTime = DateTime.Now;
+    }
+
+    public void Dispose()
+    {
+        _disposables?.Dispose();
+    }
+
+    private class StateTransition
+    {
+        public DateTime Timestamp { get; set; }
+        public SessionState OldState { get; set; }
+        public SessionState NewState { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+}
+

@@ -19,7 +19,7 @@ namespace NoLock.Social.Core.Extensions
             return services;
         }
 
-        public static IServiceCollection AddCryptographicServices(this IServiceCollection services)
+        public static IServiceCollection AddCryptographicServices(this IServiceCollection services, bool useReactive = false)
         {
             // Browser compatibility
             services.AddScoped<IBrowserCompatibilityService, BrowserCompatibilityService>();
@@ -30,8 +30,17 @@ namespace NoLock.Social.Core.Extensions
             // Secure memory management
             services.AddSingleton<ISecureMemoryManager, SecureMemoryManager>();
             
-            // Session state management
-            services.AddScoped<ISessionStateService, SessionStateService>();
+            // Session state management - use reactive version if specified
+            if (useReactive)
+            {
+                services.AddScoped<ReactiveSessionStateService>();
+                services.AddScoped<ISessionStateService>(provider => provider.GetRequiredService<ReactiveSessionStateService>());
+                services.AddScoped<IReactiveSessionStateService>(provider => provider.GetRequiredService<ReactiveSessionStateService>());
+            }
+            else
+            {
+                services.AddScoped<ISessionStateService, SessionStateService>();
+            }
             
             // Key derivation and generation
             services.AddScoped<IKeyDerivationService, KeyDerivationService>();
