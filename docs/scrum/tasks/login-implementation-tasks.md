@@ -269,68 +269,11 @@
 
 ---
 
-## Phase 4: Browser Integration (Day 2-3)
+## Phase 4: Service Registration and Integration (Day 3)
 
-### Task 4.1: Implement BroadcastChannel JavaScript Module [P1]
-**Time Estimate**: 3 hours  
-**Reference**: Architecture Section 15.1 - BroadcastChannel Module  
-**Dependencies**: None
-
-**Acceptance Criteria**:
-- [ ] Create `broadcastChannel.js` in wwwroot/js/
-- [ ] Implement channel creation and management
-- [ ] Add message posting functionality
-- [ ] Implement subscription mechanism for .NET interop
-- [ ] Add cleanup on page unload
-- [ ] Handle browser compatibility
-
-**Implementation Notes**:
-- Use native BroadcastChannel API
-- Create wrapper for .NET JSInterop
-- Manage channel lifecycle properly
-
----
-
-### Task 4.2: Integrate BroadcastChannel with LoginAdapterService [P1]
-**Time Estimate**: 3 hours  
-**Reference**: Architecture Section 12.3 - Multi-Tab Synchronization  
-**Dependencies**: Tasks 2.1, 4.1
-
-**Acceptance Criteria**:
-- [ ] Add BroadcastChannel initialization to LoginAdapterService
-- [ ] Implement session state broadcasting on login
-- [ ] Implement session state broadcasting on logout
-- [ ] Handle incoming messages from other tabs
-- [ ] Update UI state based on broadcast messages
-- [ ] Ensure no sensitive data in broadcasts
-
-**Security Note**:
-- Only broadcast session state, never keys or passphrases
-- Include public key for identity verification
-- Use tab ID to prevent self-notification
-
----
-
-### Task 4.3: Test Multi-Tab Synchronization [P1]
-**Time Estimate**: 2 hours  
-**Reference**: Architecture Section 12.3  
-**Dependencies**: Task 4.2
-
-**Acceptance Criteria**:
-- [ ] Test login propagates to other tabs
-- [ ] Test logout propagates to other tabs
-- [ ] Test lock state synchronization
-- [ ] Verify no keys are shared between tabs
-- [ ] Test tab close scenarios
-- [ ] Test browser compatibility
-
----
-
-## Phase 5: Service Registration and Integration (Day 3)
-
-### Task 5.1: Update Dependency Injection Configuration [P0]
+### Task 4.1: Update Dependency Injection Configuration [P0]
 **Time Estimate**: 1 hour  
-**Reference**: Architecture Section 16.1 - Dependency Injection Setup  
+**Reference**: Architecture Section 14.1 - Dependency Injection Setup  
 **Dependencies**: All service implementations
 
 **Acceptance Criteria**:
@@ -343,10 +286,10 @@
 
 ---
 
-### Task 5.2: Update Program.cs Configuration [P0]
+### Task 4.2: Update Program.cs Configuration [P0]
 **Time Estimate**: 1 hour  
-**Reference**: Architecture Section 16.1  
-**Dependencies**: Task 5.1
+**Reference**: Architecture Section 14.1  
+**Dependencies**: Task 4.1
 
 **Acceptance Criteria**:
 - [ ] Call AddLoginServices extension method
@@ -357,10 +300,10 @@
 
 ---
 
-### Task 5.3: Integrate LoginAdapterComponent into Home Page [P0]
+### Task 4.3: Integrate LoginAdapterComponent into Home Page [P0]
 **Time Estimate**: 2 hours  
-**Reference**: Architecture Section 9 - Example Integration  
-**Dependencies**: Tasks 3.1, 5.1
+**Reference**: Architecture Section 8 - Example Integration  
+**Dependencies**: Tasks 3.1, 4.1
 
 **Acceptance Criteria**:
 - [ ] Replace IdentityUnlockComponent usage in Home.razor
@@ -372,21 +315,7 @@
 
 ---
 
-### Task 5.4: Update JavaScript References [P0]
-**Time Estimate**: 1 hour  
-**Reference**: Architecture Section 15.2 - Index.html Script Reference  
-**Dependencies**: Task 4.1
-
-**Acceptance Criteria**:
-- [ ] Add broadcastChannel.js reference to index.html
-- [ ] Ensure script loads before Blazor
-- [ ] Test JavaScript module loading
-- [ ] Verify no console errors
-- [ ] Check browser compatibility
-
----
-
-## Phase 6: End-to-End Testing (Day 3)
+## Phase 5: End-to-End Testing (Day 3)
 
 ### Task 6.1: Create Integration Test Suite [P0]
 **Time Estimate**: 3 hours  
@@ -405,7 +334,7 @@
 
 ### Task 6.2: Security Validation Tests [P0]
 **Time Estimate**: 2 hours  
-**Reference**: Architecture Section 10 - Testing Strategy  
+**Reference**: Architecture Section 9 - Testing Strategy  
 **Dependencies**: All previous tasks
 
 **Acceptance Criteria**:
@@ -414,13 +343,13 @@
 - [ ] Verify session cleared on logout
 - [ ] Test memory is properly wiped
 - [ ] Verify no sensitive data in localStorage
-- [ ] Check no sensitive data in broadcasts
+- [ ] Check no sensitive data in storage
 
 ---
 
-### Task 6.3: User Experience Testing [P1]
+### Task 5.3: User Experience Testing [P1]
 **Time Estimate**: 2 hours  
-**Reference**: Architecture Section 10  
+**Reference**: Architecture Section 9  
 **Dependencies**: All previous tasks
 
 **Acceptance Criteria**:
@@ -433,9 +362,9 @@
 
 ---
 
-### Task 6.4: Performance Testing [P2]
+### Task 5.4: Performance Testing [P2]
 **Time Estimate**: 2 hours  
-**Reference**: Architecture Section 7 - Key Design Decisions  
+**Reference**: Architecture Section 6 - Key Design Decisions  
 **Dependencies**: All previous tasks
 
 **Acceptance Criteria**:
@@ -443,12 +372,11 @@
 - [ ] Test memory usage during login
 - [ ] Verify no memory leaks
 - [ ] Check component render performance
-- [ ] Test multi-tab performance impact
 - [ ] Document performance metrics
 
 ---
 
-## Phase 7: Documentation and Cleanup (Optional Day 4)
+## Phase 6: Documentation and Cleanup (Optional Day 4)
 
 ### Task 7.1: Update Architecture Documentation [P2]
 **Time Estimate**: 1 hour  
@@ -492,16 +420,16 @@
 
 ## Task Summary
 
-### MVP Critical Path (3-Day Plan)
+### MVP Critical Path (2-Day Plan)
 **Day 1**: Tasks 1.1-1.6, 2.1-2.3 (Core Services)  
-**Day 2**: Tasks 3.1-3.4, 4.1-4.3 (UI and Browser Integration)  
-**Day 3**: Tasks 5.1-5.4, 6.1-6.3 (Integration and Testing)
+**Day 2**: Tasks 3.1-3.4, 4.1-4.3 (UI and Integration)  
+**Day 2-3**: Tasks 5.1-5.4 (Testing)
 
 ### Total Estimated Hours
-- **P0 Tasks**: 31 hours (Critical)
-- **P1 Tasks**: 15 hours (Important)
+- **P0 Tasks**: 26 hours (Critical)
+- **P1 Tasks**: 7 hours (Important)
 - **P2 Tasks**: 10 hours (Nice to have)
-- **Total**: 56 hours
+- **Total**: 43 hours
 
 ### Risk Mitigation
 - Each task is independent where possible
@@ -515,7 +443,7 @@
 - >80% test coverage on new code
 - Zero regression in existing functionality
 - Login flow works end-to-end
-- Multi-tab sync operational
+- Session management operational
 
 ---
 
