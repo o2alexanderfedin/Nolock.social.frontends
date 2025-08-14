@@ -81,6 +81,8 @@ namespace NoLock.Social.Core.Extensions
             // New login layer services that wrap existing identity unlock
             services.AddScoped<IUserTrackingService, UserTrackingService>();
             services.AddScoped<IRememberMeService, RememberMeService>();
+            // Use the secure session persistence that doesn't store private keys
+            services.AddScoped<ISessionPersistenceService, SecureSessionPersistenceService>();
             services.AddScoped<ILoginAdapterService, LoginAdapterService>();
             
             return services;

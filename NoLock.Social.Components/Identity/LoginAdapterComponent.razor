@@ -1,6 +1,9 @@
 @using NoLock.Social.Core.Identity.Interfaces
 @using NoLock.Social.Core.Identity.Models
+@using NoLock.Social.Core.Identity.Configuration
 @using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
 @inject ILoginAdapterService LoginService
 @inject IRememberMeService RememberMeService
 @inject ILogger<LoginAdapterComponent> Logger
@@ -73,7 +76,7 @@
                         <label for="username" class="form-label">
                             <i class="bi bi-person"></i> Username
                         </label>
-                        <InputText @bind-Value="_loginModel.Username" 
+                        <InputText @bind-value="_loginModel.Username" 
                                    id="username"
                                    class="form-control" 
                                    placeholder="Enter your username"
@@ -90,7 +93,7 @@
                             <i class="bi bi-key"></i> Passphrase
                         </label>
                         <InputText type="password" 
-                                   @bind-Value="_loginModel.Passphrase" 
+                                   @bind-value="_loginModel.Passphrase" 
                                    id="passphrase"
                                    class="form-control" 
                                    placeholder="Enter your secure passphrase"
@@ -103,7 +106,7 @@
                     </div>
                     
                     <div class="mb-3 form-check">
-                        <InputCheckbox @bind-Value="_loginModel.RememberUsername" 
+                        <InputCheckbox @bind-value="_loginModel.RememberUsername" 
                                        class="form-check-input" 
                                        id="rememberMe" 
                                        disabled="@_isProcessing" />
@@ -339,12 +342,14 @@
     private class LoginModel
     {
         [Required(ErrorMessage = "Username is required")]
-        [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
+        [StringLength(50, MinimumLength = 3, 
+                     ErrorMessage = "Username must be between 3 and 50 characters")]
         [RegularExpression(@"^[a-zA-Z0-9_-]+$", ErrorMessage = "Username can only contain letters, numbers, hyphens, and underscores")]
         public string Username { get; set; } = "";
         
         [Required(ErrorMessage = "Passphrase is required")]
-        [StringLength(200, MinimumLength = 12, ErrorMessage = "Passphrase must be at least 12 characters")]
+        [StringLength(1000, MinimumLength = 12, 
+                     ErrorMessage = "Passphrase must be at least 12 characters")]
         public string Passphrase { get; set; } = "";
         
         public bool RememberUsername { get; set; } = false;

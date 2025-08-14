@@ -305,9 +305,6 @@ namespace NoLock.Social.Core.Tests.Cryptography
             result1.Data.Should().BeEquivalentTo(result2.Data);
         }
 
-        // TODO: Fix this test - currently has a complex mocking issue with CreateSecureBuffer
-        // The test is disabled temporarily to allow progress on UI components
-        /*
         [Fact]
         public async Task DeriveIdentityAsync_WithDifferentPassphrases_ShouldProduceDifferentKeys()
         {
@@ -324,8 +321,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
             Random.Shared.NextBytes(privateKey1);
             Random.Shared.NextBytes(privateKey2);
             
-            var keyPair1 = new ECDSAKeyPair { PublicKey = new byte[65], PrivateKey = privateKey1 };
-            var keyPair2 = new ECDSAKeyPair { PublicKey = new byte[65], PrivateKey = privateKey2 };
+            var keyPair1 = new Ed25519KeyPair { PublicKey = new byte[32], PrivateKey = privateKey1 };
+            var keyPair2 = new Ed25519KeyPair { PublicKey = new byte[32], PrivateKey = privateKey2 };
             keyPair1.PublicKey[0] = 1;
             keyPair2.PublicKey[0] = 2;
             
@@ -340,8 +337,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
             
             _webCryptoMock
                 .SetupSequence(c => c.GenerateECDSAKeyPairAsync("P-256"))
-                .ReturnsAsync(keyPair1)
-                .ReturnsAsync(keyPair2);
+                .ReturnsAsync(new ECDSAKeyPair { PublicKey = keyPair1.PublicKey, PrivateKey = keyPair1.PrivateKey })
+                .ReturnsAsync(new ECDSAKeyPair { PublicKey = keyPair2.PublicKey, PrivateKey = keyPair2.PrivateKey });
             
             // Setup master key buffers and private key buffers for each passphrase
             var masterKeyBuffer1 = new Mock<ISecureBuffer>();
@@ -376,6 +373,5 @@ namespace NoLock.Social.Core.Tests.Cryptography
             // Assert
             identity1.PublicKey.Should().NotBeEquivalentTo(identity2.PublicKey);
         }
-        */
     }
 }

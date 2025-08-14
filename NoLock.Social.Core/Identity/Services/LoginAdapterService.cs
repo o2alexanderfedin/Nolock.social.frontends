@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Cryptography.Interfaces;
+using NoLock.Social.Core.Cryptography.Services;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
 
@@ -49,6 +50,9 @@ namespace NoLock.Social.Core.Identity.Services
 
             // Subscribe to session state changes to sync login state
             _sessionState.SessionStateChanged += OnSessionStateChanged;
+            
+            // Attempt to restore persisted session on initialization
+            _ = TryRestorePersistedSessionAsync();
         }
 
         /// <inheritdoc />
@@ -222,16 +226,11 @@ namespace NoLock.Social.Core.Identity.Services
 
                 // Update login state
                 var previousState = CurrentLoginState;
-                var newState = new LoginState
+                var newState = CreateStateWithChanges(previousState, state => 
                 {
-                    IsLoggedIn = previousState.IsLoggedIn,
-                    IsLocked = true,
-                    Username = previousState.Username,
-                    PublicKeyBase64 = previousState.PublicKeyBase64,
-                    LoginTime = previousState.LoginTime,
-                    LastActivity = DateTime.UtcNow,
-                    IsNewUser = previousState.IsNewUser
-                };
+                    state.IsLocked = true;
+                    state.LastActivity = DateTime.UtcNow;
+                });
 
                 UpdateState(newState, LoginStateChangeReason.Lock, previousState);
 
@@ -279,16 +278,11 @@ namespace NoLock.Social.Core.Identity.Services
                 case SessionState.Unlocked:
                     if (currentLogin.IsLocked)
                     {
-                        var unlockedState = new LoginState
+                        var unlockedState = CreateStateWithChanges(currentLogin, state => 
                         {
-                            IsLoggedIn = currentLogin.IsLoggedIn,
-                            IsLocked = false,
-                            Username = currentLogin.Username,
-                            PublicKeyBase64 = currentLogin.PublicKeyBase64,
-                            LoginTime = currentLogin.LoginTime,
-                            LastActivity = DateTime.UtcNow,
-                            IsNewUser = currentLogin.IsNewUser
-                        };
+                            state.IsLocked = false;
+                            state.LastActivity = DateTime.UtcNow;
+                        });
                         UpdateState(unlockedState, LoginStateChangeReason.Unlock, currentLogin);
                     }
                     break;
@@ -296,16 +290,11 @@ namespace NoLock.Social.Core.Identity.Services
                 case SessionState.Locked:
                     if (!currentLogin.IsLocked && currentLogin.IsLoggedIn)
                     {
-                        var lockedState = new LoginState
+                        var lockedState = CreateStateWithChanges(currentLogin, state => 
                         {
-                            IsLoggedIn = currentLogin.IsLoggedIn,
-                            IsLocked = true,
-                            Username = currentLogin.Username,
-                            PublicKeyBase64 = currentLogin.PublicKeyBase64,
-                            LoginTime = currentLogin.LoginTime,
-                            LastActivity = DateTime.UtcNow,
-                            IsNewUser = currentLogin.IsNewUser
-                        };
+                            state.IsLocked = true;
+                            state.LastActivity = DateTime.UtcNow;
+                        });
                         UpdateState(lockedState, LoginStateChangeReason.Lock, currentLogin);
                     }
                     break;
@@ -327,6 +316,27 @@ namespace NoLock.Social.Core.Identity.Services
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// Create a new LoginState based on an existing state with selective modifications.
+        /// This eliminates code duplication in state management.
+        /// </summary>
+        private LoginState CreateStateWithChanges(LoginState source, Action<LoginState> modifications)
+        {
+            var newState = new LoginState
+            {
+                IsLoggedIn = source.IsLoggedIn,
+                IsLocked = source.IsLocked,
+                Username = source.Username,
+                PublicKeyBase64 = source.PublicKeyBase64,
+                LoginTime = source.LoginTime,
+                LastActivity = source.LastActivity,
+                IsNewUser = source.IsNewUser
+            };
+            
+            modifications(newState);
+            return newState;
         }
 
         /// <summary>
@@ -355,6 +365,56 @@ namespace NoLock.Social.Core.Identity.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error emitting state change");
+            }
+        }
+
+        /// <summary>
+        /// Attempt to restore a persisted session on service initialization
+        /// </summary>
+        private async Task TryRestorePersistedSessionAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Checking for persisted session to restore");
+
+                // Check if the session state service supports restoration
+                if (_sessionState is ReactiveSessionStateService reactiveSession)
+                {
+                    var restored = await reactiveSession.TryRestoreSessionAsync();
+                    if (restored)
+                    {
+                        _logger.LogInformation("Persisted session found and restored in locked state");
+                        
+                        // Update login state to reflect the locked session
+                        var previousState = CurrentLoginState;
+                        var newState = new LoginState
+                        {
+                            IsLoggedIn = true, // User is logged in but needs to unlock
+                            IsLocked = true,   // Session is locked
+                            Username = "", // Will be populated on unlock
+                            PublicKeyBase64 = "", // Will be populated on unlock
+                            LoginTime = DateTime.UtcNow,
+                            LastActivity = DateTime.UtcNow,
+                            IsNewUser = false
+                        };
+
+                        UpdateState(newState, LoginStateChangeReason.SessionRestored, previousState);
+                        
+                        _logger.LogInformation("Login state updated to reflect restored locked session");
+                    }
+                    else
+                    {
+                        _logger.LogDebug("No persisted session found to restore");
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("Session state service does not support persistence");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to restore persisted session");
             }
         }
 

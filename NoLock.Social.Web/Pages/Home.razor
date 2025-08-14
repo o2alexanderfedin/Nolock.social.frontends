@@ -2,12 +2,21 @@
 @using NoLock.Social.Components.Identity
 @using NoLock.Social.Components.Content
 @using NoLock.Social.Components.Storage
+@using NoLock.Social.Core.Identity.Models
 
 <PageTitle>NoLock Social - Decentralized Identity Platform</PageTitle>
 
 <div class="container-fluid">
     <h1>NoLock Social Platform</h1>
     <p class="lead">A decentralized identity and content management system with cryptographic security.</p>
+    
+    @if (_showWelcomeMessage && !string.IsNullOrEmpty(_welcomeMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill"></i> @_welcomeMessage
+            <button type="button" class="btn-close" @onclick="() => _showWelcomeMessage = false"></button>
+        </div>
+    }
     
     <div class="row">
         <div class="col-md-12 mb-4">
@@ -17,7 +26,11 @@
     
     <div class="row">
         <div class="col-md-12 mb-4">
-            <IdentityUnlockComponent />
+            <LoginAdapterComponent 
+                OnLogin="@HandleLogin"
+                OnLogout="@HandleLogout"
+                RememberUsernameDefault="true"
+                ShowNewUserWelcome="true" />
         </div>
     </div>
     
@@ -36,3 +49,46 @@
         </div>
     </div>
 </div>
+
+@code {
+    private string _welcomeMessage = "";
+    private bool _showWelcomeMessage = false;
+
+    private void HandleLogin(LoginResult loginResult)
+    {
+        if (loginResult.Success)
+        {
+            // Display welcome message based on whether user is new or returning
+            if (loginResult.IsNewUser)
+            {
+                _welcomeMessage = $"Welcome to NoLock Social! Your decentralized identity has been created successfully.";
+            }
+            else
+            {
+                _welcomeMessage = $"Welcome back! You have successfully logged in.";
+            }
+            _showWelcomeMessage = true;
+            
+            // Force UI update
+            StateHasChanged();
+            
+            // Hide the message after 5 seconds
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                _showWelcomeMessage = false;
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private void HandleLogout()
+    {
+        // Clear any welcome messages on logout
+        _showWelcomeMessage = false;
+        _welcomeMessage = "";
+        
+        // Force UI update to reflect logged out state
+        StateHasChanged();
+    }
+}
