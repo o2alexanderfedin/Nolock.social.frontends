@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Storage;
+using NoLock.Social.Core.Identity.Configuration;
 
 namespace NoLock.Social.Core.Identity.Services
 {
@@ -15,7 +16,7 @@ namespace NoLock.Social.Core.Identity.Services
     /// </summary>
     public class RememberMeService : IRememberMeService
     {
-        private const string STORAGE_KEY = "nolock_remembered_user";
+        private static readonly string STORAGE_KEY = LoginConfiguration.StorageKey;
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<RememberMeService> _logger;
         
@@ -53,10 +54,7 @@ namespace NoLock.Social.Core.Identity.Services
                     Preferences = new() // Can be extended with non-sensitive preferences
                 };
 
-                var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
+                var json = JsonSerializer.Serialize(data, LoginConfiguration.JsonOptions);
 
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", STORAGE_KEY, json);
                 
@@ -94,10 +92,7 @@ namespace NoLock.Social.Core.Identity.Services
                     return null;
                 }
 
-                var data = JsonSerializer.Deserialize<RememberedUserData>(json, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
+                var data = JsonSerializer.Deserialize<RememberedUserData>(json, LoginConfiguration.JsonOptions);
 
                 if (data == null || string.IsNullOrWhiteSpace(data.Username))
                 {
@@ -106,9 +101,9 @@ namespace NoLock.Social.Core.Identity.Services
                     return null;
                 }
 
-                // Check if the remembered data is too old (optional expiry after 30 days)
+                // Check if the remembered data is too old (configurable expiry)
                 var daysSinceLastUse = (DateTime.UtcNow - data.LastUsed).TotalDays;
-                if (daysSinceLastUse > 30)
+                if (daysSinceLastUse > LoginConfiguration.RememberMeExpiryDays)
                 {
                     _logger.LogInformation("Remembered username expired (last used {Days} days ago)", daysSinceLastUse);
                     await ClearRememberedDataAsync();
@@ -179,10 +174,7 @@ namespace NoLock.Social.Core.Identity.Services
                     Preferences = new()
                 };
 
-                var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
+                var json = JsonSerializer.Serialize(data, LoginConfiguration.JsonOptions);
 
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", STORAGE_KEY, json);
                 _logger.LogDebug("Updated last used timestamp for remembered username");

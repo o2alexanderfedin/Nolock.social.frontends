@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Cryptography.Interfaces;
+using NoLock.Social.Core.Identity.Interfaces;
 
 namespace NoLock.Social.Core.Cryptography.Services
 {
@@ -15,6 +16,7 @@ namespace NoLock.Social.Core.Cryptography.Services
     {
         private readonly IWebCryptoService _cryptoService;
         private readonly ISecureMemoryManager _secureMemoryManager;
+        private readonly ISessionPersistenceService _sessionPersistence;
         private readonly ILogger<ReactiveSessionStateService> _logger;
         
         private readonly ReaderWriterLockSlim _stateLock = new(LockRecursionPolicy.NoRecursion);
@@ -37,10 +39,12 @@ namespace NoLock.Social.Core.Cryptography.Services
         public ReactiveSessionStateService(
             IWebCryptoService cryptoService,
             ISecureMemoryManager secureMemoryManager,
+            ISessionPersistenceService sessionPersistence,
             ILogger<ReactiveSessionStateService> logger)
         {
             _cryptoService = cryptoService ?? throw new ArgumentNullException(nameof(cryptoService));
             _secureMemoryManager = secureMemoryManager ?? throw new ArgumentNullException(nameof(secureMemoryManager));
+            _sessionPersistence = sessionPersistence ?? throw new ArgumentNullException(nameof(sessionPersistence));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             SessionTimeoutMinutes = 30; // Default timeout
@@ -182,6 +186,34 @@ namespace NoLock.Social.Core.Cryptography.Services
             _stateChangesSubject.OnNext(args);
             _remainingTimeSubject.OnNext(TimeSpan.FromMinutes(SessionTimeoutMinutes));
 
+            // Persist the session for page refresh survival
+            try
+            {
+                var sessionData = new PersistedSessionData
+                {
+                    SessionId = _currentSession.SessionId,
+                    Username = username,
+                    PublicKey = keyPair.PublicKey,
+                    EncryptedPrivateKey = privateKeyBuffer.Data, // This will be encrypted by the persistence service
+                    CreatedAt = _currentSession.CreatedAt,
+                    LastActivityAt = _lastActivity,
+                    State = SessionState.Unlocked,
+                    Version = 1
+                };
+
+                // Use a derived key from the public key for encryption (simplified approach)
+                // In production, this should use a proper key derivation from the passphrase
+                var encryptionKey = new byte[32];
+                Array.Copy(keyPair.PublicKey, 0, encryptionKey, 0, Math.Min(32, keyPair.PublicKey.Length));
+
+                await _sessionPersistence.PersistSessionAsync(sessionData, encryptionKey, SessionTimeoutMinutes);
+                _logger.LogDebug("Session persisted for refresh survival");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist session, but continuing with in-memory session");
+            }
+
             _logger.LogInformation("Session started successfully for user: {Username}", username);
             return true;
         }
@@ -290,6 +322,17 @@ namespace NoLock.Social.Core.Cryptography.Services
                 _stateLock.ExitWriteLock();
             }
 
+            // Clear persisted session data
+            try
+            {
+                await _sessionPersistence.ClearPersistedSessionAsync();
+                _logger.LogDebug("Cleared persisted session data");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clear persisted session data");
+            }
+
             // Emit state changes
             var args = new SessionStateChangedEventArgs { OldState = oldState, NewState = SessionState.Expired, Reason = "Session ended" };
             _stateSubject.OnNext(SessionState.Expired);
@@ -308,7 +351,7 @@ namespace NoLock.Social.Core.Cryptography.Services
                 if (_currentState == SessionState.Unlocked)
                 {
                     _lastActivity = DateTime.UtcNow;
-                    var remaining = GetRemainingTime();
+                    var remaining = GetRemainingTimeNoLock();
                     _remainingTimeSubject.OnNext(remaining);
                     
                     _logger.LogDebug("Activity updated, {Minutes} minutes remaining", 
@@ -333,7 +376,7 @@ namespace NoLock.Social.Core.Cryptography.Services
             {
                 if (_currentState == SessionState.Unlocked)
                 {
-                    var remaining = GetRemainingTime();
+                    var remaining = GetRemainingTimeNoLock();
                     _remainingTimeSubject.OnNext(remaining);
 
                     // Emit warning if less than 1 minute remaining
@@ -366,13 +409,7 @@ namespace NoLock.Social.Core.Cryptography.Services
             _stateLock.EnterReadLock();
             try
             {
-                if (_currentState != SessionState.Unlocked)
-                    return TimeSpan.Zero;
-
-                var elapsed = DateTime.UtcNow - _lastActivity;
-                var remaining = TimeSpan.FromMinutes(SessionTimeoutMinutes) - elapsed;
-                
-                return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+                return GetRemainingTimeNoLock();
             }
             finally
             {
@@ -380,11 +417,115 @@ namespace NoLock.Social.Core.Cryptography.Services
             }
         }
 
+        /// <summary>
+        /// Gets the remaining time without acquiring a lock.
+        /// This method should only be called when a lock is already held.
+        /// </summary>
+        private TimeSpan GetRemainingTimeNoLock()
+        {
+            if (_currentState != SessionState.Unlocked)
+                return TimeSpan.Zero;
+
+            var elapsed = DateTime.UtcNow - _lastActivity;
+            var remaining = TimeSpan.FromMinutes(SessionTimeoutMinutes) - elapsed;
+            
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        }
+
         public async Task ExtendSessionAsync()
         {
             UpdateActivity();
+            
+            // Also extend the persisted session
+            try
+            {
+                await _sessionPersistence.ExtendSessionExpiryAsync(SessionTimeoutMinutes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to extend persisted session expiry");
+            }
+            
             await Task.CompletedTask;
             _logger.LogInformation("Session extended by {Minutes} minutes", SessionTimeoutMinutes);
+        }
+
+        /// <summary>
+        /// Attempt to restore a persisted session from storage
+        /// </summary>
+        public async Task<bool> TryRestoreSessionAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Attempting to restore persisted session");
+
+                // Check if there's a valid persisted session
+                var hasSession = await _sessionPersistence.HasValidPersistedSessionAsync();
+                if (!hasSession)
+                {
+                    _logger.LogDebug("No valid persisted session found");
+                    return false;
+                }
+
+                // Get the encrypted session data
+                var encryptedSession = await _sessionPersistence.GetPersistedSessionAsync();
+                if (encryptedSession == null)
+                {
+                    _logger.LogDebug("Could not retrieve persisted session");
+                    return false;
+                }
+
+                _logger.LogInformation("Found persisted session {SessionId}, expires at {ExpiresAt}", 
+                    encryptedSession.Metadata.SessionId, encryptedSession.Metadata.ExpiresAt);
+
+                // For now, we can't fully decrypt the session without the passphrase
+                // But we can at least indicate that a session exists and prompt for unlock
+                // This helps maintain awareness that there's an active session
+
+                SessionState oldState;
+                _stateLock.EnterWriteLock();
+                try
+                {
+                    oldState = _currentState;
+                    _currentState = SessionState.Locked;
+                    
+                    // Store basic session info (without keys)
+                    _currentSession = new IdentitySession
+                    {
+                        SessionId = encryptedSession.Metadata.SessionId,
+                        Username = "", // Will be populated on unlock
+                        PublicKey = Array.Empty<byte>(), // Will be populated on unlock
+                        CreatedAt = DateTime.UtcNow,
+                        IsLocked = true,
+                        PrivateKeyBuffer = null // Will be populated on unlock
+                    };
+                }
+                finally
+                {
+                    _stateLock.ExitWriteLock();
+                }
+
+                // Emit state changes
+                var args = new SessionStateChangedEventArgs 
+                { 
+                    OldState = oldState, 
+                    NewState = SessionState.Locked, 
+                    Reason = "Session restored from storage (locked)" 
+                };
+                _stateSubject.OnNext(SessionState.Locked);
+                _stateChangesSubject.OnNext(args);
+
+                var remainingTime = await _sessionPersistence.GetRemainingSessionTimeAsync();
+                _remainingTimeSubject.OnNext(remainingTime);
+
+                _logger.LogInformation("Session restored in locked state, awaiting unlock");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to restore persisted session");
+                return false;
+            }
         }
 
         #endregion

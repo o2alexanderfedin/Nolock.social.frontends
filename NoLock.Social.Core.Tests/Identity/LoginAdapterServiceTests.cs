@@ -56,7 +56,7 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             var keyPair = new Ed25519KeyPair { PublicKey = _testPublicKey, PrivateKey = _testPrivateKey };
-            var privateKeyBuffer = new SecureMemoryBuffer(32);
+            var privateKeyBuffer = Mock.Of<ISecureBuffer>();
 
             _mockKeyDerivation.Setup(x => x.DeriveIdentityAsync(_testPassphrase, _testUsername))
                 .ReturnsAsync((keyPair, privateKeyBuffer));
@@ -105,7 +105,7 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             var keyPair = new Ed25519KeyPair { PublicKey = _testPublicKey, PrivateKey = _testPrivateKey };
-            var privateKeyBuffer = new SecureMemoryBuffer(32);
+            var privateKeyBuffer = Mock.Of<ISecureBuffer>();
 
             _mockKeyDerivation.Setup(x => x.DeriveIdentityAsync(_testPassphrase, _testUsername))
                 .ReturnsAsync((keyPair, privateKeyBuffer));
@@ -181,7 +181,7 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             var keyPair = new Ed25519KeyPair { PublicKey = _testPublicKey, PrivateKey = _testPrivateKey };
-            var privateKeyBuffer = new SecureMemoryBuffer(32);
+            var privateKeyBuffer = Mock.Of<ISecureBuffer>();
 
             _mockKeyDerivation.Setup(x => x.DeriveIdentityAsync(_testPassphrase, _testUsername))
                 .ReturnsAsync((keyPair, privateKeyBuffer));
@@ -229,7 +229,7 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             var keyPair = new Ed25519KeyPair { PublicKey = _testPublicKey, PrivateKey = _testPrivateKey };
-            var privateKeyBuffer = new SecureMemoryBuffer(32);
+            var privateKeyBuffer = Mock.Of<ISecureBuffer>();
 
             _mockKeyDerivation.Setup(x => x.DeriveIdentityAsync(_testPassphrase, _testUsername))
                 .ReturnsAsync((keyPair, privateKeyBuffer));
@@ -478,7 +478,7 @@ namespace NoLock.Social.Core.Tests.Identity
 
             // Act - Raise session state changed event
             _mockSessionState.Raise(x => x.SessionStateChanged += null,
-                new SessionStateChangedEventArgs(SessionState.Locked, SessionState.Unlocked));
+                new SessionStateChangedEventArgs { OldState = SessionState.Locked, NewState = SessionState.Unlocked });
 
             // Assert
             Assert.NotNull(capturedChange);
@@ -510,7 +510,7 @@ namespace NoLock.Social.Core.Tests.Identity
 
             // Act
             _mockSessionState.Raise(x => x.SessionStateChanged += null,
-                new SessionStateChangedEventArgs(SessionState.Unlocked, SessionState.Expired));
+                new SessionStateChangedEventArgs { OldState = SessionState.Unlocked, NewState = SessionState.Expired });
 
             // Assert
             Assert.NotNull(capturedChange);
@@ -526,7 +526,7 @@ namespace NoLock.Social.Core.Tests.Identity
         private async Task<LoginResult> SetupSuccessfulLogin(bool isReturningUser = false)
         {
             var keyPair = new Ed25519KeyPair { PublicKey = _testPublicKey, PrivateKey = _testPrivateKey };
-            var privateKeyBuffer = new SecureMemoryBuffer(32);
+            var privateKeyBuffer = Mock.Of<ISecureBuffer>();
 
             _mockKeyDerivation.Setup(x => x.DeriveIdentityAsync(_testPassphrase, _testUsername))
                 .ReturnsAsync((keyPair, privateKeyBuffer));

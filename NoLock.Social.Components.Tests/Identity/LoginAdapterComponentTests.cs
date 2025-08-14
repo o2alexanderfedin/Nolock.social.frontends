@@ -163,15 +163,24 @@ namespace NoLock.Social.Components.Tests.Identity
                 ErrorMessage = "Invalid credentials"
             };
 
-            _mockLoginService.Setup(x => x.LoginAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+            _mockLoginService.Setup(x => x.LoginAsync("validuser123", "wrongpassphrase123", false))
                 .ReturnsAsync(loginResult);
 
             var component = RenderComponent<LoginAdapterComponent>();
 
             // Act
-            component.Find("input#username").Change("user");
-            component.Find("input#passphrase").Change("wrong");
+            component.Find("input#username").Change("validuser123");
+            component.Find("input#passphrase").Change("wrongpassphrase123");
+            
+            await Task.Delay(50); // Allow form validation to update
+            
+            // Force component re-render to ensure form validation state is updated
+            component.Render();
+            
+            // Use form submit
             await component.Find("form").SubmitAsync();
+            
+            await Task.Delay(50); // Allow login processing to complete
 
             // Assert
             Assert.Contains("Invalid credentials", component.Markup);
@@ -183,19 +192,27 @@ namespace NoLock.Social.Components.Tests.Identity
         {
             // Arrange
             var loginResult = new LoginResult { Success = true };
-            _mockLoginService.Setup(x => x.LoginAsync("user", "pass", true))
+            _mockLoginService.Setup(x => x.LoginAsync("validuser123", "validpassphrase123", true))
                 .ReturnsAsync(loginResult);
 
             var component = RenderComponent<LoginAdapterComponent>();
 
             // Act
-            component.Find("input#username").Change("user");
-            component.Find("input#passphrase").Change("pass");
+            component.Find("input#username").Change("validuser123");
+            component.Find("input#passphrase").Change("validpassphrase123");
             component.Find("input#rememberMe").Change(true);
+            
+            // Wait a bit for the form to update its validation state
+            await Task.Delay(50);
+            
+            // Force component re-render to ensure form validation state is updated
+            component.Render();
+            
+            // Use form submit instead of button click
             await component.Find("form").SubmitAsync();
 
             // Assert
-            _mockLoginService.Verify(x => x.LoginAsync("user", "pass", true), Times.Once);
+            _mockLoginService.Verify(x => x.LoginAsync("validuser123", "validpassphrase123", true), Times.Once);
         }
 
         [Fact]
@@ -203,23 +220,36 @@ namespace NoLock.Social.Components.Tests.Identity
         {
             // Arrange
             var tcs = new TaskCompletionSource<LoginResult>();
-            _mockLoginService.Setup(x => x.LoginAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+            _mockLoginService.Setup(x => x.LoginAsync("validuser123", "validpassphrase123", false))
                 .Returns(tcs.Task);
 
             var component = RenderComponent<LoginAdapterComponent>();
 
             // Act
-            component.Find("input#username").Change("user");
-            component.Find("input#passphrase").Change("pass");
+            component.Find("input#username").Change("validuser123");
+            component.Find("input#passphrase").Change("validpassphrase123");
+            
+            await Task.Delay(50); // Allow form validation to update
+            
+            // Force component re-render to ensure form validation state is updated
+            component.Render();
+            
+            // Start form submission but don't await yet so we can check loading state
             var submitTask = component.Find("form").SubmitAsync();
 
+            // Small delay to ensure the component updates its state
+            await Task.Delay(10);
+            
+            // Force a render to ensure state is updated
+            component.Render();
+            
             // Assert - while processing
             Assert.Contains("Deriving cryptographic keys", component.Markup);
             Assert.Contains("progress-bar", component.Markup);
             Assert.Contains("Processing...", component.Markup);
             
             var submitButton = component.Find("button[type='submit']");
-            Assert.Equal("true", submitButton.GetAttribute("disabled"));
+            Assert.True(submitButton.HasAttribute("disabled"));
 
             // Complete the login
             tcs.SetResult(new LoginResult { Success = true });
@@ -309,7 +339,7 @@ namespace NoLock.Social.Components.Tests.Identity
                 .Add(p => p.OnLogout, () => { logoutCalled = true; return Task.CompletedTask; }));
 
             // Act
-            await component.Find("button:contains('Logout')").ClickAsync();
+            await component.Find("button:contains('Logout')").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
             _mockLoginService.Verify(x => x.LogoutAsync(), Times.Once);
@@ -331,7 +361,7 @@ namespace NoLock.Social.Components.Tests.Identity
                 .Add(p => p.OnLock, () => { lockCalled = true; return Task.CompletedTask; }));
 
             // Act
-            await component.Find("button:contains('Lock Session')").ClickAsync();
+            await component.Find("button:contains('Lock Session')").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
             _mockLoginService.Verify(x => x.LockAsync(), Times.Once);
@@ -356,7 +386,7 @@ namespace NoLock.Social.Components.Tests.Identity
             await Task.Delay(50); // Allow async initialization
 
             // Act
-            await component.Find("button:contains('Forget saved username')").ClickAsync();
+            await component.Find("button:contains('Forget saved username')").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
             _mockRememberMeService.Verify(x => x.ClearRememberedDataAsync(), Times.Once);
@@ -420,7 +450,16 @@ namespace NoLock.Social.Components.Tests.Identity
             // Act
             var passphraseInput = component.Find("input#passphrase");
             passphraseInput.Change("sensitive-passphrase");
-            await component.Find("form").SubmitAsync();
+            
+            // Set valid username to pass form validation
+            component.Find("input#username").Change("validuser");
+            
+            await Task.Delay(10); // Allow form validation to update
+            
+            // Trigger form submit with valid data (OnValidSubmit)
+            await component.Find("button[type='submit']").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+            
+            await Task.Delay(10); // Allow login processing to complete
 
             // Assert - passphrase should be cleared
             Assert.Equal("", passphraseInput.GetAttribute("value"));
@@ -441,10 +480,13 @@ namespace NoLock.Social.Components.Tests.Identity
 
         #endregion
 
-        public override void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            _loginStateChanges?.Dispose();
-            base.Dispose();
+            if (disposing)
+            {
+                _loginStateChanges?.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }

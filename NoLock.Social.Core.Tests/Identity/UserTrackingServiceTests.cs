@@ -32,7 +32,7 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task CheckUserExistsAsync_NewUser_ReturnsNotExists()
         {
             // Arrange
-            var emptyContent = AsyncEnumerable.Empty<ContentMetadata>();
+            var emptyContent = GetEmptyAsyncEnumerable<StorageMetadata>();
             _mockStorageAdapter.Setup(x => x.ListAllContentAsync())
                 .Returns(emptyContent);
 
@@ -52,23 +52,23 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task CheckUserExistsAsync_ReturningUser_ReturnsExists()
         {
             // Arrange
-            var contentList = new List<ContentMetadata>
+            var contentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow.AddDays(-5),
                     ContentAddress = "hash1",
                     Size = 1024
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow.AddDays(-2),
                     ContentAddress = "hash2",
                     Size = 2048
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = "other-user-key",
                     Timestamp = DateTime.UtcNow.AddDays(-1),
@@ -96,9 +96,9 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task CheckUserExistsAsync_CachesResult()
         {
             // Arrange
-            var contentList = new List<ContentMetadata>
+            var contentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow,
@@ -171,9 +171,9 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             // First, populate the cache
-            var contentList = new List<ContentMetadata>
+            var contentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow,
@@ -188,16 +188,16 @@ namespace NoLock.Social.Core.Tests.Identity
             await _service.CheckUserExistsAsync(_testPublicKey); // Populate cache
 
             // Setup for second call with more content
-            var updatedContentList = new List<ContentMetadata>
+            var updatedContentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow,
                     ContentAddress = "hash1",
                     Size = 1024
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow.AddMinutes(1),
@@ -235,30 +235,30 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             var now = DateTime.UtcNow;
-            var contentList = new List<ContentMetadata>
+            var contentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = now.AddDays(-5),
                     ContentAddress = "hash1",
                     Size = 1024
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = now.AddDays(-2),
                     ContentAddress = "hash2",
                     Size = 2048
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = now,
                     ContentAddress = "hash3",
                     Size = 4096
                 },
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = "other-user",
                     Timestamp = now,
@@ -288,10 +288,10 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task GetUserActivityAsync_LimitsRecentContent()
         {
             // Arrange
-            var contentList = new List<ContentMetadata>();
+            var contentList = new List<StorageMetadata>();
             for (int i = 0; i < 15; i++)
             {
-                contentList.Add(new ContentMetadata
+                contentList.Add(new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow.AddHours(-i),
@@ -317,7 +317,7 @@ namespace NoLock.Social.Core.Tests.Identity
         {
             // Arrange
             _mockStorageAdapter.Setup(x => x.ListAllContentAsync())
-                .Returns(AsyncEnumerable.Empty<ContentMetadata>());
+                .Returns(GetEmptyAsyncEnumerable<StorageMetadata>());
 
             // Act
             var result = await _service.GetUserActivityAsync(_testPublicKey);
@@ -366,9 +366,9 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task ClearCache_RemovesAllCachedData()
         {
             // Arrange
-            var contentList = new List<ContentMetadata>
+            var contentList = new List<StorageMetadata>
             {
-                new ContentMetadata
+                new StorageMetadata
                 {
                     PublicKeyBase64 = _testPublicKey,
                     Timestamp = DateTime.UtcNow,
@@ -393,6 +393,11 @@ namespace NoLock.Social.Core.Tests.Identity
         }
 
         #endregion
+
+        private static async IAsyncEnumerable<T> GetEmptyAsyncEnumerable<T>()
+        {
+            yield break;
+        }
     }
 
     // Helper extension to convert IEnumerable to IAsyncEnumerable

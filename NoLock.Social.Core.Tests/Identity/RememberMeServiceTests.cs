@@ -34,15 +34,15 @@ namespace NoLock.Social.Core.Tests.Identity
             string? capturedKey = null;
             string? capturedJson = null;
 
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .Callback<string, object[]>((identifier, args) =>
+                .Callback<string, object[]>((methodName, args) =>
                 {
                     capturedKey = args[0] as string;
                     capturedJson = args[1] as string;
                 })
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await _service.RememberUsernameAsync(username);
@@ -88,7 +88,7 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task RememberUsernameAsync_JSInteropFails_ThrowsInvalidOperationException()
         {
             // Arrange
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
                 .ThrowsAsync(new JSException("localStorage error"));
@@ -166,10 +166,10 @@ namespace NoLock.Social.Core.Tests.Identity
                 It.IsAny<object[]>()))
                 .ReturnsAsync(json);
 
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.IsAny<object[]>()))
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             var result = await _service.GetRememberedUsernameAsync();
@@ -179,7 +179,7 @@ namespace NoLock.Social.Core.Tests.Identity
             Assert.False(_service.IsUsernameRemembered);
             
             // Verify that clear was called
-            _mockJsRuntime.Verify(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.Is<object[]>(args => args[0].Equals(STORAGE_KEY))),
                 Times.Once);
@@ -194,10 +194,10 @@ namespace NoLock.Social.Core.Tests.Identity
                 It.IsAny<object[]>()))
                 .ReturnsAsync("{ invalid json }");
 
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.IsAny<object[]>()))
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             var result = await _service.GetRememberedUsernameAsync();
@@ -207,7 +207,7 @@ namespace NoLock.Social.Core.Tests.Identity
             Assert.False(_service.IsUsernameRemembered);
             
             // Verify that clear was called
-            _mockJsRuntime.Verify(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.Is<object[]>(args => args[0].Equals(STORAGE_KEY))),
                 Times.Once);
@@ -281,10 +281,10 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task ClearRememberedDataAsync_Success_ClearsDataAndCache()
         {
             // Arrange
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.IsAny<object[]>()))
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // First, set up a cached username
             var data = new RememberedUserData { Username = "cacheduser", LastUsed = DateTime.UtcNow };
@@ -304,7 +304,7 @@ namespace NoLock.Social.Core.Tests.Identity
             // Assert
             Assert.False(_service.IsUsernameRemembered);
             
-            _mockJsRuntime.Verify(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.Is<object[]>(args => args[0].Equals(STORAGE_KEY))),
                 Times.Once);
@@ -314,7 +314,7 @@ namespace NoLock.Social.Core.Tests.Identity
         public async Task ClearRememberedDataAsync_JSInteropFails_DoesNotThrow()
         {
             // Arrange
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.removeItem",
                 It.IsAny<object[]>()))
                 .ThrowsAsync(new JSException("localStorage error"));
@@ -344,22 +344,22 @@ namespace NoLock.Social.Core.Tests.Identity
             var username = "testuser";
             
             // First, remember a username
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             await _service.RememberUsernameAsync(username);
             
             string? capturedJson = null;
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .Callback<string, object[]>((identifier, args) =>
+                .Callback<string, object[]>((methodName, args) =>
                 {
                     capturedJson = args[1] as string;
                 })
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await Task.Delay(100); // Small delay to ensure time difference
@@ -382,7 +382,7 @@ namespace NoLock.Social.Core.Tests.Identity
             await _service.UpdateLastUsedAsync();
 
             // Assert - should not call localStorage
-            _mockJsRuntime.Verify(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()),
                 Times.Never);
@@ -395,15 +395,15 @@ namespace NoLock.Social.Core.Tests.Identity
             var username = "testuser";
             
             // First, remember a username
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             await _service.RememberUsernameAsync(username);
             
             // Setup failure for update
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
                 .ThrowsAsync(new JSException("localStorage error"));
@@ -434,14 +434,14 @@ namespace NoLock.Social.Core.Tests.Identity
             var passphrase = "super-secret-passphrase"; // This should never appear in storage
             string? capturedJson = null;
 
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .Callback<string, object[]>((identifier, args) =>
+                .Callback<string, object[]>((methodName, args) =>
                 {
                     capturedJson = args[1] as string;
                 })
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await _service.RememberUsernameAsync(username);
@@ -462,14 +462,14 @@ namespace NoLock.Social.Core.Tests.Identity
             var username = "testuser";
             string? capturedJson = null;
 
-            _mockJsRuntime.Setup(x => x.InvokeAsync<IJSVoidResult>(
+            _mockJsRuntime.Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "localStorage.setItem",
                 It.IsAny<object[]>()))
-                .Callback<string, object[]>((identifier, args) =>
+                .Callback<string, object[]>((methodName, args) =>
                 {
                     capturedJson = args[1] as string;
                 })
-                .ReturnsAsync(Mock.Of<IJSVoidResult>());
+                .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await _service.RememberUsernameAsync(username);

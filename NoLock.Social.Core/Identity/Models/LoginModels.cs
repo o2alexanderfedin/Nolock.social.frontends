@@ -197,6 +197,11 @@ namespace NoLock.Social.Core.Identity.Models
         /// <summary>
         /// State synced from another tab.
         /// </summary>
-        TabSync
+        TabSync,
+        
+        /// <summary>
+        /// Session was restored from persisted storage.
+        /// </summary>
+        SessionRestored
     }
 }
