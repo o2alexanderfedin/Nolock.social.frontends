@@ -21,7 +21,6 @@ This document describes a pragmatic login system that builds directly on top of 
 ### What's Missing for a Login System
 - ❌ Remember me functionality (optional convenience)
 - ❌ Account existence verification (first-time vs returning user)
-- ❌ Basic session persistence across tabs
 - ❌ Logout vs Lock distinction
 
 ### Core Insight
@@ -211,37 +210,7 @@ graph TB
 
 ---
 
-## 5. Multi-Tab Coordination (Optional Enhancement)
-
-### BroadcastChannel for Session Sync
-```mermaid
-sequenceDiagram
-    participant Tab1
-    participant BC as BroadcastChannel
-    participant Tab2
-    participant Tab3
-    
-    Tab1->>Tab1: User logs in
-    Tab1->>BC: Broadcast("session:started", publicKey)
-    BC->>Tab2: Notify session started
-    BC->>Tab3: Notify session started
-    
-    Tab2->>Tab2: Update UI to logged-in
-    Tab3->>Tab3: Update UI to logged-in
-    
-    Note over Tab2,Tab3: Tabs share session state, not keys
-    
-    Tab1->>Tab1: User logs out
-    Tab1->>BC: Broadcast("session:ended")
-    BC->>Tab2: Notify session ended
-    BC->>Tab3: Notify session ended
-```
-
-**Important**: Only session STATE is shared, never keys or passphrases.
-
----
-
-## 6. Implementation Roadmap
+## 5. Implementation Roadmap
 
 ### Phase 1: Core Login Adapter (2-3 days)
 ```
@@ -272,17 +241,10 @@ sequenceDiagram
    - Warn before auto-lock
 ```
 
-### Phase 3: Multi-Tab Support (Optional, 1 day)
-```
-6. Implement BroadcastChannel coordination
-   - Sync login/logout across tabs
-   - Share session state (not keys)
-   - Handle tab close gracefully
-```
 
 ---
 
-## 7. Key Design Decisions
+## 6. Key Design Decisions
 
 ### What We're Building
 ✅ Thin adapter layer over existing unlock mechanism  
@@ -307,7 +269,7 @@ sequenceDiagram
 
 ---
 
-## 8. Security Considerations
+## 7. Security Considerations
 
 ### No New Attack Vectors
 - Passphrase never stored (same as current)
@@ -329,7 +291,7 @@ sequenceDiagram
 
 ---
 
-## 9. Example Integration
+## 8. Example Integration
 
 ### Current Component Usage
 ```typescript
@@ -361,7 +323,7 @@ sequenceDiagram
 
 ---
 
-## 10. Testing Strategy
+## 9. Testing Strategy
 
 ### Unit Tests (Existing Components Unchanged)
 - ✅ All existing crypto tests still pass
@@ -402,7 +364,7 @@ The implementation can be completed in 3-5 days and provides users with a clean,
 
 ---
 
-## 11. Concrete Interface Definitions
+## 10. Concrete Interface Definitions
 
 ### 11.1 Core Login Service Interfaces
 
@@ -591,24 +553,12 @@ namespace NoLock.Social.Core.Identity.Storage
         // NEVER store: passphrase, keys, or session data
     }
 
-    /// <summary>
-    /// Session coordination data for multi-tab sync
-    /// </summary>
-    public class SessionCoordinationMessage
-    {
-        public string MessageType { get; set; } = string.Empty; // "login", "logout", "lock"
-        public string? Username { get; set; }
-        public string? PublicKeyBase64 { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        public string TabId { get; set; } = Guid.NewGuid().ToString();
-        // NEVER include: keys, passphrases, or sensitive data
-    }
 }
 ```
 
 ---
 
-## 12. Detailed Sequence Diagrams
+## 11. Detailed Sequence Diagrams
 
 ### 12.1 Complete Login Flow
 
@@ -623,7 +573,6 @@ sequenceDiagram
     participant KDS as KeyDerivation Service
     participant SSS as SessionState Service
     participant SAS as StorageAdapter Service
-    participant BC as BroadcastChannel
     
     U->>LAC: Click Login
     LAC->>RMS: GetRememberedUsername()
@@ -662,9 +611,6 @@ sequenceDiagram
         RMS->>RMS: Store in localStorage
     end
     
-    LAS->>BC: Broadcast("session:started")
-    BC-->>BC: Notify other tabs
-    
     LAS->>LAS: Update LoginState
     LAS->>LAS: Emit LoginStateChange event
 ```
@@ -678,7 +624,6 @@ sequenceDiagram
     participant LAS as LoginAdapter Service
     participant SSS as SessionState Service
     participant SMM as SecureMemory Manager
-    participant BC as BroadcastChannel
     
     U->>LAC: Click Logout
     LAC->>LAS: LogoutAsync()
@@ -688,9 +633,6 @@ sequenceDiagram
     SMM->>SMM: Secure wipe memory
     SSS-->>LAS: Session ended
     
-    LAS->>BC: Broadcast("session:ended")
-    BC-->>BC: Notify other tabs
-    
     LAS->>LAS: Clear LoginState
     LAS->>LAS: Emit LoginStateChange(Logout)
     
@@ -699,51 +641,9 @@ sequenceDiagram
     Note over SMM: All keys and sensitive data securely wiped
 ```
 
-### 12.3 Multi-Tab Synchronization
-
-```mermaid
-sequenceDiagram
-    participant Tab1 as Tab 1
-    participant BC1 as BroadcastChannel
-    participant Tab2 as Tab 2
-    participant Tab3 as Tab 3
-    
-    Note over Tab1: User logs in
-    Tab1->>Tab1: LoginAsync() succeeds
-    Tab1->>BC1: postMessage({type: "login", username, publicKey})
-    
-    BC1-->>Tab2: onMessage(loginEvent)
-    BC1-->>Tab3: onMessage(loginEvent)
-    
-    Tab2->>Tab2: Update UI state
-    Tab2->>Tab2: Show logged-in view
-    Tab2->>Tab2: Display username
-    
-    Tab3->>Tab3: Update UI state
-    Tab3->>Tab3: Show logged-in view
-    Tab3->>Tab3: Display username
-    
-    Note over Tab2,Tab3: Tabs show logged-in state but don't have keys
-    
-    Tab2->>Tab2: User tries action requiring keys
-    Tab2->>Tab2: Prompt: "Please unlock in original tab"
-    
-    Note over Tab1: User logs out
-    Tab1->>BC1: postMessage({type: "logout"})
-    
-    BC1-->>Tab2: onMessage(logoutEvent)
-    BC1-->>Tab3: onMessage(logoutEvent)
-    
-    Tab2->>Tab2: Clear UI state
-    Tab2->>Tab2: Return to login
-    
-    Tab3->>Tab3: Clear UI state
-    Tab3->>Tab3: Return to login
-```
-
 ---
 
-## 13. Implementation Service Details
+## 12. Implementation Service Details
 
 ### 13.1 UserTrackingService Implementation
 
@@ -853,7 +753,6 @@ public class LoginAdapterService : ILoginAdapterService, IDisposable
     
     private readonly Subject<LoginStateChange> _stateChanges = new();
     private LoginState _currentState = new();
-    private IJSObjectReference? _broadcastChannel;
     
     public LoginState CurrentLoginState => _currentState;
     public IObservable<LoginStateChange> LoginStateChanges => _stateChanges.AsObservable();
@@ -899,10 +798,7 @@ public class LoginAdapterService : ILoginAdapterService, IDisposable
                 IsNewUser = !userInfo.Exists
             };
             
-            // 6. Broadcast to other tabs
-            await BroadcastSessionChange("login");
-            
-            // 7. Emit state change
+            // 6. Emit state change
             _stateChanges.OnNext(new LoginStateChange
             {
                 PreviousState = previousState,
@@ -928,28 +824,12 @@ public class LoginAdapterService : ILoginAdapterService, IDisposable
             };
         }
     }
-    
-    private async Task BroadcastSessionChange(string messageType)
-    {
-        // Initialize broadcast channel if needed
-        _broadcastChannel ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
-            "createBroadcastChannel", "nolock_session");
-        
-        var message = new SessionCoordinationMessage
-        {
-            MessageType = messageType,
-            Username = _currentState.Username,
-            PublicKeyBase64 = _currentState.PublicKeyBase64
-        };
-        
-        await _broadcastChannel.InvokeVoidAsync("postMessage", message);
-    }
 }
 ```
 
 ---
 
-## 14. Component Implementation
+## 13. Component Implementation
 
 ### 14.1 LoginAdapterComponent Structure
 
@@ -1146,62 +1026,9 @@ public class LoginAdapterService : ILoginAdapterService, IDisposable
 
 ---
 
-## 15. JavaScript Interop for BroadcastChannel
+## 14. Service Registration
 
-### 15.1 BroadcastChannel Module
-
-```javascript
-// wwwroot/js/broadcastChannel.js
-
-let channels = {};
-
-window.createBroadcastChannel = (channelName) => {
-    if (channels[channelName]) {
-        return channels[channelName];
-    }
-    
-    const channel = new BroadcastChannel(channelName);
-    
-    // Wrapper object for .NET interop
-    const wrapper = {
-        postMessage: (data) => {
-            channel.postMessage(data);
-        },
-        
-        subscribe: (dotNetRef, methodName) => {
-            channel.onmessage = (event) => {
-                dotNetRef.invokeMethodAsync(methodName, event.data);
-            };
-        },
-        
-        close: () => {
-            channel.close();
-            delete channels[channelName];
-        }
-    };
-    
-    channels[channelName] = wrapper;
-    return wrapper;
-};
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-    Object.values(channels).forEach(channel => channel.close());
-});
-```
-
-### 15.2 Index.html Script Reference
-
-```html
-<!-- Add to wwwroot/index.html -->
-<script src="js/broadcastChannel.js"></script>
-```
-
----
-
-## 16. Service Registration
-
-### 16.1 Dependency Injection Setup
+### 15.1 Dependency Injection Setup
 
 ```csharp
 // In Program.cs or ServiceCollectionExtensions.cs
@@ -1224,9 +1051,9 @@ public static IServiceCollection AddLoginServices(this IServiceCollection servic
 
 ---
 
-## 17. Testing Specifications
+## 15. Testing Specifications
 
-### 17.1 Unit Test Coverage
+### 16.1 Unit Test Coverage
 
 ```csharp
 [TestClass]
@@ -1270,7 +1097,7 @@ public class LoginAdapterServiceTests
 }
 ```
 
-### 17.2 Integration Test Scenarios
+### 16.2 Integration Test Scenarios
 
 ```csharp
 [TestClass]
@@ -1298,7 +1125,7 @@ public class LoginFlowIntegrationTests
 
 ---
 
-## 18. Migration Path from Current Implementation
+## 16. Migration Path from Current Implementation
 
 ### Step 1: Add New Services (No Breaking Changes)
 1. Implement `IUserTrackingService`
