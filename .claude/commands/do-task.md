@@ -1,5 +1,6 @@
 ---
 description: Orchestrate multiple agents to collaboratively work on a task until completion
+argument-hint: [optional: agents to be used], [short task description], [optional: references to specs/documentation to be used]
 disablePreview: true
 ---
 
