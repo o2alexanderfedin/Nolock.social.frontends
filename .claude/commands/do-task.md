@@ -11,13 +11,49 @@ This command orchestrates multiple specialized agents to work together on a comp
 ## Usage
 ```
 /do-task <agent1,agent2,...> <task_description>
+/do-task <shortcut> <task_description>
+/do-task <task_description>  # Auto-selects best agents for the task
 ```
 
+## Auto-Selection
+When no agents are specified, the command **MUST** automatically match the best pair of agents based on the task description:
+- **Testing/QA tasks** → `qa-automation-engineer,principal-engineer`
+- **Security/Crypto tasks** → `system-architect-crypto,principal-engineer`
+- **Blazor/WebAssembly tasks** → `system-architect-blazor,principal-engineer`
+- **Application architecture** → `system-architect-app,principal-engineer`
+- **Implementation tasks** → `principal-engineer,principal-engineer`
+- **Architecture tasks** → `system-architect-app,system-architect-crypto`
+- **Git/Release tasks** → `principal-engineer,git-flow-automation`
+- **Complex features** → `system-architect-app,principal-engineer`
+
+## Shortcuts
+- `engineers` → `principal-engineer,principal-engineer`
+- `architects` → `system-architect-crypto,system-architect-crypto`
+
 ## Examples
+
+### With Explicit Agents
 ```
-/do-task general-purpose,system-architect-crypto Design and implement a secure messaging system
-/do-task git-flow-automation,general-purpose Refactor the authentication module and prepare a release
-/do-task system-architect-crypto,general-purpose Review and optimize the cryptographic architecture
+/do-task principal-engineer,system-architect-crypto Design and implement a secure messaging system
+/do-task principal-engineer,git-flow-automation Refactor the authentication module and prepare a release
+/do-task system-architect-crypto,principal-engineer Review and optimize the cryptographic architecture
+```
+
+### With Shortcuts
+```
+/do-task engineers Build a REST API with comprehensive tests
+/do-task architects Design microservices architecture with security patterns
+```
+
+### With Auto-Selection (No Agents Specified)
+```
+/do-task Write comprehensive test suite with coverage  # Auto-selects: qa-automation-engineer,principal-engineer
+/do-task Design Blazor component architecture  # Auto-selects: system-architect-blazor,principal-engineer
+/do-task Create microservices architecture  # Auto-selects: system-architect-app,system-architect-crypto
+/do-task Debug failing tests and analyze logs  # Auto-selects: qa-automation-engineer,principal-engineer
+/do-task Design secure authentication system  # Auto-selects: system-architect-crypto,principal-engineer
+/do-task Implement user management features  # Auto-selects: principal-engineer,principal-engineer
+/do-task Prepare release and update changelog  # Auto-selects: principal-engineer,git-flow-automation
 ```
 
 ## Process
@@ -124,6 +160,38 @@ The agents work in clearly defined rounds with specific responsibilities:
    - Track progress with mutual agreement
    - Continue iterating until all todos have consensus
 
+## Auto-Agent Selection Algorithm
+
+When no agents are provided, the command **MUST** analyze the task description and select the optimal agent pair:
+
+1. **Scan for Keywords**:
+   - Test/QA/coverage/integration/unit/e2e/smoke → Include `qa-automation-engineer`
+   - Security/crypto/auth/encrypt/sign → Include `system-architect-crypto`
+   - Blazor/WebAssembly/WASM/SignalR → Include `system-architect-blazor`
+   - Application/app/microservices/monolith → Include `system-architect-app`
+   - Build/implement/code/feature → Include `principal-engineer`
+   - Architecture/design/system/scale → Include appropriate architect
+   - Git/release/branch/version/deploy → Include `git-flow-automation`
+   - Logs/debugging/troubleshoot/analyze → Include `qa-automation-engineer`
+
+2. **Apply Selection Rules**:
+   - If task mentions testing/QA → `qa-automation-engineer,principal-engineer`
+   - If task mentions Blazor/WASM → `system-architect-blazor,principal-engineer`
+   - If task mentions app architecture → `system-architect-app,principal-engineer`
+   - If task mentions security AND implementation → `system-architect-crypto,principal-engineer`
+   - If task is pure implementation → `engineers` (two principal engineers)
+   - If task is pure architecture → `system-architect-app,system-architect-crypto`
+   - If task involves git workflow → `principal-engineer,git-flow-automation`
+   - Default for complex tasks → `system-architect-app,principal-engineer`
+
+3. **Examples of Auto-Selection**:
+   - "Write unit and integration tests" → Detects "tests" → `qa-automation-engineer,principal-engineer`
+   - "Design Blazor component architecture" → Detects "Blazor" → `system-architect-blazor,principal-engineer`
+   - "Create microservices architecture" → Detects "microservices" → `system-architect-app,system-architect-crypto`
+   - "Debug failing tests and analyze logs" → Detects "tests" + "logs" → `qa-automation-engineer,principal-engineer`
+   - "Build REST API endpoints" → Detects "build" + "API" → `engineers`
+   - "Fix bugs and create release" → Detects "release" → `principal-engineer,git-flow-automation`
+
 ## How It Works - Explicit Agent Actions
 
 The command orchestrates a multi-agent collaboration through these phases:
@@ -200,7 +268,7 @@ Example handoff:
 
 #### Example 1: Architecture Design Task
 ```
-/do-task system-architect-crypto,general-purpose Design secure login system
+/do-task system-architect-crypto,principal-engineer Design secure login system
 ```
 
 **Round 1:**
@@ -219,22 +287,39 @@ Example handoff:
 - **Architect (Agent 1)**: "I AGREE todo #5 is complete. Working on todo #2 (API design)..."
 - **Developer (Agent 2)**: "Good. Starting todo #6 (tests) while you finish #2..."
 
-#### Example 2: Code Review & Refactor Task
+#### Example 2: Two Engineers Collaboration
 ```
-/do-task general-purpose,git-flow-automation Review and refactor authentication module
+/do-task engineers Build REST API with authentication
 ```
 
 **Round 1:**
-- **Developer (Agent 1)**: "Analyzing code structure. Found: 3 code smells, 2 performance issues, missing tests..."
-- **Git Expert (Agent 2)**: "Confirming issues. Creating feature branch 'refactor/auth-cleanup'. Adding todos for each issue..."
+- **Engineer 1 (Agent 1)**: "I'll design the API structure. Creating todos: 1) API routes, 2) Data models, 3) Auth middleware, 4) Tests, 5) Documentation"
+- **Engineer 2 (Agent 2)**: "Good structure. I'll add: 6) Input validation, 7) Error handling, 8) Rate limiting. I'll start on data models while you do routes."
 
 **Round 2:**
-- **Developer (Agent 1)**: "Refactoring authentication service, extracting interfaces, adding unit tests..."
-- **Git Expert (Agent 2)**: "Reviewing changes, ensuring atomic commits. Implementing pre-commit hooks..."
+- **Engineer 1 (Agent 1)**: "Implemented routes in /api/routes. Using Express with TypeScript. Ready for review."
+- **Engineer 2 (Agent 2)**: "Routes look good but need async error wrapper. NOT complete. My data models with Prisma are ready for your review."
 
 **Round 3:**
-- **Developer (Agent 1)**: "All refactoring complete, tests passing, coverage at 95%..."
-- **Git Expert (Agent 2)**: "Creating release branch, updating version, preparing changelog. TASK COMPLETE"
+- **Engineer 1 (Agent 1)**: "Added async wrapper to routes. I AGREE routes are complete. Your models need unique constraints on email."
+- **Engineer 2 (Agent 2)**: "Fixed models. Both working on auth middleware now - I'll do JWT, you do session management."
+
+#### Example 3: Two Architects Collaboration
+```
+/do-task architects Design distributed payment system
+```
+
+**Round 1:**
+- **Architect 1 (Agent 1)**: "Analyzing requirements. I'll focus on: 1) System topology, 2) Data flow, 3) Security boundaries"
+- **Architect 2 (Agent 2)**: "I'll complement with: 4) Consensus mechanisms, 5) Cryptographic protocols, 6) Failure recovery"
+
+**Round 2:**
+- **Architect 1 (Agent 1)**: "Proposed topology: 3-tier with service mesh. Event-driven with Kafka. Documenting in architecture.md"
+- **Architect 2 (Agent 2)**: "Topology solid. Adding Byzantine fault tolerance. Proposing ECDSA for signatures, AES-256-GCM for encryption."
+
+**Round 3:**
+- **Architect 1 (Agent 1)**: "Integrated your crypto specs. Added API gateway pattern. Todo #1-3 ready for agreement."
+- **Architect 2 (Agent 2)**: "Reviewing against security standards... I AGREE todos #1-3 complete. Finalizing consensus protocol..."
 
 ### Example Flow Diagram
 
@@ -282,24 +367,59 @@ Agents communicate through:
 
 #### Architecture & Implementation Team
 ```
-/do-task system-architect-crypto,general-purpose Design secure API architecture and implement core endpoints
+/do-task system-architect-crypto,principal-engineer Design secure API architecture and implement core endpoints
 ```
 **Agent 1 (Architect)** designs system architecture, defines security requirements, creates API contracts
 **Agent 2 (Developer)** implements endpoints, writes tests, handles error cases, creates documentation
 
+#### Two Engineers Team (Peer Programming)
+```
+/do-task engineers Implement complex feature with full test coverage
+```
+**Agent 1 (Lead Engineer)** designs implementation approach, builds core logic, writes unit tests
+**Agent 2 (Review Engineer)** reviews code quality, implements edge cases, writes integration tests
+
+#### Two Architects Team (Architecture Review)
+```
+/do-task architects Design enterprise-scale distributed system
+```
+**Agent 1 (System Architect)** designs overall topology, defines service boundaries, specifies APIs
+**Agent 2 (Security Architect)** adds security layers, defines crypto protocols, validates compliance
+
 #### Review & Refactor Team
 ```
-/do-task general-purpose,git-flow-automation Review code quality, refactor, and prepare release
+/do-task principal-engineer,git-flow-automation Review code quality, refactor, and prepare release
 ```
 **Agent 1 (Developer)** identifies code issues, performs refactoring, writes/updates tests
 **Agent 2 (Git Expert)** manages branches, creates atomic commits, prepares release, updates changelog
 
 #### Research & Document Team
 ```
-/do-task general-purpose,system-architect-crypto Research best practices and document system design
+/do-task principal-engineer,system-architect-crypto Research best practices and document system design
 ```
 **Agent 1 (Researcher)** gathers information, analyzes options, compares approaches
 **Agent 2 (Architect)** evaluates technical merit, designs solution, creates architecture docs
+
+#### Testing & QA Team
+```
+/do-task qa-automation-engineer,principal-engineer Create comprehensive test coverage and fix issues
+```
+**Agent 1 (QA Engineer)** writes all test types (unit/integration/e2e), analyzes logs, debugs failures
+**Agent 2 (Principal Engineer)** fixes bugs, refactors for testability, implements missing features
+
+#### Blazor Development Team
+```
+/do-task system-architect-blazor,principal-engineer Build Blazor WebAssembly application
+```
+**Agent 1 (Blazor Architect)** designs component architecture, SignalR integration, state management
+**Agent 2 (Principal Engineer)** implements components, handles interop, writes tests
+
+#### Application Architecture Team
+```
+/do-task system-architect-app,system-architect-crypto Design enterprise application architecture
+```
+**Agent 1 (App Architect)** designs overall system topology, microservices, APIs, data flow
+**Agent 2 (Crypto Architect)** adds security layers, authentication, encryption, compliance
 
 ### Specific Coordination Patterns
 
@@ -315,21 +435,42 @@ Agents communicate through:
 #### Pattern 4: Quality Gate
 **Agent 1** creates solution → **Agent 2** tests/validates → **Agent 1** fixes issues → **Agent 2** approves
 
+#### Pattern 5: Parallel Development (Two Engineers)
+**Both** divide work by components → **Agent 1** builds backend → **Agent 2** builds frontend → **Both** integrate and test
+
+#### Pattern 6: Complementary Architecture (Two Architects)
+**Agent 1** designs business logic → **Agent 2** designs infrastructure → **Both** align on interfaces → **Both** validate integration
+
 ### Task Templates
 
 **Security Review**:
 ```
-/do-task system-architect-crypto,general-purpose Perform security review of authentication system, identify vulnerabilities, and implement fixes
+/do-task system-architect-crypto,principal-engineer Perform security review of authentication system, identify vulnerabilities, and implement fixes
 ```
 
 **Performance Optimization**:
 ```
-/do-task general-purpose,system-architect-crypto Profile application, identify bottlenecks, and optimize critical paths
+/do-task principal-engineer,system-architect-crypto Profile application, identify bottlenecks, and optimize critical paths
 ```
 
 **Architecture Evolution**:
 ```
-/do-task system-architect-crypto,general-purpose Evolve architecture from monolith to microservices, maintaining backward compatibility
+/do-task system-architect-crypto,principal-engineer Evolve architecture from monolith to microservices, maintaining backward compatibility
+```
+
+**Full Stack Implementation**:
+```
+/do-task engineers Build complete feature from database to UI with tests
+```
+
+**System Design**:
+```
+/do-task architects Design scalable multi-tenant SaaS architecture
+```
+
+**Code Quality Review**:
+```
+/do-task engineers Refactor legacy codebase and improve test coverage
 ```
 
 ## Limitations
@@ -350,11 +491,13 @@ Agents communicate through:
 ## Error Handling
 
 The command will:
-- Validate agent names exist
+- **Auto-select agents if none provided** based on task analysis
+- Validate agent names exist (if explicitly provided)
 - Ensure task description is provided
 - Prevent infinite loops with round limit
 - Require consensus for completion
 - Provide clear status updates
+- **Announce selected agents** when auto-selection occurs
 
 ## Output
 
