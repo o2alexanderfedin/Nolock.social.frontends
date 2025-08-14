@@ -16,7 +16,7 @@
 ## Document Information
 - **Version**: 1.0.0
 - **Date**: 2025-08-13
-- **Target Platform**: Blazor WebAssembly (.NET 8+)
+- **Target Platform**: Blazor WebAssembly (.NET 9.0)
 - **Status**: MVP Complete ✅
 - **Epic**: Cryptographic Identity System MVP
 

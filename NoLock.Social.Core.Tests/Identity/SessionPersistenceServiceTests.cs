@@ -57,7 +57,7 @@ namespace NoLock.Social.Core.Tests.Identity
             string? capturedValue = null;
 
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                     It.IsAny<string>(),
                     It.IsAny<object[]>()))
                 .Callback<string, object[]>((identifier, args) =>
@@ -68,7 +68,7 @@ namespace NoLock.Social.Core.Tests.Identity
                         capturedValue = args[1] as string;
                     }
                 })
-                .Returns(new ValueTask());
+                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             var result = await _service.PersistSessionAsync(sessionData, encryptionKey, 30);
@@ -125,10 +125,10 @@ namespace NoLock.Social.Core.Tests.Identity
                 .ReturnsAsync(json);
 
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                     It.IsAny<string>(),
                     It.IsAny<object[]>()))
-                .Returns(new ValueTask());
+                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             var result = await _service.GetPersistedSessionAsync();
@@ -137,7 +137,7 @@ namespace NoLock.Social.Core.Tests.Identity
             Assert.Null(result);
             
             // Verify that clear was called
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "sessionStorage.removeItem",
                 It.IsAny<object[]>()), Times.AtLeastOnce);
         }
@@ -181,11 +181,11 @@ namespace NoLock.Social.Core.Tests.Identity
             var removeItemCalls = 0;
 
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                     It.Is<string>(s => s.Contains("removeItem")),
                     It.IsAny<object[]>()))
                 .Callback(() => removeItemCalls++)
-                .Returns(new ValueTask());
+                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await _service.ClearPersistedSessionAsync();
@@ -260,7 +260,7 @@ namespace NoLock.Social.Core.Tests.Identity
 
             string? updatedJson = null;
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                     "sessionStorage.setItem",
                     It.IsAny<object[]>()))
                 .Callback<string, object[]>((_, args) =>
@@ -268,7 +268,7 @@ namespace NoLock.Social.Core.Tests.Identity
                     if (args.Length >= 2)
                         updatedJson = args[1] as string;
                 })
-                .Returns(new ValueTask());
+                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
 
             // Act
             await _service.ExtendSessionExpiryAsync(15);
