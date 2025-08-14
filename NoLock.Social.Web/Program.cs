@@ -28,6 +28,8 @@ builder.Services.AddContentAddressableStorage();
 builder.Services.AddCryptographicServices(useReactive: true);
 builder.Services.AddSecurityServices();
 builder.Services.AddPerformanceMonitoring();
+// Add login services (wraps existing identity unlock with login semantics)
+builder.Services.AddLoginServices();
 
 var app = builder.Build();
 

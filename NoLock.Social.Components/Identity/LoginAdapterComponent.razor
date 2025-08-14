@@ -1,0 +1,352 @@
+@using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Identity.Models
+@using System.ComponentModel.DataAnnotations
+@inject ILoginAdapterService LoginService
+@inject IRememberMeService RememberMeService
+@inject ILogger<LoginAdapterComponent> Logger
+@implements IDisposable
+
+<div class="login-container">
+    @if (LoginService.CurrentLoginState.IsLoggedIn)
+    {
+        @* Already logged in - show status *@
+        <div class="logged-in-status card">
+            <div class="card-body">
+                <h5 class="card-title">Welcome, @LoginService.CurrentLoginState.Username!</h5>
+                <p class="card-text">
+                    @if (LoginService.CurrentLoginState.IsLocked)
+                    {
+                        <span class="badge bg-warning">Session Locked</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success">Session Active</span>
+                    }
+                </p>
+                <p class="card-text">
+                    <small class="text-muted">
+                        Logged in since: @LoginService.CurrentLoginState.LoginTime?.ToString("g")
+                    </small>
+                </p>
+                <div class="btn-group" role="group">
+                    @if (!LoginService.CurrentLoginState.IsLocked)
+                    {
+                        <button @onclick="HandleLock" class="btn btn-warning">
+                            <i class="bi bi-lock"></i> Lock Session
+                        </button>
+                    }
+                    <button @onclick="HandleLogout" class="btn btn-secondary">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="login-card card">
+            <div class="card-body">
+                <h3 class="card-title text-center mb-4">
+                    @(_isNewUserFlow ? "Create Your Identity" : "Welcome Back")
+                </h3>
+                
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @_errorMessage
+                        <button type="button" class="btn-close" @onclick="() => _errorMessage = string.Empty"></button>
+                    </div>
+                }
+                
+                @if (_showSuccessMessage && !string.IsNullOrEmpty(_successMessage))
+                {
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle-fill"></i> @_successMessage
+                        <button type="button" class="btn-close" @onclick="() => _showSuccessMessage = false"></button>
+                    </div>
+                }
+                
+                <EditForm Model="@_loginModel" OnValidSubmit="@HandleLogin">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="bi bi-person"></i> Username
+                        </label>
+                        <InputText @bind-Value="_loginModel.Username" 
+                                   id="username"
+                                   class="form-control" 
+                                   placeholder="Enter your username"
+                                   disabled="@_isProcessing" 
+                                   autocomplete="username" />
+                        <ValidationMessage For="@(() => _loginModel.Username)" />
+                        <small class="form-text text-muted">
+                            Your username is part of your cryptographic identity
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="passphrase" class="form-label">
+                            <i class="bi bi-key"></i> Passphrase
+                        </label>
+                        <InputText type="password" 
+                                   @bind-Value="_loginModel.Passphrase" 
+                                   id="passphrase"
+                                   class="form-control" 
+                                   placeholder="Enter your secure passphrase"
+                                   disabled="@_isProcessing" 
+                                   autocomplete="current-password" />
+                        <ValidationMessage For="@(() => _loginModel.Passphrase)" />
+                        <small class="form-text text-muted">
+                            Use a strong, memorable passphrase (12+ characters recommended)
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <InputCheckbox @bind-Value="_loginModel.RememberUsername" 
+                                       class="form-check-input" 
+                                       id="rememberMe" 
+                                       disabled="@_isProcessing" />
+                        <label class="form-check-label" for="rememberMe">
+                            Remember my username (never stores your passphrase)
+                        </label>
+                    </div>
+                    
+                    @if (_isProcessing)
+                    {
+                        <div class="progress mb-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 style="width: 100%">
+                                Deriving cryptographic keys...
+                            </div>
+                        </div>
+                        <small class="text-muted d-block text-center mb-3">
+                            This may take a few seconds for security
+                        </small>
+                    }
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" disabled="@_isProcessing">
+                            @if (_isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Processing...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-shield-lock"></i>
+                                <span> @(_isNewUserFlow ? "Create Identity" : "Login")</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+                
+                @if (_hasRememberedUsername)
+                {
+                    <div class="text-center mt-3">
+                        <button @onclick="ForgetUsername" class="btn btn-link btn-sm text-muted">
+                            <i class="bi bi-x-circle"></i> Forget saved username
+                        </button>
+                    </div>
+                }
+                
+                <hr class="my-4" />
+                
+                <div class="text-center">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        Your identity is derived from your username and passphrase.<br />
+                        There is no password reset - your passphrase IS your identity.
+                    </small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private LoginModel _loginModel = new();
+    private bool _isProcessing = false;
+    private string _errorMessage = "";
+    private string _successMessage = "";
+    private bool _showSuccessMessage = false;
+    private bool _isNewUserFlow = false;
+    private bool _hasRememberedUsername = false;
+    private IDisposable? _stateChangeSubscription;
+    
+    [Parameter] public EventCallback<LoginResult> OnLogin { get; set; }
+    [Parameter] public EventCallback OnLogout { get; set; }
+    [Parameter] public EventCallback OnLock { get; set; }
+    [Parameter] public bool ShowNewUserWelcome { get; set; } = true;
+    [Parameter] public bool RememberUsernameDefault { get; set; } = false;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Check for remembered username
+        var remembered = await RememberMeService.GetRememberedUsernameAsync();
+        if (!string.IsNullOrEmpty(remembered))
+        {
+            _loginModel.Username = remembered;
+            _loginModel.RememberUsername = true;
+            _hasRememberedUsername = true;
+            Logger.LogDebug("Pre-filled remembered username");
+        }
+        else
+        {
+            _loginModel.RememberUsername = RememberUsernameDefault;
+        }
+        
+        // Subscribe to login state changes for reactive UI updates
+        _stateChangeSubscription = LoginService.LoginStateChanges.Subscribe(change =>
+        {
+            Logger.LogDebug("Login state changed: {Reason}", change.Reason);
+            InvokeAsync(StateHasChanged);
+        });
+    }
+    
+    private async Task HandleLogin()
+    {
+        _isProcessing = true;
+        _errorMessage = "";
+        _showSuccessMessage = false;
+        
+        try
+        {
+            Logger.LogInformation("Starting login for user: {Username}", _loginModel.Username);
+            
+            var result = await LoginService.LoginAsync(
+                _loginModel.Username,
+                _loginModel.Passphrase,
+                _loginModel.RememberUsername);
+            
+            if (result.Success)
+            {
+                // Clear sensitive data from form
+                _loginModel.Passphrase = "";
+                
+                // Show appropriate welcome message
+                if (result.IsNewUser && ShowNewUserWelcome)
+                {
+                    _successMessage = $"Welcome to NoLock.Social, {_loginModel.Username}! Your identity has been created.";
+                    _showSuccessMessage = true;
+                    Logger.LogInformation("New user created: {Username}", _loginModel.Username);
+                }
+                else if (!result.IsNewUser)
+                {
+                    _successMessage = $"Welcome back, {_loginModel.Username}!";
+                    _showSuccessMessage = true;
+                    Logger.LogInformation("Returning user logged in: {Username}", _loginModel.Username);
+                }
+                
+                // Notify parent component
+                if (OnLogin.HasDelegate)
+                {
+                    await OnLogin.InvokeAsync(result);
+                }
+            }
+            else
+            {
+                _errorMessage = result.ErrorMessage ?? "Login failed. Please check your credentials.";
+                Logger.LogWarning("Login failed for user: {Username}", _loginModel.Username);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Exception during login");
+            _errorMessage = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+    
+    private async Task HandleLogout()
+    {
+        try
+        {
+            Logger.LogInformation("User logging out");
+            await LoginService.LogoutAsync();
+            
+            // Clear form
+            _loginModel.Passphrase = "";
+            if (!_hasRememberedUsername)
+            {
+                _loginModel.Username = "";
+            }
+            
+            _successMessage = "You have been logged out successfully.";
+            _showSuccessMessage = true;
+            
+            if (OnLogout.HasDelegate)
+            {
+                await OnLogout.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during logout");
+            _errorMessage = "An error occurred during logout.";
+        }
+    }
+    
+    private async Task HandleLock()
+    {
+        try
+        {
+            Logger.LogInformation("User locking session");
+            await LoginService.LockAsync();
+            
+            _successMessage = "Session locked. Enter your passphrase to unlock.";
+            _showSuccessMessage = true;
+            
+            if (OnLock.HasDelegate)
+            {
+                await OnLock.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during session lock");
+            _errorMessage = "An error occurred while locking the session.";
+        }
+    }
+    
+    private async Task ForgetUsername()
+    {
+        try
+        {
+            await RememberMeService.ClearRememberedDataAsync();
+            _loginModel.Username = "";
+            _loginModel.RememberUsername = false;
+            _hasRememberedUsername = false;
+            _successMessage = "Saved username has been forgotten.";
+            _showSuccessMessage = true;
+            Logger.LogInformation("Cleared remembered username");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error clearing remembered username");
+            _errorMessage = "Failed to clear remembered username.";
+        }
+    }
+    
+    public void Dispose()
+    {
+        _stateChangeSubscription?.Dispose();
+    }
+    
+    private class LoginModel
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
+        [RegularExpression(@"^[a-zA-Z0-9_-]+$", ErrorMessage = "Username can only contain letters, numbers, hyphens, and underscores")]
+        public string Username { get; set; } = "";
+        
+        [Required(ErrorMessage = "Passphrase is required")]
+        [StringLength(200, MinimumLength = 12, ErrorMessage = "Passphrase must be at least 12 characters")]
+        public string Passphrase { get; set; } = "";
+        
+        public bool RememberUsername { get; set; } = false;
+    }
+}

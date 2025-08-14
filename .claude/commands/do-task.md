@@ -6,6 +6,13 @@ disablePreview: true
 
 # Do Task - Multi-Agent Collaboration
 
+## ⚠️ CRITICAL: Sequential Task Execution
+**Agents MUST work on tasks ONE AT A TIME, not all at once:**
+- ✅ CORRECT: Select Task 1 → Complete it → Select Task 2 → Complete it
+- ❌ WRONG: Create todo list with all 8 tasks → Try to do them all
+- ✅ CORRECT: "Working on Task 4.3: Integrate LoginAdapterComponent"
+- ❌ WRONG: "Creating todo list with tasks 4.3, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.3"
+
 ## Overview
 This command orchestrates multiple specialized agents to work together on a complex task, similar to pair programming but adapted for any type of work. Agents take turns contributing their expertise, reviewing each other's work, and iterating until the task is complete.
 
@@ -18,26 +25,26 @@ This command orchestrates multiple specialized agents to work together on a comp
 
 ## Auto-Selection
 When no agents are specified, the command **MUST** automatically match the best pair of agents based on the task description:
-- **Testing/QA tasks** → `qa-automation-engineer,principal-engineer`
-- **Security/Crypto tasks** → `system-architect-crypto,principal-engineer`
-- **Blazor/WebAssembly tasks** → `system-architect-blazor,principal-engineer`
-- **Application architecture** → `system-architect-app,principal-engineer`
-- **Implementation tasks** → `principal-engineer,principal-engineer`
-- **Architecture tasks** → `system-architect-app,system-architect-crypto`
-- **Git/Release tasks** → `principal-engineer,git-flow-automation`
-- **Complex features** → `system-architect-app,principal-engineer`
+- **Testing/QA tasks** → `qa-automation-engineer and principal-engineer`
+- **Security/Crypto tasks** → `system-architect-crypto and principal-engineer`
+- **Blazor/WebAssembly tasks** → `system-architect-blazor and principal-engineer`
+- **Application architecture** → `system-architect-app and principal-engineer`
+- **Implementation tasks** → `principal-engineer 1 and principal-engineer 2`
+- **Architecture tasks** → `system-architect-app and system-architect-crypto`
+- **Git/Release tasks** → `principal-engineer and git-flow-automation`
+- **Complex features** → `system-architect-app and principal-engineer`
 
 ## Shortcuts
-- `engineers` → `principal-engineer,principal-engineer`
-- `architects` → `system-architect-crypto,system-architect-crypto`
+- `engineers` → `principal-engineer 1 and principal-engineer 2`
+- `architects` → `system-architect-crypto 1 and system-architect-crypto 2`
 
 ## Examples
 
 ### With Explicit Agents
 ```
-/do-task principal-engineer,system-architect-crypto Design and implement a secure messaging system
-/do-task principal-engineer,git-flow-automation Refactor the authentication module and prepare a release
-/do-task system-architect-crypto,principal-engineer Review and optimize the cryptographic architecture
+/do-task principal-engineer and system-architect-crypto to Design and implement a secure messaging system
+/do-task principal-engineer and git-flow-automation to Refactor the authentication module and prepare a release
+/do-task system-architect-crypto and principal-engineer to Review and optimize the cryptographic architecture
 ```
 
 ### With Shortcuts
@@ -48,13 +55,13 @@ When no agents are specified, the command **MUST** automatically match the best 
 
 ### With Auto-Selection (No Agents Specified)
 ```
-/do-task Write comprehensive test suite with coverage  # Auto-selects: qa-automation-engineer,principal-engineer
-/do-task Design Blazor component architecture  # Auto-selects: system-architect-blazor,principal-engineer
-/do-task Create microservices architecture  # Auto-selects: system-architect-app,system-architect-crypto
-/do-task Debug failing tests and analyze logs  # Auto-selects: qa-automation-engineer,principal-engineer
-/do-task Design secure authentication system  # Auto-selects: system-architect-crypto,principal-engineer
-/do-task Implement user management features  # Auto-selects: principal-engineer,principal-engineer
-/do-task Prepare release and update changelog  # Auto-selects: principal-engineer,git-flow-automation
+/do-task Write comprehensive test suite with coverage  # Auto-selects: qa-automation-engineer agent and principal-engineer agent
+/do-task Design Blazor component architecture  # Auto-selects: system-architect-blazor agent and principal-engineer agent
+/do-task Create microservices architecture  # Auto-selects: system-architect-app agent and system-architect-crypto agent
+/do-task Debug failing tests and analyze logs  # Auto-selects: qa-automation-engineer agent and principal-engineer agent
+/do-task Design secure authentication system  # Auto-selects: system-architect-crypto agent and principal-engineer agent
+/do-task Implement user management features  # Auto-selects: principal-engineer agent 1 and principal-engineer agent 2
+/do-task Prepare release and update changelog  # Auto-selects: principal-engineer agent and git-flow-automation agent
 ```
 
 ## Process
@@ -64,10 +71,11 @@ When no agents are specified, the command **MUST** automatically match the best 
    - Identifies key components and dependencies
    - Establishes success criteria
 
-2. **Collaborative Work Loop**
-   - Each agent contributes based on their specialty
-   - Agents review and build upon previous work
-   - Continue until consensus that task is complete
+2. **Sequential Task Execution**
+   - **CRITICAL: Agents work on ONE task at a time, NOT all tasks at once**
+   - Agents select a single task from the task file or todo list
+   - Complete that task with mutual agreement before moving to the next
+   - Continue sequentially until all tasks are complete
 
 3. **Completion Criteria**
    - **Every todo item has mutual agreement from both agents**
@@ -148,18 +156,71 @@ The agents work in clearly defined rounds with specific responsibilities:
 - No todos remain in "in_progress" state
 - All work validated against task description and relevant documentation
 
+## Automatic Task File Tracking
+
+When working on tasks, agents **MUST** automatically update task files if they exist:
+
+### Task File Detection
+Agents automatically search for and update task files in:
+- `/docs/scrum/tasks/*.md` - Scrum task files
+- `/docs/tasks/*.md` - General task files  
+- `/tasks/*.md` - Root task files
+- Any `.md` file referenced in the task description
+
+### Task Status Markers
+Agents update task checkboxes with status indicators:
+- `- [ ]` = Not started
+- `- [🔄]` = In progress (started by an agent)
+- `- [✅]` = Complete (both agents agreed)
+- `- [❌]` = Blocked or failed
+
+### Update Protocol
+1. **When starting a task**: Change `- [ ]` to `- [🔄]`
+2. **When proposing completion**: Keep as `- [🔄]` until agreement
+3. **When both agree**: Change `- [🔄]` to `- [✅]`
+4. **Add timestamps**: Include date/time of status changes
+5. **Add agent notes**: Document who worked on what
+
+### Example Task File Updates
+```markdown
+<!-- Original -->
+### Task 2.1: Implement LoginService [P0]
+- [ ] Create ILoginService interface
+- [ ] Implement service logic
+- [ ] Add unit tests
+
+<!-- After Agent 1 starts -->
+### Task 2.1: Implement LoginService [P0] 
+**Status**: In Progress (Started: 2024-03-14 10:30 by Engineer 1)
+- [🔄] Create ILoginService interface
+- [🔄] Implement service logic  
+- [ ] Add unit tests
+
+<!-- After both agents agree complete -->
+### Task 2.1: Implement LoginService [P0]
+**Status**: ✅ Complete (2024-03-14 12:15)
+**Completed by**: Engineer 1 & Engineer 2 (mutual agreement)
+- [✅] Create ILoginService interface
+- [✅] Implement service logic
+- [✅] Add unit tests
+```
+
 ## Best Practices
 
-1. **Choose complementary agents** - Select agents whose skills complement each other
-2. **Clear task definition** - Provide specific, measurable goals
-3. **Let agents iterate** - Allow multiple rounds for complex tasks
-4. **Trust the process** - Agents will coordinate naturally
-5. **Enforce mutual agreement** - No todo is done until both agents agree
-6. **Dynamic task management** - Agents use TodoWrite to:
-   - Maintain a shared task list throughout collaboration
-   - Add new todo items as they discover additional work
-   - Track progress with mutual agreement
-   - Continue iterating until all todos have consensus
+1. **Sequential execution** - Work on ONE task at a time, complete it, then move to next
+2. **Choose complementary agents** - Select agents whose skills complement each other
+3. **Clear task definition** - Provide specific, measurable goals
+4. **Let agents iterate** - Allow multiple rounds for complex tasks
+5. **Trust the process** - Agents will coordinate naturally
+6. **Enforce mutual agreement** - No todo is done until both agents agree
+7. **Track in task files** - Automatically update task files when they exist
+8. **Avoid task overload** - NEVER load all remaining tasks at once
+9. **Quality over speed** - Complete each task properly before moving on
+10. **Smart task management** - When using TodoWrite:
+    - Add ONLY the current task being worked on
+    - Complete it with mutual agreement
+    - Then add the next single task
+    - NEVER create a list with all remaining tasks at once
 
 ## Auto-Agent Selection Algorithm
 
@@ -176,22 +237,22 @@ When no agents are provided, the command **MUST** analyze the task description a
    - Logs/debugging/troubleshoot/analyze → Include `qa-automation-engineer`
 
 2. **Apply Selection Rules**:
-   - If task mentions testing/QA → `qa-automation-engineer,principal-engineer`
-   - If task mentions Blazor/WASM → `system-architect-blazor,principal-engineer`
-   - If task mentions app architecture → `system-architect-app,principal-engineer`
-   - If task mentions security AND implementation → `system-architect-crypto,principal-engineer`
+   - If task mentions testing/QA → `qa-automation-engineer and principal-engineer`
+   - If task mentions Blazor/WASM → `system-architect-blazor and principal-engineer`
+   - If task mentions app architecture → `system-architect-app and principal-engineer`
+   - If task mentions security AND implementation → `system-architect-crypto and principal-engineer`
    - If task is pure implementation → `engineers` (two principal engineers)
-   - If task is pure architecture → `system-architect-app,system-architect-crypto`
-   - If task involves git workflow → `principal-engineer,git-flow-automation`
-   - Default for complex tasks → `system-architect-app,principal-engineer`
+   - If task is pure architecture → `system-architect-app and system-architect-crypto`
+   - If task involves git workflow → `principal-engineer and git-flow-automation`
+   - Default for complex tasks → `system-architect-app and principal-engineer`
 
 3. **Examples of Auto-Selection**:
-   - "Write unit and integration tests" → Detects "tests" → `qa-automation-engineer,principal-engineer`
-   - "Design Blazor component architecture" → Detects "Blazor" → `system-architect-blazor,principal-engineer`
-   - "Create microservices architecture" → Detects "microservices" → `system-architect-app,system-architect-crypto`
-   - "Debug failing tests and analyze logs" → Detects "tests" + "logs" → `qa-automation-engineer,principal-engineer`
+   - "Write unit and integration tests" → Detects "tests" → `qa-automation-engineer and principal-engineer`
+   - "Design Blazor component architecture" → Detects "Blazor" → `system-architect-blazor and principal-engineer`
+   - "Create microservices architecture" → Detects "microservices" → `system-architect-app and system-architect-crypto`
+   - "Debug failing tests and analyze logs" → Detects "tests" + "logs" → `qa-automation-engineer and principal-engineer`
    - "Build REST API endpoints" → Detects "build" + "API" → `engineers`
-   - "Fix bugs and create release" → Detects "release" → `principal-engineer,git-flow-automation`
+   - "Fix bugs and create release" → Detects "release" → `principal-engineer and git-flow-automation`
 
 ## How It Works - Explicit Agent Actions
 
@@ -200,38 +261,45 @@ The command orchestrates a multi-agent collaboration through these phases:
 ### Phase 1: Task Analysis (Rounds 1-2)
 
 **Round 1 - Agent 1 says:**
-"I'll analyze this task and break it down. The main components are: [lists components]. Creating initial todo list with [X] items. My plan is to [describes approach]."
+"I'll analyze this task and break it down. First, let me check for existing task files... Found `/docs/scrum/tasks/[relevant-file].md`. Reading task breakdown from file. The main components are: [lists components from file]. Creating todo list from the task file with [X] items. Updating task file to mark items as in progress. My plan is to [describes approach]."
 
 **Round 2 - Agent 2 says:**
-"Reviewing Agent 1's analysis. I agree with components A, B, C. However, we also need to consider [additional aspects]. Adding todos for [missing items]. Let me refine the success criteria to include [specific metrics]."
+"Reviewing Agent 1's analysis and the task file. I agree with components A, B, C from the file. However, we also need to consider [additional aspects]. Adding todos for [missing items]. Updating task file with additional discovered tasks. Let me refine the success criteria to include [specific metrics]."
 
 ### Phase 2: Collaborative Work Loop (Rounds 3+)
 
+**CRITICAL SEQUENTIAL EXECUTION RULE:**
+- **Work on ONE task at a time from the task file**
+- **Do NOT create a todo list with ALL remaining tasks**
+- **Complete current task with mutual agreement BEFORE selecting next task**
+- **Example**: If there are 8 tasks remaining, work on Task 1, complete it, THEN select Task 2
+
 **Round N - Agent 1 says:**
-"Working on todo item #3: [specific task]. I'm implementing [specific solution]. Code/content created: [shows work]. I believe todo #3 is ready for review. Moving to todo #5."
+"Looking at the task file, I'll work on the NEXT SINGLE task: Task 3.1 [specific task description]. Updating task file - marking ONLY Task 3.1 as [🔄] in progress. I'm implementing [specific solution]. Code/content created: [shows work]. I believe Task 3.1 is ready for review. NOT starting another task until we agree on this one."
 
 **Round N+1 - Agent 2 says:**
-"Reviewing Agent 1's implementation of #3. Checking against task description and architecture docs... Found issues: [lists problems]. The implementation doesn't follow the architecture pattern specified in section X. Todo #3 is NOT complete yet - needs [improvement]. I'll work on todo #4 while you fix #3. Also discovered we need [new requirement] - adding as todo #8."
+"Reviewing Agent 1's implementation of Task 3.1. Checking against task description and architecture docs... Found issues: [lists problems]. The implementation doesn't follow the architecture pattern specified in section X. Task 3.1 is NOT complete yet - needs [improvement]. Keeping status as [🔄] in task file. Let me help fix Task 3.1 before we move to any other task."
 
 **Round N+2 - Agent 1 says:**
-"Fixed the issues in todo #3: [shows fixes]. Now follows architecture pattern from section X. Validated against original task requirements. Requesting your approval to mark #3 complete. Meanwhile implementing todo #5: [shows work]. Tests added: [test details]."
+"Fixed the issues in Task 3.1: [shows fixes]. Now follows architecture pattern from section X. Validated against original task requirements. Requesting your approval to mark Task 3.1 complete in the file. Waiting for your agreement before selecting next task."
 
 **Round N+3 - Agent 2 says:**
-"Reviewing todo #3 fixes - validating against architecture doc... Confirmed it now matches the documented pattern. Cross-checked with task description - all requirements met. I AGREE todo #3 is complete. Let's mark it done. For todo #5, checking against requirements... This violates the constraint mentioned in the task description about [specific concern]. Not ready to mark complete. Todo #4 which I implemented follows all architecture guidelines and is ready for your review."
+"Reviewing Task 3.1 fixes - validating against architecture doc... Confirmed it now matches the documented pattern. Cross-checked with task description - all requirements met. I AGREE Task 3.1 is complete. Updating task file: Task 3.1 now [✅]. Now selecting the NEXT SINGLE task from the file: Task 3.2. I'll work on this one task."
 
 **Round N+4 - Agent 1 says:**
-"Reviewing your todo #4 - excellent work. I AGREE todo #4 is complete. Fixing todo #5 based on your feedback: [shows fix]. This should address your concern."
+"Good, Task 3.1 is complete. Reviewing your work on Task 3.2... This violates the constraint mentioned in the task description about [specific concern]. Task 3.2 NOT complete. Let me help fix this issue in Task 3.2."
 
 **Round N+5 - Agent 2 says:**
-"Todo #5 fix confirmed. I AGREE todo #5 is complete. Current status: 3 of 8 todos mutually agreed as complete. Let's continue with remaining items."
+"Task 3.2 fix confirmed. I AGREE Task 3.2 is complete. Updating task file: Task 3.2 now [✅]. Current status: 2 tasks complete. Now selecting ONLY the next task: Task 3.3. Working on this single task..."
 
-**Important**: Agents maintain task progress using TodoWrite tool throughout the collaboration:
-- Create initial todo items during planning phase
-- Mark items as in_progress when starting work
+**Important Sequential Task Management**:
+- **NEVER create a todo list with ALL remaining tasks at once**
+- **Select and work on ONE task at a time**
+- **Complete current task with mutual agreement BEFORE selecting next**
+- If using TodoWrite tool, add ONLY the current working task, not all tasks
 - **Items can ONLY be marked complete when BOTH agents explicitly agree**
 - **If one agent disagrees, the item remains in_progress and work continues**
-- **Add new todo items dynamically** as they discover additional work needed
-- Continue the loop until all todos have mutual agreement for completion
+- **Sequential execution prevents overwhelming context and ensures quality**
 
 **Mutual Agreement Protocol**:
 - Agent 1: "I believe todo #X is complete"
@@ -264,6 +332,35 @@ Each agent explicitly states:
 Example handoff:
 - **Agent 1**: "I've completed the authentication service (todo #2). Tests are passing. Agent 2, please review the security aspects while I start on the UI components (todo #3)."
 - **Agent 2**: "Reviewing your auth service now. Security looks good but needs rate limiting. I'll add that (new todo #8) while you continue with UI."
+
+### WRONG vs RIGHT Approach
+
+#### ❌ WRONG Approach (Trying to do all tasks at once):
+```
+Agent 1: "I see 8 remaining tasks. Creating todo list:
+1. Task 4.3: Integrate LoginAdapterComponent
+2. Task 5.1: Create Integration Test Suite
+3. Task 5.2: Security Validation Tests
+4. Task 5.3: User Experience Testing
+5. Task 5.4: Performance Testing
+6. Task 6.1: Update Architecture Documentation
+7. Task 6.2: Create User Guide
+8. Task 6.3: Code Review and Refactoring
+Let me start working on all of these..."
+```
+**This is WRONG because it tries to handle everything at once!**
+
+#### ✅ RIGHT Approach (Sequential, one at a time):
+```
+Agent 1: "Looking at the task file, the next incomplete task is Task 4.3: 
+Integrate LoginAdapterComponent into Home Page. I'll work on ONLY this 
+task now. Marking Task 4.3 as [🔄] in progress..."
+
+Agent 2: "Reviewing your Task 4.3 implementation... I AGREE it's complete.
+Marking Task 4.3 as [✅]. Now selecting the NEXT task: Task 5.1: Create 
+Integration Test Suite. Working on this single task..."
+```
+**This is RIGHT because it focuses on one task at a time!**
 
 ### Detailed Coordination Examples
 
@@ -368,7 +465,7 @@ Agents communicate through:
 
 #### Architecture & Implementation Team
 ```
-/do-task system-architect-crypto,principal-engineer Design secure API architecture and implement core endpoints
+/do-task system-architect-crypto and principal-engineer Design secure API architecture and implement core endpoints
 ```
 **Agent 1 (Architect)** designs system architecture, defines security requirements, creates API contracts
 **Agent 2 (Developer)** implements endpoints, writes tests, handles error cases, creates documentation
@@ -389,35 +486,35 @@ Agents communicate through:
 
 #### Review & Refactor Team
 ```
-/do-task principal-engineer,git-flow-automation Review code quality, refactor, and prepare release
+/do-task principal-engineer and git-flow-automation Review code quality, refactor, and prepare release
 ```
 **Agent 1 (Developer)** identifies code issues, performs refactoring, writes/updates tests
 **Agent 2 (Git Expert)** manages branches, creates atomic commits, prepares release, updates changelog
 
 #### Research & Document Team
 ```
-/do-task principal-engineer,system-architect-crypto Research best practices and document system design
+/do-task principal-engineer and system-architect-crypto Research best practices and document system design
 ```
 **Agent 1 (Researcher)** gathers information, analyzes options, compares approaches
 **Agent 2 (Architect)** evaluates technical merit, designs solution, creates architecture docs
 
 #### Testing & QA Team
 ```
-/do-task qa-automation-engineer,principal-engineer Create comprehensive test coverage and fix issues
+/do-task qa-automation-engineer and principal-engineer Create comprehensive test coverage and fix issues
 ```
 **Agent 1 (QA Engineer)** writes all test types (unit/integration/e2e), analyzes logs, debugs failures
 **Agent 2 (Principal Engineer)** fixes bugs, refactors for testability, implements missing features
 
 #### Blazor Development Team
 ```
-/do-task system-architect-blazor,principal-engineer Build Blazor WebAssembly application
+/do-task system-architect-blazor and principal-engineer Build Blazor WebAssembly application
 ```
 **Agent 1 (Blazor Architect)** designs component architecture, SignalR integration, state management
 **Agent 2 (Principal Engineer)** implements components, handles interop, writes tests
 
 #### Application Architecture Team
 ```
-/do-task system-architect-app,system-architect-crypto Design enterprise application architecture
+/do-task system-architect-app and system-architect-crypto Design enterprise application architecture
 ```
 **Agent 1 (App Architect)** designs overall system topology, microservices, APIs, data flow
 **Agent 2 (Crypto Architect)** adds security layers, authentication, encryption, compliance
@@ -446,17 +543,17 @@ Agents communicate through:
 
 **Security Review**:
 ```
-/do-task system-architect-crypto,principal-engineer Perform security review of authentication system, identify vulnerabilities, and implement fixes
+/do-task system-architect-crypto and principal-engineer Perform security review of authentication system, identify vulnerabilities, and implement fixes
 ```
 
 **Performance Optimization**:
 ```
-/do-task principal-engineer,system-architect-crypto Profile application, identify bottlenecks, and optimize critical paths
+/do-task principal-engineer and system-architect-crypto Profile application, identify bottlenecks, and optimize critical paths
 ```
 
 **Architecture Evolution**:
 ```
-/do-task system-architect-crypto,principal-engineer Evolve architecture from monolith to microservices, maintaining backward compatibility
+/do-task system-architect-crypto and principal-engineer Evolve architecture from monolith to microservices, maintaining backward compatibility
 ```
 
 **Full Stack Implementation**:
@@ -507,4 +604,28 @@ The command returns:
 - Number of rounds completed
 - Final status (complete or max rounds)
 - Summary of final outcome
+- **Task file update summary** (if task file exists)
+  - Total tasks in file
+  - Tasks completed [✅]
+  - Tasks in progress [🔄]
+  - Tasks remaining [ ]
+  - Link to updated task file
 - Complete work history available on request
+
+### Example Final Report
+```
+✅ Task Complete after 12 rounds
+
+Agents: principal-engineer 1 & principal-engineer 2
+Task: Implement login functionality
+
+Task File Status (/docs/scrum/tasks/login-implementation-tasks.md):
+- Total Tasks: 24
+- Completed: 18 [✅]
+- In Progress: 3 [🔄]
+- Remaining: 3 [ ]
+
+Summary: Successfully implemented core login services, UI components, 
+and integration. All Phase 1-3 tasks complete with mutual agreement.
+Task file has been updated with current progress.
+```
