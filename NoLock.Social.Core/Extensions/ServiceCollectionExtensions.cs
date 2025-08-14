@@ -4,6 +4,8 @@ using NoLock.Social.Core.Storage.Interfaces;
 using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
+using NoLock.Social.Core.Identity.Interfaces;
+using NoLock.Social.Core.Identity.Services;
 using NoLock.Social.Core.Security;
 using NoLock.Social.Core.Performance;
 
@@ -70,6 +72,16 @@ namespace NoLock.Social.Core.Extensions
         {
             // Performance monitoring service
             services.AddSingleton<IPerformanceMonitoringService, PerformanceMonitoringService>();
+            
+            return services;
+        }
+        
+        public static IServiceCollection AddLoginServices(this IServiceCollection services)
+        {
+            // New login layer services that wrap existing identity unlock
+            services.AddScoped<IUserTrackingService, UserTrackingService>();
+            services.AddScoped<IRememberMeService, RememberMeService>();
+            services.AddScoped<ILoginAdapterService, LoginAdapterService>();
             
             return services;
         }
