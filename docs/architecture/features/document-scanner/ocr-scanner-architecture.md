@@ -33,13 +33,44 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 ### Technical Requirements
 - Integration with Mistral OCR API (non-streaming, complete document submission)
 - Simple exponential backoff polling (5s, 10s, 15s, 30s intervals)
-- Ed25519 cryptographic signatures for document integrity
+- ECDSA P-256 cryptographic signatures for document integrity (currently simulating Ed25519 API)
 - Immutable Content-Addressable Storage (CAS) as the sole storage system for all documents, OCR results, and metadata
 - Camera access via browser MediaDevices API
 - Blazor WebAssembly client-side execution
 - Plugin loading suitable for WASM environment
 - Circuit breakers for OCR service failures
 - Browser console logging for debugging (no distributed tracing)
+
+### Blazor WebAssembly Threading Model
+
+**Important**: Blazor WebAssembly runs in a **single-threaded environment** within the browser's JavaScript runtime. This has critical implications for the architecture:
+
+1. **No Traditional Threading**: 
+   - `Task.Run()` does not create new threads - it queues work on the same thread
+   - All code executes on the single UI thread
+   - Removed from this architecture: Task.Run() patterns in key derivation
+
+2. **No Synchronization Primitives Needed**:
+   - No `lock` statements, `Monitor`, `Mutex`, or `Semaphore` required
+   - No `ReaderWriterLockSlim` or similar threading constructs
+   - Removed from this architecture: SemaphoreSlim in CachedProcessorRegistry
+   - Dictionary operations and memory caches are inherently thread-safe (single thread)
+
+3. **Async/Await Behavior**:
+   - `async`/`await` provides cooperative multitasking, not parallelism
+   - Useful for I/O operations (network calls, IndexedDB access)
+   - Does not improve CPU-bound computation performance
+
+4. **Performance Considerations**:
+   - CPU-intensive operations (like PBKDF2) will block the UI thread
+   - Consider chunking large operations with `await Task.Yield()` to maintain responsiveness
+   - Web Workers are not directly accessible from Blazor WASM
+
+5. **Benefits for This Architecture**:
+   - Simpler code without synchronization complexity
+   - No race conditions or deadlocks
+   - Predictable execution order
+   - Reduced memory overhead from threading primitives
 
 ## Architecture Overview
 
@@ -265,20 +296,65 @@ classDiagram
 
 ### State Management Design
 
-```csharp
-public class ScannerStateManager
-{
-    private readonly IState<ScannerState> _state;
-    private readonly IState<CapturedImage> _capturedImage;
-    private readonly IState<OCRResult> _ocrResult;
-    private readonly IState<ProcessingQueue> _processingQueue;
+```mermaid
+stateDiagram-v2
+    direction TB
     
-    public IObservable<ScannerState> StateChanges => _state.Changes;
-    public IObservable<CapturedImage> ImageChanges => _capturedImage.Changes;
-    public IObservable<OCRResult> ResultChanges => _ocrResult.Changes;
-    public IObservable<ProcessingQueue> QueueChanges => _processingQueue.Changes;
-}
+    %% State Containers
+    state "State Management Core" as SMC {
+        direction LR
+        [*] --> ScannerState: Initialize
+        ScannerState --> CapturedImage: Image Captured
+        CapturedImage --> OCRResult: Process OCR
+        OCRResult --> ProcessingQueue: Queue Result
+        ProcessingQueue --> ScannerState: Update Status
+    }
+    
+    %% Observable Streams
+    state "Observable Event Streams" as OES {
+        direction TB
+        StateChanges: State Changes Observable
+        ImageChanges: Image Changes Observable
+        ResultChanges: OCR Result Observable
+        QueueChanges: Queue Changes Observable
+    }
+    
+    %% Component Interactions
+    state "Component Subscribers" as CS {
+        direction LR
+        UI: UI Components
+        Camera: Camera Service
+        OCR: OCR Processor
+        Storage: Storage Service
+    }
+    
+    %% Event Flow Connections
+    SMC --> OES: Emit Events
+    OES --> CS: Notify Subscribers
+    CS --> SMC: Trigger State Updates
+    
+    %% State Transitions Detail
+    note right of ScannerState
+        States:
+        - Idle
+        - Capturing
+        - Processing
+        - Complete
+        - Error
+    end note
+    
+    note right of ProcessingQueue
+        Queue Operations:
+        - Add to queue
+        - Process batch
+        - Clear completed
+        - Retry failed
+    end note
 ```
+
+**Scanner State Manager Architecture**
+
+The state manager orchestrates document scanning workflow through a reactive state pattern. It maintains four primary state containers that emit observable streams, enabling components to subscribe to specific state changes. This event-driven architecture ensures loose coupling between UI, camera, OCR processing, and storage components while maintaining a unidirectional data flow for predictable state updates.
 
 ## Cryptographic Document Architecture
 
@@ -296,7 +372,7 @@ graph TB
         DOC --> IMG_HASH[Image Hash: SHA-256]
         DOC --> OCR_HASH[OCR Hash: SHA-256 or null]
         DOC --> META[Metadata]
-        DOC --> SIG[Digital Signature: Ed25519]
+        DOC --> SIG[Digital Signature: ECDSA P-256]
     end
     
     subgraph "Referenced Content (Also in CAS)"
@@ -338,7 +414,7 @@ public class SignedDocument
     public ProcessingState State { get; set; }
     
     // Cryptographic Signature
-    public byte[] Signature { get; set; }  // Ed25519 signature
+    public byte[] Signature { get; set; }  // ECDSA P-256 signature (simulating Ed25519)
     public string SignerPublicKey { get; set; }
 }
 
@@ -380,7 +456,7 @@ sequenceDiagram
     
     Note over Signer: Create Document Structure
     Note over Signer: Set OcrHash = null
-    Note over Signer: Sign with Ed25519
+    Note over Signer: Sign with ECDSA P-256
     Note over Signer: Hash Document Structure
     
     Signer->>CAS: Store Signed Document by Hash
@@ -530,84 +606,59 @@ public interface IPollingService
 
 ### Background Job Processing
 
+**OcrBackgroundProcessor** manages the background processing queue for OCR jobs. It ensures mobile devices stay awake during processing, handles job timeouts, and coordinates with the polling service to retrieve results.
+
+**Key Responsibilities:**
+- Queue management for OCR processing jobs
+- Wake lock management to prevent mobile device sleep
+- Timeout enforcement (2.5 minutes per job)
+- Result notification and error handling
+
 ```csharp
-public class OcrBackgroundProcessor : BackgroundService
+public interface IOcrBackgroundProcessor
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<OcrBackgroundProcessor> _logger;
-    private readonly Channel<OcrProcessingJob> _jobQueue;
-    private readonly IJSRuntime _jsRuntime;
-    
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await foreach (var job in _jobQueue.Reader.ReadAllAsync(stoppingToken))
-        {
-            try
-            {
-                using var scope = _serviceProvider.CreateScope();
-                var pollingService = scope.ServiceProvider.GetRequiredService<IPollingService>();
-                
-                // Prevent mobile sleep during processing
-                await AcquireWakeLock(job.DocumentId);
-                
-                // Process with individual timeout
-                using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                jobCts.CancelAfter(TimeSpan.FromMinutes(2.5)); // Allow extra time for retries
-                
-                var result = await pollingService.PollForResultAsync(job.TaskId, jobCts.Token);
-                
-                // Notify completion
-                await NotifyCompletion(job.DocumentId, result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process OCR job {JobId}", job.TaskId);
-                await NotifyFailure(job.DocumentId, ex.Message);
-            }
-            finally
-            {
-                // Release wake lock
-                await ReleaseWakeLock(job.DocumentId);
-            }
-        }
-    }
-    
-    private async Task AcquireWakeLock(Guid documentId)
-    {
-        try
-        {
-            // Use Wake Lock API to prevent sleep on mobile
-            await _jsRuntime.InvokeVoidAsync("wakeLock.request", documentId.ToString());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to acquire wake lock");
-        }
-    }
-    
-    private async Task ReleaseWakeLock(Guid documentId)
-    {
-        try
-        {
-            await _jsRuntime.InvokeVoidAsync("wakeLock.release", documentId.ToString());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to release wake lock");
-        }
-    }
-    
-    public async Task EnqueueJobAsync(OcrProcessingJob job)
-    {
-        await _jobQueue.Writer.WriteAsync(job);
-        _logger.LogInformation("Enqueued OCR job {JobId} for document {DocumentId}", 
-            job.TaskId, job.DocumentId);
-    }
+    Task EnqueueJobAsync(OcrProcessingJob job);
+    Task ExecuteAsync(CancellationToken stoppingToken);
 }
+```
+
+**Processing Flow:**
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Queue as Job Queue
+    participant Processor as Background Processor
+    participant WakeLock as Wake Lock API
+    participant Polling as Polling Service
+    participant Notification as Notification System
+
+    Client->>Queue: EnqueueJobAsync(job)
+    Queue->>Processor: Job Available
+    
+    Processor->>WakeLock: AcquireWakeLock(documentId)
+    Note over WakeLock: Prevent device sleep
+    
+    Processor->>Processor: Create timeout (2.5 min)
+    Processor->>Polling: PollForResultAsync(taskId)
+    
+    alt Success
+        Polling-->>Processor: OCR Result
+        Processor->>Notification: NotifyCompletion(result)
+    else Timeout/Error
+        Polling-->>Processor: Error/Timeout
+        Processor->>Notification: NotifyFailure(error)
+    end
+    
+    Processor->>WakeLock: ReleaseWakeLock(documentId)
+    Note over WakeLock: Allow device sleep
+    
+    Processor->>Queue: Ready for next job
+```
 
 ### Wake Lock Service Architecture
 
-The Wake Lock service prevents mobile devices from sleeping during OCR processing. The architecture follows Blazor best practices with C# handling all business logic and JavaScript only calling native browser APIs.
+The Wake Lock service prevents mobile devices from sleeping during OCR processing. It provides a thin wrapper around the browser's Wake Lock API, ensuring the device screen stays active during document processing operations.
 
 ```mermaid
 sequenceDiagram
@@ -635,7 +686,7 @@ sequenceDiagram
     Service->>Service: Remove from tracking
 ```
 
-**C# Service Implementation:**
+**Service Interface:**
 ```csharp
 public interface IWakeLockService
 {
@@ -643,58 +694,17 @@ public interface IWakeLockService
     Task ReleaseWakeLockAsync(string lockId);
     Task ReleaseAllLocksAsync();
 }
-
-public class WakeLockService : IWakeLockService, IAsyncDisposable
-{
-    private readonly IJSRuntime _jsRuntime;
-    private readonly Dictionary<string, bool> _activeLocks;
-    private IJSObjectReference? _wakeLockModule;
-    
-    public async Task<bool> RequestWakeLockAsync(string lockId)
-    {
-        _wakeLockModule ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", "./js/wake-lock-interop.js");
-        
-        var success = await _wakeLockModule.InvokeAsync<bool>("requestWakeLock", lockId);
-        if (success)
-            _activeLocks[lockId] = true;
-        
-        return success;
-    }
-}
 ```
 
-**Minimal JavaScript Interop (wake-lock-interop.js):**
-```javascript
-// Thin wrapper - only calls native browser APIs
-const locks = new Map();
-
-export async function requestWakeLock(lockId) {
-    if (!('wakeLock' in navigator)) return false;
-    
-    try {
-        const lock = await navigator.wakeLock.request('screen');
-        locks.set(lockId, lock);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-export async function releaseWakeLock(lockId) {
-    const lock = locks.get(lockId);
-    if (lock) {
-        await lock.release();
-        locks.delete(lockId);
-    }
-}
-```
+The service manages wake lock lifecycle through JavaScript interop, tracking active locks and handling browser visibility changes. The minimal JavaScript module acts as a thin wrapper that only calls native browser APIs, keeping all business logic in C#.
 
 ## Document Signing Architecture
 
-### Ed25519 Signature Service
+### ECDSA P-256 Signature Service
 
-The document signing service ensures cryptographic integrity and authenticity using Ed25519 signatures.
+The document signing service ensures cryptographic integrity and authenticity using ECDSA P-256 signatures.
+
+> **Note**: The current implementation uses ECDSA P-256 while maintaining an Ed25519-compatible API for future migration. The Ed25519KeyPair class internally uses ECDSA until native Ed25519 support is available in the browser environment.
 
 ```mermaid
 classDiagram
@@ -705,21 +715,24 @@ classDiagram
         +UpdateAndResignAsync(existing, update) Task~SignedDocument~
     }
     
-    class Ed25519DocumentSigner {
-        -IKeyManager keyManager
+    class ECDSADocumentSigner {
+        -IKeyDerivationService keyDerivationService
+        -ISecureMemoryManager secureMemoryManager
         -ILogger logger
         +SignDocumentAsync(content) Task~SignedDocument~
         +VerifyDocumentAsync(document) Task~bool~
         +UpdateAndResignAsync(existing, update) Task~SignedDocument~
         -CreateCanonicalRepresentation(document) byte[]
         -ValidateDocumentIntegrity(document) bool
+        // Note: Uses ECDSA P-256 internally
     }
     
-    class IKeyManager {
+    class IKeyDerivationService {
         <<interface>>
-        +GetSigningKeyPairAsync() Task~KeyPair~
-        +RotateKeysAsync() Task
-        +GetPublicKeyAsync(keyId) Task~byte[]~
+        +DeriveMasterKeyAsync(passphrase, username) Task~byte[]~
+        +GenerateKeyPairAsync(masterKey) Task~Ed25519KeyPair~
+        +DeriveIdentityAsync(passphrase, username) Task~NostrIdentity~
+        // Note: Ed25519KeyPair wraps ECDSA P-256 keys
     }
     
     class SignedDocument {
@@ -734,24 +747,27 @@ classDiagram
         +string SignerPublicKey
     }
     
-    Ed25519DocumentSigner ..|> IDocumentSigner
-    Ed25519DocumentSigner --> IKeyManager
-    Ed25519DocumentSigner --> SignedDocument
+    ECDSADocumentSigner ..|> IDocumentSigner
+    ECDSADocumentSigner --> IKeyDerivationService
+    ECDSADocumentSigner --> ISecureMemoryManager
+    ECDSADocumentSigner --> SignedDocument
 ```
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Signer as DocumentSigner
-    participant KeyMgr as KeyManager
-    participant Crypto as Ed25519
+    participant KeyDerive as KeyDerivationService
+    participant Crypto as ECDSA P-256
     
     rect rgb(240, 248, 255)
         Note over Client,Crypto: Signing Process
         Client->>Signer: SignDocumentAsync(content)
         Signer->>Signer: Create document structure
-        Signer->>KeyMgr: GetSigningKeyPairAsync()
-        KeyMgr-->>Signer: KeyPair
+        Signer->>KeyDerive: DeriveMasterKeyAsync(passphrase, username)
+        KeyDerive-->>Signer: MasterKey
+        Signer->>KeyDerive: GenerateKeyPairAsync(masterKey)
+        KeyDerive-->>Signer: Ed25519KeyPair (wrapping ECDSA)
         Signer->>Signer: CreateCanonicalRepresentation()
         Signer->>Crypto: Sign(data, privateKey)
         Crypto-->>Signer: Signature
@@ -779,53 +795,91 @@ public interface IDocumentSigner
 }
 ```
 
-### Key Management
+### Key Derivation
 
 ```csharp
-public interface IKeyManager
+public interface IKeyDerivationService
 {
-    Task<Ed25519KeyPair> GetSigningKeyPairAsync();
-    Task<Ed25519KeyPair> GenerateNewKeyPairAsync();
-    Task RotateKeysAsync();
+    Task<byte[]> DeriveMasterKeyAsync(string passphrase, string username);
+    Task<Ed25519KeyPair> GenerateKeyPairAsync(byte[] masterKey);
+    Task<NostrIdentity> DeriveIdentityAsync(string passphrase, string username);
+    // Note: Ed25519KeyPair internally uses ECDSA P-256 keys
 }
 
-public class SecureKeyManager : IKeyManager
+public class KeyDerivationService : IKeyDerivationService
 {
-    private readonly ISecureStorage _secureStorage;
-    private readonly ILogger<SecureKeyManager> _logger;
-    private Ed25519KeyPair? _cachedKeyPair;
+    private readonly ISecureMemoryManager _secureMemoryManager;
+    private readonly ILogger<KeyDerivationService> _logger;
+    private const int PBKDF2_ITERATIONS = 600_000;
+    private const int KEY_SIZE = 32; // 256 bits
     
-    public async Task<Ed25519KeyPair> GetSigningKeyPairAsync()
+    public async Task<byte[]> DeriveMasterKeyAsync(string passphrase, string username)
     {
-        if (_cachedKeyPair != null)
-            return _cachedKeyPair;
+        // Derive deterministic key material using PBKDF2
+        var salt = GenerateSalt(username, "master");
+        // Note: In Blazor WASM, no Task.Run needed (single-threaded)
+        var masterKey = Rfc2898DeriveBytes.Pbkdf2(
+            passphrase,
+            salt,
+            PBKDF2_ITERATIONS,
+            HashAlgorithmName.SHA256,
+            KEY_SIZE
+        );
         
-        // Try to load existing key
-        var storedKey = await _secureStorage.GetAsync("signing_key");
-        if (storedKey != null)
-        {
-            _cachedKeyPair = DeserializeKeyPair(storedKey);
-            return _cachedKeyPair;
-        }
-        
-        // Generate new key pair if none exists
-        _cachedKeyPair = await GenerateNewKeyPairAsync();
-        return _cachedKeyPair;
+        _logger.LogInformation("Derived master key");
+        return masterKey;
     }
     
-    public async Task<Ed25519KeyPair> GenerateNewKeyPairAsync()
+    public async Task<Ed25519KeyPair> GenerateKeyPairAsync(byte[] masterKey)
     {
-        // Generate Ed25519 key pair
-        var keyPair = Ed25519.GenerateKeyPair();
+        // Generate ECDSA P-256 key pair (wrapped as Ed25519KeyPair)
+        // TODO: Replace with actual Ed25519 when browser support is available
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         
-        // Store securely
-        await _secureStorage.SetAsync("signing_key", SerializeKeyPair(keyPair));
+        // Derive key from master key (deterministic)
+        // Note: This is a simplified representation
+        var keyPair = new Ed25519KeyPair(ecdsa);
         
-        _logger.LogInformation("Generated new Ed25519 key pair");
+        _logger.LogInformation("Generated ECDSA P-256 key pair (simulating Ed25519)");
         return keyPair;
+    }
+    
+    public async Task<byte[]> DeriveEncryptionKeyAsync(string username, string password)
+    {
+        // Derive deterministic encryption key using PBKDF2
+        var salt = GenerateSalt(username, "encryption");
+        // Note: In Blazor WASM, no Task.Run needed (single-threaded)
+        var key = Rfc2898DeriveBytes.Pbkdf2(
+            password,
+            salt,
+            PBKDF2_ITERATIONS,
+            HashAlgorithmName.SHA256,
+                KEY_SIZE
+            )
+        );
+        
+        _logger.LogInformation("Derived encryption key");
+        return key;
+    }
+    
+    private byte[] GenerateSalt(string username, string purpose)
+    {
+        // Deterministic salt generation from username and purpose
+        var saltInput = $"{username}:{purpose}:nolock.social";
+        using (var sha256 = SHA256.Create())
+        {
+            return sha256.ComputeHash(Encoding.UTF8.GetBytes(saltInput));
+        }
     }
 }
 ```
+
+**Key Design Principles:**
+- **Stateless**: No persistent key storage - keys are derived on-demand
+- **Deterministic**: Same username/password always produces same keys
+- **Memory-only**: Keys exist only in secure memory during session
+- **PBKDF2**: Industry-standard key derivation (600k iterations)
+- **Secure Memory**: Keys protected via ISecureMemoryManager
 
 ## Gallery Component Architecture
 
@@ -1188,13 +1242,13 @@ public interface ICASStorage
     Task<CASMetadata> GetMetadataAsync(string hash);
     
     // Document-specific operations (all stored in CAS)
-    Task<IEnumerable<string>> GetDocumentHashesAsync();
+    IAsyncEnumerable<string> GetDocumentHashesAsync(CancellationToken cancellationToken = default);
     Task<T> RetrieveAsync<T>(string hash) where T : class;
     Task<string> StoreAsync<T>(T obj) where T : class;
     
     // Search operations (searches within CAS-stored content)
     Task<bool> SearchContent(string hash, string searchText);
-    Task<IEnumerable<string>> FindByType(string contentType);
+    IAsyncEnumerable<string> FindByTypeAsync(string contentType, CancellationToken cancellationToken = default);
 }
 
 public class CASStorage : ICASStorage
@@ -1237,6 +1291,35 @@ public class CASStorage : ICASStorage
         }
         
         return await _blockStore.RetrieveBlocksAsync(hash);
+    }
+    
+    // Streaming implementation for document hashes
+    public async IAsyncEnumerable<string> GetDocumentHashesAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var hash in _index.GetAllHashesAsync(cancellationToken))
+        {
+            // Stream hashes as they're discovered, avoiding memory overhead
+            yield return hash;
+        }
+    }
+    
+    // Streaming implementation for finding documents by type
+    public async IAsyncEnumerable<string> FindByTypeAsync(
+        string contentType,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var hash in _index.GetAllHashesAsync(cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            var metadata = await _index.GetMetadataAsync(hash);
+            if (metadata?.ContentType == contentType)
+            {
+                // Stream matching documents as found, no memory accumulation
+                yield return hash;
+            }
+        }
     }
 }
 ```
@@ -1759,27 +1842,28 @@ public class PluginLoader
     private readonly ILogger<PluginLoader> _logger;
     private readonly IServiceProvider _serviceProvider;
     
-    public async Task<IEnumerable<IDocumentProcessorPlugin>> LoadPluginsAsync()
+    public async IAsyncEnumerable<IDocumentProcessorPlugin> LoadPluginsAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var plugins = new List<IDocumentProcessorPlugin>();
         var config = _configuration.GetSection("processors").Get<ProcessorConfig[]>();
         
         foreach (var processorConfig in config.Where(c => c.Enabled))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            
             try
             {
                 var plugin = await LoadPluginAsync(processorConfig);
-                plugins.Add(plugin);
                 _logger.LogInformation("Loaded plugin: {Type} from {Assembly}", 
                     processorConfig.Type, processorConfig.Assembly);
+                yield return plugin;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to load plugin: {Type}", processorConfig.Type);
+                // Continue to next plugin instead of failing entire stream
             }
         }
-        
-        return plugins;
     }
     
     private async Task<IDocumentProcessorPlugin> LoadPluginAsync(ProcessorConfig config)
@@ -1939,7 +2023,7 @@ public class CachedProcessorRegistry : IDocumentProcessorRegistry
 {
     private readonly IDocumentProcessorRegistry _innerRegistry;
     private readonly IMemoryCache _cache;
-    private readonly SemaphoreSlim _loadLock = new(1, 1);
+    // Note: No locking needed in Blazor WASM (single-threaded environment)
     
     public IDocumentProcessor GetProcessor(DocumentType type)
     {
@@ -2067,6 +2151,7 @@ public interface IOCRServiceAdapter
     Task<CheckData> ProcessCheckAsync(byte[] imageData, CancellationToken cancellationToken = default);
     Task<HealthStatus> GetHealthStatusAsync(CancellationToken cancellationToken = default);
 }
+```
 
 ```mermaid
 classDiagram
@@ -2233,16 +2318,16 @@ NoLock.Social.DocumentScanner/
 │   │   ├── IPollingService.cs
 │   │   ├── IDocumentSigner.cs
 │   │   ├── ICASStorage.cs
-│   │   └── IKeyManager.cs
+│   │   └── IKeyDerivationService.cs
 │   ├── Implementation/
 │   │   ├── CameraService.cs
 │   │   ├── ImageProcessingService.cs
 │   │   ├── OCRServiceAdapter.cs
 │   │   ├── ScannerService.cs
 │   │   ├── AdaptivePollingService.cs
-│   │   ├── Ed25519DocumentSigner.cs
+│   │   ├── ECDSADocumentSigner.cs  // Uses ECDSA P-256 internally
 │   │   ├── CASStorage.cs
-│   │   └── SecureKeyManager.cs
+│   │   └── KeyDerivationService.cs
 │   ├── Background/
 │   │   └── OcrBackgroundProcessor.cs
 │   ├── Proxies/
@@ -2258,7 +2343,7 @@ NoLock.Social.DocumentScanner/
 │   ├── ProcessingState.cs
 │   ├── OcrProcessingJob.cs
 │   ├── CASMetadata.cs
-│   ├── Ed25519KeyPair.cs
+│   ├── Ed25519KeyPair.cs  // Wrapper class using ECDSA P-256 internally
 │   ├── ReceiptData.cs
 │   ├── CheckData.cs
 │   └── DocumentType.cs
@@ -3240,7 +3325,7 @@ public class ProcessingEntry
     public string ResultHash { get; set; }       // CAS address of OCR result (when complete)
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-    public Ed25519Signature Signature { get; set; }
+    public ECDSASignature Signature { get; set; }  // ECDSA P-256 signature
 }
 ```
 
@@ -3289,7 +3374,7 @@ public class CASStateRecovery
 - 2-minute timeout handling
 
 #### 3. Cryptographic Foundation
-- Ed25519 signatures for document integrity
+- ECDSA P-256 signatures for document integrity (Ed25519 API for future migration)
 - SHA-256 for content addressing
 - Immutable CAS storage
 - Signature verification on retrieval
@@ -3329,7 +3414,8 @@ This architecture implements a **P2P document scanning system** optimized for cl
 
 2. **Pluggable Processor Design**: Following SOLID's Open/Closed principle, new document types (W4, W2, 1099) can be added without modifying the core system. Each processor has single responsibility for one document type.
 
-3. **Immutable CAS with Signatures**: Ed25519 signatures combined with content-addressable storage ensure document integrity while enabling future P2P synchronization across user's devices.
+3. **Immutable CAS with Signatures**: ECDSA P-256 signatures (with Ed25519-compatible API) combined with content-addressable storage ensure document integrity while enabling future P2P synchronization across user's devices.
+   - **TODO**: Migrate to native Ed25519 when browser WebCrypto API adds support
 
 4. **Simple Polling Strategy**: Exponential backoff (5s, 10s, 15s, 30s) is optimal for the P2P model - works offline, battery-efficient, and requires no complex infrastructure.
 
@@ -3391,7 +3477,7 @@ When adding a new document type (e.g., Form 1040):
 - **Consistent Pipeline**: All documents flow through same processing stages
 - **Automatic Discovery**: New processors are discovered and registered automatically
 - **Configuration-Driven**: Enable/disable processors via configuration
-- **Cryptographically signed documents**: Ed25519 for integrity verification
+- **Cryptographically signed documents**: ECDSA P-256 for integrity verification (Ed25519 API wrapper)
 - **Asynchronous processing**: Handles 2-minute delays gracefully
 - **CAS integration**: Efficient, deduplicated storage
 - **Progressive enhancement**: Immediate image access while OCR processes
@@ -3401,7 +3487,7 @@ When adding a new document type (e.g., Form 1040):
 ### P2P Security Model
 - **Device-local processing**: Documents captured and processed on same device (no network attack surface)
 - **Browser sandbox**: Blazor WASM provides inherent plugin isolation
-- **Ed25519 signatures**: Cryptographic integrity for all documents
+- **ECDSA P-256 signatures**: Cryptographic integrity for all documents (simulating Ed25519 API)
 - **Immutable CAS**: Content-addressable storage prevents tampering
 - **P2P synchronization**: Signed items enable secure cross-device sync
 - **No external threats**: Same-device model eliminates traditional security concerns
