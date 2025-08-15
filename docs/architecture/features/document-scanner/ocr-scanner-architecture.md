@@ -1,8 +1,8 @@
-# Document Scanner and OCR Feature Architecture - P2P Pluggable Processor System
+# Document Scanner and OCR Feature Architecture - Pluggable Processor System
 
 ## Executive Summary
 
-This document outlines the architecture for a **peer-to-peer (P2P) document scanning and OCR system** in the NoLock.Social platform. The architecture implements a **client-side, device-local processing model** where documents are captured and processed on the same device, eliminating traditional server-side security concerns. The plugin-based design enables seamless addition of new document types (receipts, checks, W4, W2, 1099, and future tax forms) without modifying the core system. Each document type is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic. The implementation follows SOLID principles with a focus on simplicity (KISS) and avoiding premature optimization (YAGNI).
+This document outlines the architecture for a **document scanning and OCR system** in the NoLock.Social platform. The architecture implements a **client-side processing model** using Blazor WebAssembly. The plugin-based design enables seamless addition of new document types (receipts, checks, W4, W2, 1099, and future tax forms) without modifying the core system. Each document type is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic. The implementation follows SOLID principles with a focus on simplicity (KISS) and avoiding premature optimization (YAGNI).
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 - Process captured images through OCR service (1-2 minute processing time)
 - Display extracted data in a user-friendly format
 - Store all documents and data in immutable Content-Addressable Storage (CAS) - the single storage system
-- Enable P2P synchronization across user's devices
+- Store documents securely in content-addressable storage
 - Provide browsable gallery for stored documents and OCR results
 
 ### Technical Requirements
@@ -76,12 +76,14 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 
 ### Storage Architecture: CAS-Only Design
 
-This architecture uses **Content-Addressable Storage (CAS) as the sole storage system**. There are no separate document stores, databases, or repositories. Every piece of data - signed documents, images, OCR results, processing states, and metadata - is stored in and retrieved from CAS using content hashes. This design ensures:
+This architecture uses **Content-Addressable Storage (CAS) as the sole storage system**. There are no separate document stores, databases, or repositories. Every piece of data - signed documents, images, OCR results, processing states, and metadata - is stored in and retrieved from CAS using content hashes.
+
+**Document Identification**: Documents are identified by their SHA-256 content hash, not by separate IDs or GUIDs. The hash serves as both the unique identifier and the storage key. This approach ensures:
 
 1. **Immutability**: All data is immutable once stored
-2. **Deduplication**: Identical content is stored only once
+2. **Deduplication**: Identical content is stored only once  
 3. **Simplicity**: Single storage system for all data types
-4. **P2P-ready**: Content addressing enables direct peer-to-peer synchronization
+4. **Natural IDs**: Content hash serves as document ID (no separate ID generation)
 5. **Integrity**: Content hashes guarantee data hasn't been modified
 
 ### High-Level Architecture Diagram
@@ -165,16 +167,24 @@ graph TD
 ### Core Components
 
 #### 1. DocumentScannerComponent (Root Container)
-```csharp
-namespace NoLock.Social.DocumentScanner.Components
-{
-    public partial class DocumentScannerComponent : ComponentBase
-    {
-        // Orchestrates the scanning workflow
-        // Manages state transitions
-        // Handles error boundaries
+
+```mermaid
+classDiagram
+    class DocumentScannerComponent {
+        <<Blazor Component>>
+        +State Management
+        +Workflow Orchestration
+        +Error Boundaries
+        +Permission Handling
     }
-}
+    
+    class ComponentBase {
+        <<Framework>>
+        +StateHasChanged()
+        +OnInitialized()
+    }
+    
+    DocumentScannerComponent --|> ComponentBase : inherits
 ```
 
 **Responsibilities:**
@@ -184,18 +194,7 @@ namespace NoLock.Social.DocumentScanner.Components
 - Permission management
 
 **State Management:**
-```csharp
-public enum ScannerState
-{
-    Idle,
-    RequestingPermission,
-    CameraActive,
-    ImageCaptured,
-    Processing,
-    ResultsReady,
-    Error
-}
-```
+Uses **Stateless** FSM library (NuGet: `Stateless` v5.15.0) for reliable state machine implementation. States: Idle → RequestingPermission → CameraActive → ImageCaptured → Processing → ResultsReady (with Error state for failures).
 
 #### 2. CameraViewComponent
 **Responsibilities:**
@@ -395,48 +394,49 @@ graph TB
 
 ### Document Schema Definition
 
-```csharp
-public class SignedDocument
-{
-    public string Version { get; set; } = "1.0";
-    public Guid DocumentId { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
+```mermaid
+classDiagram
+    class SignedDocument {
+        +string Version
+        +string DocumentHash
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+        +string ImageHash
+        +string OcrHash
+        +DocumentMetadata Metadata
+        +byte[] Signature
+        +string SignerPublicKey
+    }
     
-    // Content References (CAS hashes)
-    public string ImageHash { get; set; }  // SHA-256 of image content
-    public string? OcrHash { get; set; }   // SHA-256 of OCR result (null initially)
+    class DocumentMetadata {
+        +DocumentType Type
+        +string OriginalFileName
+        +long FileSizeBytes
+        +string MimeType
+        +Dictionary CustomFields
+    }
     
-    // Document Metadata
-    public DocumentMetadata Metadata { get; set; }
+    class DocumentType {
+        <<enumeration>>
+        Receipt
+        Check
+        W4Form
+        W2Form
+        Form1099
+    }
     
-    // Processing State
-    public ProcessingState State { get; set; }
+    SignedDocument --> DocumentMetadata : contains
+    DocumentMetadata --> DocumentType : uses
     
-    // Cryptographic Signature
-    public byte[] Signature { get; set; }  // ECDSA P-256 signature (simulating Ed25519)
-    public string SignerPublicKey { get; set; }
-}
-
-public class DocumentMetadata
-{
-    public DocumentType Type { get; set; }
-    public string OriginalFileName { get; set; }
-    public long FileSizeBytes { get; set; }
-    public string MimeType { get; set; }
-    public Dictionary<string, string> CustomFields { get; set; }
-}
-
-public enum ProcessingState
-{
-    ImageCaptured,      // Image saved, OCR not started
-    OcrPending,         // OCR request submitted
-    OcrProcessing,      // OCR in progress (polling)
-    OcrCompleted,       // OCR results available
-    OcrFailed,          // OCR processing failed
-    OcrTimeout          // OCR exceeded 2-minute timeout
-}
+    note for SignedDocument "Document ID is its SHA-256 hash\nAll hashes reference CAS storage"
+    note for DocumentMetadata "Extensible via CustomFields"
 ```
+
+**Key Design Decisions:**
+- **DocumentHash**: SHA-256 hash serves as document ID (no separate ID generation)
+- **Content References**: ImageHash and OcrHash point to CAS-stored content
+- **Signature**: ECDSA P-256 (browser-compatible, future migration to Ed25519)
+- **Extensibility**: CustomFields dictionary for document-type-specific data
 
 ### Cryptographic Signing Process
 
@@ -543,7 +543,7 @@ The polling service implements an adaptive exponential backoff strategy for chec
 classDiagram
     class IPollingService {
         <<interface>>
-        +SubmitForProcessingAsync(document, imageData) Task~Guid~
+        +SubmitForProcessingAsync(document, imageData) Task~string~
         +PollForResultAsync(taskId, token) Task~OcrResult~
         +CancelPolling(taskId) void
     }
@@ -595,13 +595,17 @@ stateDiagram-v2
 ```
 
 **Key Interface Definition:**
-```csharp
-public interface IPollingService
-{
-    Task<Guid> SubmitForProcessingAsync(SignedDocument document, byte[] imageData);
-    Task<OcrResult> PollForResultAsync(Guid taskId, CancellationToken cancellationToken);
-    void CancelPolling(Guid taskId);
-}
+
+```mermaid
+classDiagram
+    class IPollingService {
+        <<interface>>
+        +SubmitForProcessingAsync() string
+        +PollForResultAsync() OcrResult
+        +CancelPolling() void
+    }
+    
+    note for IPollingService "Returns document hash\nPolls with exponential backoff"
 ```
 
 ### Background Job Processing
@@ -614,12 +618,21 @@ public interface IPollingService
 - Timeout enforcement (2.5 minutes per job)
 - Result notification and error handling
 
-```csharp
-public interface IOcrBackgroundProcessor
-{
-    Task EnqueueJobAsync(OcrProcessingJob job);
-    Task ExecuteAsync(CancellationToken stoppingToken);
-}
+```mermaid
+classDiagram
+    class IOcrBackgroundProcessor {
+        <<interface>>
+        +EnqueueJobAsync(job) Task
+        +ExecuteAsync(token) Task
+    }
+    
+    class OcrProcessingJob {
+        +string DocumentHash
+        +string TaskId
+        +DateTime EnqueuedAt
+    }
+    
+    IOcrBackgroundProcessor ..> OcrProcessingJob : processes
 ```
 
 **Processing Flow:**
@@ -687,13 +700,17 @@ sequenceDiagram
 ```
 
 **Service Interface:**
-```csharp
-public interface IWakeLockService
-{
-    Task<bool> RequestWakeLockAsync(string lockId);
-    Task ReleaseWakeLockAsync(string lockId);
-    Task ReleaseAllLocksAsync();
-}
+
+```mermaid
+classDiagram
+    class IWakeLockService {
+        <<interface>>
+        +RequestWakeLockAsync(lockId) bool
+        +ReleaseWakeLockAsync(lockId) Task
+        +ReleaseAllLocksAsync() Task
+    }
+    
+    note for IWakeLockService "Manages wake locks via JS interop\nTracks active locks\nHandles visibility changes"
 ```
 
 The service manages wake lock lifecycle through JavaScript interop, tracking active locks and handling browser visibility changes. The minimal JavaScript module acts as a thin wrapper that only calls native browser APIs, keeping all business logic in C#.
@@ -737,7 +754,7 @@ classDiagram
     
     class SignedDocument {
         +string Version
-        +Guid DocumentId
+        +string DocumentHash
         +DateTime CreatedAt
         +string ImageHash
         +string OcrHash
@@ -786,92 +803,38 @@ sequenceDiagram
 ```
 
 **Key Interface:**
-```csharp
-public interface IDocumentSigner
-{
-    Task<SignedDocument> SignDocumentAsync(DocumentContent content);
-    Task<bool> VerifyDocumentAsync(SignedDocument document);
-    Task<SignedDocument> UpdateAndResignAsync(SignedDocument existing, Action<SignedDocument> update);
-}
+
+```mermaid
+classDiagram
+    class IDocumentSigner {
+        <<interface>>
+        +SignDocumentAsync(content) SignedDocument
+        +VerifyDocumentAsync(document) bool
+        +UpdateAndResignAsync(existing, update) SignedDocument
+    }
+    
+    class SignedDocument {
+        +string DocumentHash
+        +byte[] Signature
+        +string SignerPublicKey
+    }
+    
+    IDocumentSigner ..> SignedDocument : creates/verifies
 ```
 
 ### Key Derivation
 
-```csharp
-public interface IKeyDerivationService
-{
-    Task<byte[]> DeriveMasterKeyAsync(string passphrase, string username);
-    Task<Ed25519KeyPair> GenerateKeyPairAsync(byte[] masterKey);
-    Task<NostrIdentity> DeriveIdentityAsync(string passphrase, string username);
-    // Note: Ed25519KeyPair internally uses ECDSA P-256 keys
-}
+The system derives cryptographic keys from user credentials using PBKDF2 with 600,000 iterations. Keys are derived deterministically from username and passphrase. Currently uses ECDSA P-256 due to browser limitations (will migrate to Ed25519 when browser support is available).
 
-public class KeyDerivationService : IKeyDerivationService
-{
-    private readonly ISecureMemoryManager _secureMemoryManager;
-    private readonly ILogger<KeyDerivationService> _logger;
-    private const int PBKDF2_ITERATIONS = 600_000;
-    private const int KEY_SIZE = 32; // 256 bits
+```mermaid
+flowchart LR
+    INPUT[Username + Purpose] --> CONCAT[Concatenate with domain]
+    CONCAT --> HASH[SHA-256 Hash]
+    HASH --> SALT[Deterministic Salt]
     
-    public async Task<byte[]> DeriveMasterKeyAsync(string passphrase, string username)
-    {
-        // Derive deterministic key material using PBKDF2
-        var salt = GenerateSalt(username, "master");
-        // Note: In Blazor WASM, no Task.Run needed (single-threaded)
-        var masterKey = Rfc2898DeriveBytes.Pbkdf2(
-            passphrase,
-            salt,
-            PBKDF2_ITERATIONS,
-            HashAlgorithmName.SHA256,
-            KEY_SIZE
-        );
-        
-        _logger.LogInformation("Derived master key");
-        return masterKey;
-    }
-    
-    public async Task<Ed25519KeyPair> GenerateKeyPairAsync(byte[] masterKey)
-    {
-        // Generate ECDSA P-256 key pair (wrapped as Ed25519KeyPair)
-        // TODO: Replace with actual Ed25519 when browser support is available
-        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        
-        // Derive key from master key (deterministic)
-        // Note: This is a simplified representation
-        var keyPair = new Ed25519KeyPair(ecdsa);
-        
-        _logger.LogInformation("Generated ECDSA P-256 key pair (simulating Ed25519)");
-        return keyPair;
-    }
-    
-    public async Task<byte[]> DeriveEncryptionKeyAsync(string username, string password)
-    {
-        // Derive deterministic encryption key using PBKDF2
-        var salt = GenerateSalt(username, "encryption");
-        // Note: In Blazor WASM, no Task.Run needed (single-threaded)
-        var key = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            PBKDF2_ITERATIONS,
-            HashAlgorithmName.SHA256,
-                KEY_SIZE
-            )
-        );
-        
-        _logger.LogInformation("Derived encryption key");
-        return key;
-    }
-    
-    private byte[] GenerateSalt(string username, string purpose)
-    {
-        // Deterministic salt generation from username and purpose
-        var saltInput = $"{username}:{purpose}:nolock.social";
-        using (var sha256 = SHA256.Create())
-        {
-            return sha256.ComputeHash(Encoding.UTF8.GetBytes(saltInput));
-        }
-    }
-}
+    note right of CONCAT
+        Format: username:purpose:nolock.social
+    end note
 ```
 
 **Key Design Principles:**
@@ -958,225 +921,133 @@ sequenceDiagram
 ```
 
 **Key Interface:**
-```csharp
-public interface IDocumentGalleryService
-{
-    Task<PagedResult<DocumentSummary>> GetDocumentsAsync(
-        int page, int pageSize, DocumentFilter filter);
-    Task<byte[]> GenerateThumbnailAsync(string imageHash);
-    Task<DocumentDetails> GetDocumentDetailsAsync(Guid documentId);
-    Task DeleteDocumentAsync(Guid documentId);
-}
+
+```mermaid
+classDiagram
+    class IDocumentGalleryService {
+        <<interface>>
+        +GetDocumentsAsync(page, size, filter) PagedResult
+        +GenerateThumbnailAsync(imageHash) byte[]
+        +GetDocumentDetailsAsync(documentHash) DocumentDetails
+        +DeleteDocumentAsync(documentHash) Task
+    }
+    
+    class DocumentFilter {
+        +DocumentType Type
+        +DateRange DateRange
+        +string SearchText
+    }
+    
+    IDocumentGalleryService ..> DocumentFilter : uses
 ```
 
 ### Virtual Scrolling Implementation
 
-```csharp
-@page "/gallery"
-@implements IAsyncDisposable
-@inject IDocumentGalleryService GalleryService
-@inject IJSRuntime JSRuntime
-
-<div class="document-gallery" @ref="galleryContainer">
-    <div class="gallery-header">
-        <DocumentFilterControls @bind-Filter="currentFilter" OnFilterChanged="OnFilterChanged" />
-    </div>
+```mermaid
+graph TB
+    subgraph "Gallery Component"
+        HEADER[Filter Controls]
+        VIRTUAL[Virtualize Component]
+        THUMB[Document Thumbnails]
+        LOADER[Loading Indicator]
+    end
     
-    <div class="gallery-grid" @onscroll="OnScroll">
-        <Virtualize Items="@documents" Context="doc" ItemSize="250" OverscanCount="3">
-            <DocumentThumbnail Document="doc" OnClick="() => OpenDocument(doc)" />
-        </Virtualize>
-    </div>
+    subgraph "Services"
+        GALLERY[IDocumentGalleryService]
+        JS[IJSRuntime]
+    end
     
-    @if (isLoading)
-    {
-        <div class="loading-indicator">
-            <span>Loading documents...</span>
-        </div>
-    }
-</div>
-
-@code {
-    private ElementReference galleryContainer;
-    private List<DocumentSummary> documents = new();
-    private DocumentFilter currentFilter = new();
-    private bool isLoading = false;
-    private int currentPage = 1;
-    private bool hasMorePages = true;
-    private CancellationTokenSource? loadingCts;
+    HEADER --> VIRTUAL
+    VIRTUAL --> THUMB
+    VIRTUAL --> LOADER
     
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadDocuments();
-        
-        // Set up infinite scroll
-        await JSRuntime.InvokeVoidAsync("gallery.setupInfiniteScroll", 
-            galleryContainer, DotNetObjectReference.Create(this));
-    }
+    VIRTUAL -.-> GALLERY
+    THUMB -.-> JS
     
-    private async Task LoadDocuments(bool append = false)
-    {
-        if (isLoading || !hasMorePages) return;
-        
-        isLoading = true;
-        loadingCts?.Cancel();
-        loadingCts = new CancellationTokenSource();
-        
-        try
-        {
-            var result = await GalleryService.GetDocumentsAsync(
-                currentPage, 20, currentFilter);
-            
-            if (append)
-            {
-                documents.AddRange(result.Items);
-            }
-            else
-            {
-                documents = result.Items.ToList();
-            }
-            
-            hasMorePages = result.HasNextPage;
-            currentPage++;
-            
-            StateHasChanged();
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancelled - ignore
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
-    
-    [JSInvokable]
-    public async Task LoadMoreDocuments()
-    {
-        await LoadDocuments(append: true);
-    }
-    
-    private async Task OnFilterChanged()
-    {
-        currentPage = 1;
-        hasMorePages = true;
-        await LoadDocuments(append: false);
-    }
-    
-    private void OpenDocument(DocumentSummary doc)
-    {
-        NavigationManager.NavigateTo($"/document/{doc.DocumentId}");
-    }
-    
-    public async ValueTask DisposeAsync()
-    {
-        loadingCts?.Cancel();
-        loadingCts?.Dispose();
-    }
-}
+    style VIRTUAL fill:#f9f
+    style THUMB fill:#9ff
 ```
+
+**Component Features:**
+- **Route**: `/gallery`
+- **Virtual Scrolling**: Renders only visible items (250px item size, 3 overscan)
+- **Filtering**: Document type, date range, search text
+- **Infinite Loading**: Loads more on scroll
+
+**Gallery Component Implementation:**
+- **HTML Structure**: Filter controls, virtual scroll grid, loading indicator
+- **State Management**: Tracks documents, filters, pagination, loading state
+- **Infinite Scroll**: JS interop for scroll detection, loads more on demand
+- **Virtual Rendering**: Blazor Virtualize component (250px items, 3 overscan)
+- **Navigation**: Routes to `/document/{hash}` on thumbnail click
+- **Cleanup**: Implements IAsyncDisposable for resource management
 
 ### Preview Component with CAS Integration
 
-```csharp
-@page "/document/{DocumentId:guid}"
-@inject IDocumentGalleryService GalleryService
-@inject ICASStorage CASStorage
-@inject IDocumentSigner Signer
-
-<div class="document-preview">
-    @if (document != null)
-    {
-        <div class="preview-header">
-            <h3>Document Details</h3>
-            <div class="signature-status">
-                @if (isSignatureValid)
-                {
-                    <span class="valid">✓ Signature Valid</span>
-                }
-                else
-                {
-                    <span class="invalid">✗ Signature Invalid</span>
-                }
-            </div>
-        </div>
-        
-        <div class="preview-content">
-            <div class="image-section">
-                <ImageViewer ImageData="@imageData" />
-            </div>
-            
-            @if (document.OcrHash != null && ocrResult != null)
-            {
-                <div class="ocr-section">
-                    <OCRTextViewer OcrData="@ocrResult" />
-                </div>
-            }
-            else if (document.State == ProcessingState.OcrProcessing)
-            {
-                <div class="processing-indicator">
-                    <PollingProgress DocumentId="@DocumentId" />
-                </div>
-            }
-            else if (document.State == ProcessingState.OcrFailed)
-            {
-                <div class="error-section">
-                    <p>OCR processing failed</p>
-                    <RetryButton DocumentId="@DocumentId" OnRetry="RetryOcr" />
-                </div>
-            }
-        </div>
-        
-        <div class="preview-metadata">
-            <DocumentMetadataDisplay Metadata="@document.Metadata" />
-        </div>
-    </div>
-</div>
-
-@code {
-    [Parameter] public Guid DocumentId { get; set; }
-    
-    private SignedDocument? document;
-    private byte[]? imageData;
-    private OcrResult? ocrResult;
-    private bool isSignatureValid;
-    
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadDocument();
-    }
-    
-    private async Task LoadDocument()
-    {
-        var details = await GalleryService.GetDocumentDetailsAsync(DocumentId);
-        document = details.Document;
-        
-        // Verify signature
-        isSignatureValid = await Signer.VerifyDocumentAsync(document);
-        
-        // Load image from CAS
-        imageData = await CASStorage.RetrieveAsync(document.ImageHash);
-        
-        // Load OCR if available
-        if (!string.IsNullOrEmpty(document.OcrHash))
-        {
-            var ocrData = await CASStorage.RetrieveAsync(document.OcrHash);
-            ocrResult = JsonSerializer.Deserialize<OcrResult>(ocrData);
-        }
-        
-        StateHasChanged();
-    }
-    
-    private async Task RetryOcr()
-    {
-        // Re-submit for OCR processing
-        await OcrService.RetryProcessingAsync(DocumentId);
-        document.State = ProcessingState.OcrPending;
-        StateHasChanged();
-    }
-}
+**UI Mockup - Document Preview (Desktop):**
 ```
++----------------------------------------------------------+
+| Document Details                    [✓ Signature Valid]  |
++----------------------------------------------------------+
+|                           |                              |
+|   +-------------------+   |  OCR Extracted Text:         |
+|   |                   |   |  ========================    |
+|   |                   |   |                              |
+|   |   DOCUMENT        |   |  Merchant: Starbucks         |
+|   |     IMAGE         |   |  Date: 2024-01-15            |
+|   |                   |   |  Items:                      |
+|   |   [Zoom +/-]      |   |  - Coffee Latte    $4.95     |
+|   |                   |   |  - Croissant       $3.50     |
+|   +-------------------+   |  Tax:              $0.85     |
+|                           |  Total:            $9.30     |
+|   Metadata:               |                              |
+|   Type: Receipt           |  [Copy Text] [Export JSON]   |
+|   Size: 1.2 MB            |                              |
+|   Date: 2024-01-15        |                              |
++----------------------------------------------------------+
+```
+
+**UI Mockup - Processing States:**
+```
+Processing State:
++------------------------+
+| ⟳ OCR Processing...    |
+| [=========>    ] 65%   |
+| Time: 45s / ~2min      |
++------------------------+
+
+Error State:
++------------------------+
+| ✗ OCR Processing Failed|
+| Reason: Timeout        |
+| [Retry Processing]     |
++------------------------+
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> Loading: Navigate to /document/{hash}
+    Loading --> DisplayImage: Image loaded from CAS
+    Loading --> Error: Invalid hash
+    
+    DisplayImage --> CheckOCR: Check OCR status
+    CheckOCR --> DisplayBoth: OCR complete
+    CheckOCR --> ShowProcessing: OCR in progress
+    CheckOCR --> ShowError: OCR failed
+    
+    ShowProcessing --> DisplayBoth: OCR completes
+    ShowError --> ShowProcessing: User retries
+    
+    DisplayBoth --> [*]: User exits
+    Error --> [*]: User navigates away
+```
+
+**Component Architecture:**
+- **Route**: `/document/{DocumentHash}`
+- **Data Loading**: Fetches from CAS using document hash
+- **Signature Verification**: ECDSA P-256 validation
+- **Progressive Enhancement**: Shows image immediately, OCR when ready
+- **Error Recovery**: Retry button for failed OCR
 
 ## Content-Addressable Storage (CAS) Integration
 
@@ -1188,7 +1059,7 @@ Key principles:
 - **Everything is content-addressed**: All data is stored and retrieved using its content hash
 - **Immutable storage**: Once stored, content never changes (updates create new entries)
 - **Natural deduplication**: Identical content automatically shares storage
-- **P2P-ready**: Content-addressed design enables seamless peer-to-peer synchronization
+- **Deduplication**: Content-addressed design automatically deduplicates identical content
 - **No separate databases**: CAS replaces traditional document databases entirely
 
 ### CAS Architecture
@@ -1231,97 +1102,32 @@ graph TB
 
 ### CAS Service Interface
 
-```csharp
-public interface ICASStorage
-{
-    // Core CAS operations
-    Task<string> StoreAsync(byte[] content);
-    Task<byte[]> RetrieveAsync(string hash);
-    Task<bool> ExistsAsync(string hash);
-    Task DeleteAsync(string hash);
-    Task<CASMetadata> GetMetadataAsync(string hash);
-    
-    // Document-specific operations (all stored in CAS)
-    IAsyncEnumerable<string> GetDocumentHashesAsync(CancellationToken cancellationToken = default);
-    Task<T> RetrieveAsync<T>(string hash) where T : class;
-    Task<string> StoreAsync<T>(T obj) where T : class;
-    
-    // Search operations (searches within CAS-stored content)
-    Task<bool> SearchContent(string hash, string searchText);
-    IAsyncEnumerable<string> FindByTypeAsync(string contentType, CancellationToken cancellationToken = default);
-}
-
-public class CASStorage : ICASStorage
-{
-    private readonly IBlockStore _blockStore;
-    private readonly IHashCalculator _hashCalculator;
-    private readonly IContentIndex _index;
-    
-    public async Task<string> StoreAsync(byte[] content)
-    {
-        // Calculate SHA-256 hash
-        var hash = _hashCalculator.ComputeSHA256(content);
-        
-        // Check for deduplication
-        if (await _index.ExistsAsync(hash))
-        {
-            _logger.LogDebug("Content already exists: {Hash}", hash);
-            return hash;
-        }
-        
-        // Store content blocks
-        await _blockStore.StoreBlocksAsync(hash, content);
-        
-        // Update index
-        await _index.AddAsync(hash, new ContentMetadata
-        {
-            Size = content.Length,
-            StoredAt = DateTime.UtcNow,
-            ContentType = DetectContentType(content)
-        });
-        
-        return hash;
+```mermaid
+classDiagram
+    class ICASStorage {
+        <<interface>>
+        +StoreAsync(content) string
+        +RetrieveAsync(hash) byte[]
+        +ExistsAsync(hash) bool
+        +DeleteAsync(hash) Task
+        +GetMetadataAsync(hash) CASMetadata
+        +GetDocumentHashesAsync() IAsyncEnumerable~string~
+        +RetrieveAsync~T~(hash) T
+        +StoreAsync~T~(obj) string
+        +SearchContent(hash, text) bool
+        +FindByTypeAsync(type) IAsyncEnumerable~string~
     }
     
-    public async Task<byte[]> RetrieveAsync(string hash)
-    {
-        if (!await _index.ExistsAsync(hash))
-        {
-            throw new ContentNotFoundException($"Content not found: {hash}");
-        }
-        
-        return await _blockStore.RetrieveBlocksAsync(hash);
+    class CASMetadata {
+        +string Hash
+        +long Size
+        +DateTime Created
+        +string ContentType
     }
     
-    // Streaming implementation for document hashes
-    public async IAsyncEnumerable<string> GetDocumentHashesAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var hash in _index.GetAllHashesAsync(cancellationToken))
-        {
-            // Stream hashes as they're discovered, avoiding memory overhead
-            yield return hash;
-        }
-    }
+    ICASStorage ..> CASMetadata : returns
     
-    // Streaming implementation for finding documents by type
-    public async IAsyncEnumerable<string> FindByTypeAsync(
-        string contentType,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var hash in _index.GetAllHashesAsync(cancellationToken))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            var metadata = await _index.GetMetadataAsync(hash);
-            if (metadata?.ContentType == contentType)
-            {
-                // Stream matching documents as found, no memory accumulation
-                yield return hash;
-            }
-        }
-    }
-}
+    note for ICASStorage "SHA-256 content addressing\nImmutable storage\nStreaming APIs\nAutomatic deduplication"
 ```
 
 ## Pluggable Document Processor Architecture
@@ -1344,11 +1150,11 @@ The pluggable document processor architecture enables seamless addition of new d
 graph TB
     subgraph "API Layer"
         API[API Gateway]
-        R1[/receipts endpoint]
-        R2[/checks endpoint]
-        R3[/w4 endpoint]
-        R4[/w2 endpoint]
-        R5[/1099 endpoint]
+        R1[receipts endpoint]
+        R2[checks endpoint]
+        R3[w4 endpoint]
+        R4[w2 endpoint]
+        R5[1099 endpoint]
     end
     
     subgraph "Routing Layer"
@@ -1412,691 +1218,269 @@ graph TB
 
 #### IDocumentProcessor Interface
 
-```csharp
-public interface IDocumentProcessor
-{
-    // Metadata
-    DocumentType DocumentType { get; }
-    string ProcessorVersion { get; }
-    string[] SupportedFormats { get; }
+```mermaid
+classDiagram
+    class IDocumentMapper {
+        <<interface>>
+        +DocumentType DocumentType
+        +string MapperVersion
+        +MapResponseAsync~T~(apiResponse) Task~T~
+    }
     
-    // Validation
-    Task<ValidationResult> ValidateImageAsync(byte[] imageData);
-    Task<ValidationResult> ValidateOcrResultAsync(OcrRawResult ocrResult);
-    
-    // Processing
-    Task<PreprocessingResult> PreprocessAsync(byte[] imageData, ProcessingContext context);
-    Task<ExtractionResult> ExtractDataAsync(OcrRawResult ocrResult, ProcessingContext context);
-    Task<TransformationResult> TransformAsync(ExtractionResult extracted, ProcessingContext context);
-    
-    // Configuration
-    ProcessorConfiguration GetConfiguration();
-    Task<bool> CanProcessAsync(DocumentMetadata metadata);
-}
+    note for IDocumentMapper "OCR API returns fully parsed models\nMappers only transform to domain objects"
+```
 
-public interface IDocumentProcessorPlugin : IDocumentProcessor
-{
-    // Plugin lifecycle
-    Task InitializeAsync(IServiceProvider services);
-    Task<HealthCheckResult> HealthCheckAsync();
-    void Dispose();
+#### Simplified Mapping Context
+
+```mermaid
+classDiagram
+    class MappingContext {
+        +string DocumentHash
+        +DocumentType DocumentType  
+        +ILogger Logger
+        +CancellationToken Token
+    }
     
-    // Plugin metadata
-    PluginMetadata GetMetadata();
+    note for MappingContext "Minimal context for mapping\nDocument hash as ID"
+```
+
+### Simple Document Mapper Registry
+
+```mermaid
+classDiagram
+    class IDocumentMapperRegistry {
+        <<interface>>
+        +RegisterMapper(mapper) void
+        +GetMapper(type) IDocumentMapper
+        +IsTypeSupported(type) bool
+    }
+    
+    class DocumentMapperRegistry {
+        -Dictionary~DocumentType,IDocumentMapper~ mappers
+        -ILogger logger
+        +RegisterMapper(mapper) void
+        +GetMapper(type) IDocumentMapper  
+        +IsTypeSupported(type) bool
+    }
+    
+    DocumentMapperRegistry ..|> IDocumentMapperRegistry
+    DocumentMapperRegistry --> IDocumentMapper : manages
+    
+    note for DocumentMapperRegistry "Simple dictionary-based registry\nAuto-discovery at startup"
+```
+
+### Simplified Processing Pipeline
+
+```mermaid
+flowchart LR
+    IMG[Image Data] --> API[1. OCR API Call]
+    API --> MAP[2. Map Response]
+    MAP --> CAS[3. Store in CAS]
+    CAS --> SIGN[4. Apply Signature]
+    SIGN --> RESULT[Processing Result]
+    
+    API -.-> ERR1[OCR API Error]
+    MAP -.-> ERR2[Mapping Error]
+    CAS -.-> ERR3[Storage Error]
+    
+    ERR1 --> FAIL[Failed Result]
+    ERR2 --> FAIL
+    ERR3 --> FAIL
+    
+    style API fill:#9cf
+    style CAS fill:#fc9
+    style SIGN fill:#9fc
+```
+
+```mermaid
+classDiagram
+    class IDocumentProcessingService {
+        <<interface>>
+        +ProcessDocumentAsync(image, type) ProcessingResult
+    }
+    
+    class ProcessingResult {
+        +bool Success
+        +string DocumentHash
+        +object Data
+        +string ErrorMessage
+        +float Confidence
+    }
+    
+    IDocumentProcessingService ..> ProcessingResult : returns
+    
+    note for IDocumentProcessingService "4-stage pipeline:\n1. OCR API (pre-parsed)\n2. Map to domain\n3. Store in CAS\n4. Sign document"
+```
+
+### Example Document Mapper Implementations
+
+#### Receipt Mapper
+
+**Architectural Note**: The OCR API (defined in OpenAPI specification) returns fully parsed receipt models with all fields populated. No client-side parsing or extraction logic is needed.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as OCR API
+    participant Mapper as Document Mapper
+    participant Model as Domain Model
+    
+    Client->>API: Submit Document (Receipt/W4/etc)
+    API->>API: Validate, OCR, Parse Fields
+    API-->>Client: Return Parsed Model
+    
+    Note over API,Client: API returns fully parsed data:<br/>- Receipt: merchant, items, total<br/>- W4: employee info, withholdings<br/>- W2: wages, taxes, employer
+    
+    Client->>Mapper: Map API Response
+    Mapper->>Model: Simple Type Cast
+    Model-->>Client: Domain Object
+    
+    Note over Mapper,Model: No parsing needed!<br/>API already extracted all fields
+```
+
+**Key Architecture Decision**: The OCR API returns **fully parsed models** with all fields extracted. Mappers only perform simple type casting from API responses to domain models. No client-side parsing, field extraction, or validation logic is needed.
+
+### Simple Configuration
+
+```json
+// appsettings.json - Simple configuration for supported document types
+{
+  "OcrApi": {
+    "BaseUrl": "https://api.nolock.social/ocr",
+    "ApiKey": "{{from-keyvault}}",
+    "Timeout": 30,
+    "MaxRetries": 3
+  },
+  "SupportedDocumentTypes": [
+    "Receipt",
+    "W4",
+    "Check"
+    // Additional types can be added as the API supports them
+  ]
 }
 ```
 
-#### Processing Context
+### Simple Mapper Registration
 
-```csharp
-public class ProcessingContext
-{
-    public Guid DocumentId { get; set; }
-    public DocumentType DocumentType { get; set; }
-    public ProcessingOptions Options { get; set; }
-    public Dictionary<string, object> CustomData { get; set; }
-    public ILogger Logger { get; set; }
-    public CancellationToken CancellationToken { get; set; }
-}
-
-public class ProcessingOptions
-{
-    public bool EnhanceImage { get; set; }
-    public bool AutoRotate { get; set; }
-    public string Language { get; set; } = "en";
-    public OcrEngine PreferredEngine { get; set; }
-    public ValidationLevel ValidationLevel { get; set; }
-    public Dictionary<string, string> ProcessorSpecificOptions { get; set; }
-}
+```mermaid
+graph TB
+    subgraph "Dependency Injection"
+        DI[Service Collection]
+        REG[Mapper Registry]
+        M1[Receipt Mapper]
+        M2[W4 Mapper]
+        M3[W2 Mapper]
+        INIT[Mapper Initializer]
+    end
+    
+    DI --> REG
+    DI --> M1
+    DI --> M2
+    DI --> M3
+    DI --> INIT
+    
+    INIT -.-> REG
+    M1 -.-> REG
+    M2 -.-> REG
+    M3 -.-> REG
+    
+    style DI fill:#9cf
+    style REG fill:#fc9
 ```
 
-### Document Processor Registry
+**Registration Process:**
+1. Register `IDocumentMapperRegistry` as singleton
+2. Register individual mapper implementations
+3. Use `IHostedService` to auto-register mappers at startup
+4. No complex plugin loading - simple DI registration
 
-```csharp
-public interface IDocumentProcessorRegistry
-{
-    Task RegisterProcessorAsync(IDocumentProcessorPlugin processor);
-    Task UnregisterProcessorAsync(DocumentType type);
-    IDocumentProcessor GetProcessor(DocumentType type);
-    IEnumerable<IDocumentProcessor> GetAllProcessors();
-    bool IsTypeSupported(DocumentType type);
-    Task<IDocumentProcessor> DiscoverAndLoadAsync(string assemblyPath);
-}
+### Simple API Integration
 
-public class DocumentProcessorRegistry : IDocumentProcessorRegistry
-{
-    private readonly ConcurrentDictionary<DocumentType, IDocumentProcessorPlugin> _processors;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<DocumentProcessorRegistry> _logger;
+```mermaid
+sequenceDiagram
+    participant Client
+    participant OcrService
+    participant ApiClient
+    participant MapperRegistry
+    participant CAS
     
-    public async Task RegisterProcessorAsync(IDocumentProcessorPlugin processor)
-    {
-        var metadata = processor.GetMetadata();
-        _logger.LogInformation("Registering processor: {Name} v{Version} for {Type}", 
-            metadata.Name, metadata.Version, processor.DocumentType);
-        
-        // Initialize the processor
-        await processor.InitializeAsync(_serviceProvider);
-        
-        // Verify health
-        var health = await processor.HealthCheckAsync();
-        if (health.Status != HealthStatus.Healthy)
-        {
-            throw new ProcessorRegistrationException(
-                $"Processor {metadata.Name} failed health check: {health.Message}");
-        }
-        
-        // Register
-        _processors[processor.DocumentType] = processor;
-        
-        // Emit registration event
-        await _eventBus.PublishAsync(new ProcessorRegisteredEvent
-        {
-            DocumentType = processor.DocumentType,
-            ProcessorName = metadata.Name,
-            Version = metadata.Version
-        });
-    }
-    
-    public IDocumentProcessor GetProcessor(DocumentType type)
-    {
-        if (_processors.TryGetValue(type, out var processor))
-        {
-            return processor;
-        }
-        
-        throw new ProcessorNotFoundException($"No processor registered for type: {type}");
-    }
-}
+    Client->>OcrService: ProcessDocumentAsync(image, type)
+    OcrService->>ApiClient: Call OCR API
+    ApiClient-->>OcrService: Parsed response
+    OcrService->>MapperRegistry: Get mapper for type
+    MapperRegistry-->>OcrService: Document mapper
+    OcrService->>OcrService: Map to domain model
+    OcrService->>CAS: Store results
+    OcrService-->>Client: Return mapped document
 ```
 
-### Processing Pipeline
+**Key Components:**
+- **OcrService**: Orchestrates OCR API calls and response mapping
+- **ApiClient**: Generated OpenAPI client for OCR service
+- **MapperRegistry**: Provides type-specific mappers
+- **Response Mapping**: Simple transformation from API response to domain model
 
-```csharp
-public interface IDocumentProcessingPipeline
-{
-    Task<ProcessingResult> ProcessAsync(
-        byte[] imageData, 
-        DocumentType documentType,
-        ProcessingContext context);
-}
+### Error Handling Strategy
 
-public class DocumentProcessingPipeline : IDocumentProcessingPipeline
-{
-    private readonly IDocumentProcessorRegistry _registry;
-    private readonly IOcrService _ocrService;
-    private readonly ICASStorage _casStorage;
-    private readonly IDocumentSigner _signer;
-    private readonly IMetricsCollector _metrics;
+```mermaid
+graph LR
+    API[API Call] --> CB{Circuit Breaker}
+    CB -->|Open| CACHE[Return Cached]
+    CB -->|Closed| RETRY[Retry Logic]
+    RETRY -->|Success| OK[Process Result]
+    RETRY -->|Fail 3x| EXP[Exponential Backoff]
+    EXP -->|Timeout| ERROR[Log & Notify]
     
-    public async Task<ProcessingResult> ProcessAsync(
-        byte[] imageData, 
-        DocumentType documentType,
-        ProcessingContext context)
-    {
-        using var activity = Activity.StartActivity("DocumentProcessing");
-        activity?.SetTag("document.type", documentType.ToString());
-        
-        // Get appropriate processor
-        var processor = _registry.GetProcessor(documentType);
-        
-        // Stage 1: Validation
-        var validationResult = await processor.ValidateImageAsync(imageData);
-        if (!validationResult.IsValid)
-        {
-            return ProcessingResult.ValidationFailed(validationResult.Errors);
-        }
-        
-        // Stage 2: Preprocessing
-        var preprocessResult = await processor.PreprocessAsync(imageData, context);
-        
-        // Stage 3: OCR Processing
-        var ocrResult = await _ocrService.ProcessAsync(
-            preprocessResult.ProcessedImage,
-            new OcrOptions
-            {
-                Language = context.Options.Language,
-                Engine = context.Options.PreferredEngine
-            });
-        
-        // Stage 4: OCR Validation
-        var ocrValidation = await processor.ValidateOcrResultAsync(ocrResult);
-        if (!ocrValidation.IsValid)
-        {
-            return ProcessingResult.OcrValidationFailed(ocrValidation.Errors);
-        }
-        
-        // Stage 5: Data Extraction
-        var extractionResult = await processor.ExtractDataAsync(ocrResult, context);
-        
-        // Stage 6: Transformation
-        var transformResult = await processor.TransformAsync(extractionResult, context);
-        
-        // Stage 7: Storage
-        var storageResult = await StoreResultsAsync(
-            imageData, 
-            preprocessResult,
-            ocrResult, 
-            transformResult,
-            processor.DocumentType);
-        
-        // Record metrics
-        await _metrics.RecordProcessingAsync(new ProcessingMetrics
-        {
-            DocumentType = documentType,
-            ProcessorVersion = processor.ProcessorVersion,
-            ProcessingTime = activity?.Duration ?? TimeSpan.Zero,
-            Success = true
-        });
-        
-        return ProcessingResult.Success(storageResult);
-    }
-}
+    style CB fill:#f9f
+    style RETRY fill:#9ff
+    style ERROR fill:#f99
 ```
 
-### Example Document Processor Implementations
+**Error Handling Components:**
+- **Circuit Breaker**: Prevents cascading failures (Polly library)
+- **Retry Policy**: 3 attempts with exponential backoff
+- **Fallback**: Return cached results when available
+- **Logging**: Structured logging with correlation IDs
 
-#### Receipt Processor Plugin
+### Performance Optimization
 
-```csharp
-public class ReceiptProcessor : IDocumentProcessorPlugin
-{
-    public DocumentType DocumentType => DocumentType.Receipt;
-    public string ProcessorVersion => "1.0.0";
-    public string[] SupportedFormats => new[] { "image/jpeg", "image/png", "application/pdf" };
-    
-    private IReceiptParser _parser;
-    private IReceiptValidator _validator;
-    private ITaxCalculator _taxCalculator;
-    
-    public async Task<ValidationResult> ValidateImageAsync(byte[] imageData)
-    {
-        var errors = new List<string>();
-        
-        // Check image size
-        if (imageData.Length > 10_000_000) // 10MB
-            errors.Add("Image size exceeds 10MB limit");
-        
-        // Check image format
-        var format = ImageFormatDetector.Detect(imageData);
-        if (!SupportedFormats.Contains(format))
-            errors.Add($"Unsupported format: {format}");
-        
-        // Check image quality
-        var quality = await ImageQualityAnalyzer.AnalyzeAsync(imageData);
-        if (quality.Score < 0.5)
-            errors.Add("Image quality too low for reliable OCR");
-        
-        return new ValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Errors = errors
-        };
-    }
-    
-    public async Task<ExtractionResult> ExtractDataAsync(
-        OcrRawResult ocrResult, 
-        ProcessingContext context)
-    {
-        var receipt = new ReceiptData();
-        
-        // Extract merchant information
-        receipt.MerchantName = await _parser.ExtractMerchantAsync(ocrResult.Text);
-        receipt.MerchantAddress = await _parser.ExtractAddressAsync(ocrResult.Text);
-        receipt.MerchantPhone = await _parser.ExtractPhoneAsync(ocrResult.Text);
-        
-        // Extract line items
-        receipt.LineItems = await _parser.ExtractLineItemsAsync(ocrResult.Lines);
-        
-        // Extract totals
-        receipt.Subtotal = await _parser.ExtractAmountAsync(ocrResult.Text, "subtotal");
-        receipt.Tax = await _parser.ExtractAmountAsync(ocrResult.Text, "tax");
-        receipt.Total = await _parser.ExtractAmountAsync(ocrResult.Text, "total");
-        
-        // Extract date/time
-        receipt.TransactionDate = await _parser.ExtractDateAsync(ocrResult.Text);
-        
-        // Validate extracted data
-        var validation = await _validator.ValidateReceiptAsync(receipt);
-        
-        return new ExtractionResult
-        {
-            Data = receipt,
-            Confidence = CalculateConfidence(receipt, ocrResult),
-            ValidationResult = validation
-        };
-    }
-    
-    public PluginMetadata GetMetadata()
-    {
-        return new PluginMetadata
-        {
-            Name = "Receipt Processor",
-            Description = "Processes retail receipts and extracts transaction data",
-            Author = "NoLock Team",
-            Version = ProcessorVersion,
-            MinimumSystemVersion = "1.0.0",
-            Dependencies = new[] { "TaxCalculator", "CurrencyConverter" }
-        };
-    }
-}
-```
+**Caching Strategy:**
+- **IMemoryCache**: 5-minute TTL for OCR results
+- **Cache Key**: SHA-256 hash of image content
+- **Cache-aside pattern**: Check cache → Call API → Update cache
 
-#### W4 Tax Form Processor Plugin
-
-```csharp
-public class W4Processor : IDocumentProcessorPlugin
-{
-    public DocumentType DocumentType => DocumentType.W4;
-    public string ProcessorVersion => "1.0.0";
-    
-    private IIrsFormValidator _irsValidator;
-    private ITaxFormParser _formParser;
-    
-    public async Task<ValidationResult> ValidateOcrResultAsync(OcrRawResult ocrResult)
-    {
-        var errors = new List<string>();
-        
-        // Verify form number
-        if (!ocrResult.Text.Contains("Form W-4", StringComparison.OrdinalIgnoreCase))
-            errors.Add("Document does not appear to be a W-4 form");
-        
-        // Check for required fields
-        var requiredFields = new[] 
-        { 
-            "First name", 
-            "Last name", 
-            "Social Security Number",
-            "Filing Status"
-        };
-        
-        foreach (var field in requiredFields)
-        {
-            if (!ContainsField(ocrResult, field))
-                errors.Add($"Required field missing: {field}");
-        }
-        
-        // Verify form year
-        var year = ExtractFormYear(ocrResult.Text);
-        if (year < DateTime.Now.Year - 1)
-            errors.Add($"Form year {year} is outdated");
-        
-        return new ValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Errors = errors
-        };
-    }
-    
-    public async Task<ExtractionResult> ExtractDataAsync(
-        OcrRawResult ocrResult, 
-        ProcessingContext context)
-    {
-        var w4Data = new W4FormData();
-        
-        // Extract employee information
-        w4Data.FirstName = await _formParser.ExtractFieldAsync(ocrResult, "First name");
-        w4Data.LastName = await _formParser.ExtractFieldAsync(ocrResult, "Last name");
-        w4Data.SSN = await _formParser.ExtractSSNAsync(ocrResult);
-        w4Data.Address = await _formParser.ExtractAddressBlockAsync(ocrResult);
-        
-        // Extract filing status
-        w4Data.FilingStatus = await _formParser.ExtractCheckboxAsync(ocrResult, 
-            new[] { "Single", "Married filing jointly", "Head of household" });
-        
-        // Extract withholding information
-        w4Data.MultipleJobs = await _formParser.ExtractCheckboxAsync(ocrResult, "Multiple jobs");
-        w4Data.DependentsAmount = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 3");
-        w4Data.OtherIncome = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(a)");
-        w4Data.Deductions = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(b)");
-        w4Data.ExtraWithholding = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(c)");
-        
-        // Extract signature
-        w4Data.HasSignature = await _formParser.DetectSignatureAsync(ocrResult);
-        w4Data.SignatureDate = await _formParser.ExtractDateAsync(ocrResult, "Date");
-        
-        // Validate with IRS rules
-        var validation = await _irsValidator.ValidateW4Async(w4Data);
-        
-        return new ExtractionResult
-        {
-            Data = w4Data,
-            Confidence = CalculateFormConfidence(w4Data, ocrResult),
-            ValidationResult = validation
-        };
-    }
-}
-```
-
-### Plugin Configuration
-
-```yaml
-# document-processors.yaml
-processors:
-  - type: Receipt
-    enabled: true
-    assembly: NoLock.Processors.Receipt.dll
-    className: NoLock.Processors.Receipt.ReceiptProcessor
-    configuration:
-      maxImageSize: 10485760  # 10MB
-      minQualityScore: 0.5
-      supportedCurrencies: ["USD", "EUR", "GBP"]
-      
-  - type: Check
-    enabled: true
-    assembly: NoLock.Processors.Banking.dll
-    className: NoLock.Processors.Banking.CheckProcessor
-    configuration:
-      micr:
-        enabled: true
-        validateChecksum: true
-      routing:
-        validateWithABA: true
-        
-  - type: W4
-    enabled: true
-    assembly: NoLock.Processors.TaxForms.dll
-    className: NoLock.Processors.TaxForms.W4Processor
-    configuration:
-      formYear: 2024
-      validateSSN: true
-      requireSignature: true
-      
-  - type: W2
-    enabled: false  # Coming soon
-    assembly: NoLock.Processors.TaxForms.dll
-    className: NoLock.Processors.TaxForms.W2Processor
-    
-  - type: Form1099
-    enabled: false  # Coming soon
-    assembly: NoLock.Processors.TaxForms.dll
-    className: NoLock.Processors.TaxForms.Form1099Processor
-```
-
-### Plugin Loading and Discovery
-
-```csharp
-public class PluginLoader
-{
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<PluginLoader> _logger;
-    private readonly IServiceProvider _serviceProvider;
-    
-    public async IAsyncEnumerable<IDocumentProcessorPlugin> LoadPluginsAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var config = _configuration.GetSection("processors").Get<ProcessorConfig[]>();
-        
-        foreach (var processorConfig in config.Where(c => c.Enabled))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            try
-            {
-                var plugin = await LoadPluginAsync(processorConfig);
-                _logger.LogInformation("Loaded plugin: {Type} from {Assembly}", 
-                    processorConfig.Type, processorConfig.Assembly);
-                yield return plugin;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load plugin: {Type}", processorConfig.Type);
-                // Continue to next plugin instead of failing entire stream
-            }
-        }
-    }
-    
-    private async Task<IDocumentProcessorPlugin> LoadPluginAsync(ProcessorConfig config)
-    {
-        // Load assembly
-        var assemblyPath = Path.Combine(AppContext.BaseDirectory, "plugins", config.Assembly);
-        var assembly = Assembly.LoadFrom(assemblyPath);
-        
-        // Find and instantiate processor type
-        var processorType = assembly.GetType(config.ClassName);
-        if (processorType == null)
-        {
-            throw new TypeLoadException($"Type {config.ClassName} not found in {config.Assembly}");
-        }
-        
-        // Create instance with dependency injection - suitable for Blazor WASM
-        // Browser sandbox provides inherent isolation
-        var processor = (IDocumentProcessorPlugin)ActivatorUtilities.CreateInstance(
-            _serviceProvider, processorType);
-        
-        // Apply configuration
-        if (config.Configuration != null)
-        {
-            await processor.ConfigureAsync(config.Configuration);
-        }
-        
-        return processor;
-    }
-}
-```
-
-### Dynamic Endpoint Registration
-
-```csharp
-public class DynamicEndpointRegistration
-{
-    public static void RegisterDocumentEndpoints(
-        this IEndpointRouteBuilder endpoints, 
-        IDocumentProcessorRegistry registry)
-    {
-        foreach (var processor in registry.GetAllProcessors())
-        {
-            var documentType = processor.DocumentType;
-            var routePath = $"/api/ocr/{documentType.ToString().ToLower()}";
-            
-            endpoints.MapPost(routePath, async (
-                HttpRequest request,
-                IDocumentProcessingPipeline pipeline,
-                ILogger<Program> logger) =>
-            {
-                try
-                {
-                    // Read image from request
-                    using var ms = new MemoryStream();
-                    await request.Body.CopyToAsync(ms);
-                    var imageData = ms.ToArray();
-                    
-                    // Create processing context
-                    var context = new ProcessingContext
-                    {
-                        DocumentId = Guid.NewGuid(),
-                        DocumentType = documentType,
-                        Options = GetOptionsFromHeaders(request.Headers),
-                        Logger = logger,
-                        CancellationToken = request.HttpContext.RequestAborted
-                    };
-                    
-                    // Process document
-                    var result = await pipeline.ProcessAsync(imageData, documentType, context);
-                    
-                    return result.Success 
-                        ? Results.Ok(result.Data)
-                        : Results.BadRequest(result.Errors);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error processing {DocumentType}", documentType);
-                    return Results.Problem("An error occurred processing the document");
-                }
-            })
-            .WithName($"Process{documentType}")
-            .WithOpenApi(operation =>
-            {
-                operation.Summary = $"Process {documentType} document";
-                operation.Description = $"Submits a {documentType} for OCR processing";
-                return operation;
-            })
-            .RequireAuthorization()
-            .DisableAntiforgery();
-        }
-    }
-}
-```
-
-### Error Handling and Validation Rules
-
-```csharp
-public abstract class BaseDocumentProcessor : IDocumentProcessorPlugin
-{
-    protected readonly ILogger _logger;
-    protected readonly IValidationRuleEngine _validationEngine;
-    
-    public async Task<ValidationResult> ValidateWithRulesAsync<T>(T data)
-    {
-        var rules = GetValidationRules();
-        var results = new List<ValidationError>();
-        
-        foreach (var rule in rules)
-        {
-            var result = await rule.ValidateAsync(data);
-            if (!result.IsValid)
-            {
-                results.AddRange(result.Errors);
-            }
-        }
-        
-        return new ValidationResult
-        {
-            IsValid = results.Count == 0,
-            Errors = results.Select(e => e.Message).ToList()
-        };
-    }
-    
-    protected abstract IEnumerable<IValidationRule> GetValidationRules();
-}
-
-public interface IValidationRule
-{
-    string RuleName { get; }
-    ValidationLevel Level { get; }
-    Task<ValidationResult> ValidateAsync(object data);
-}
-
-public class RequiredFieldRule : IValidationRule
-{
-    public string RuleName => "RequiredField";
-    public ValidationLevel Level => ValidationLevel.Error;
-    
-    private readonly string _fieldName;
-    private readonly Func<object, string> _fieldExtractor;
-    
-    public async Task<ValidationResult> ValidateAsync(object data)
-    {
-        var value = _fieldExtractor(data);
-        
-        return string.IsNullOrWhiteSpace(value)
-            ? ValidationResult.Failed($"Required field '{_fieldName}' is missing")
-            : ValidationResult.Success();
-    }
-}
-```
-
-### Performance Optimization with Processor Caching
-
-```csharp
-public class CachedProcessorRegistry : IDocumentProcessorRegistry
-{
-    private readonly IDocumentProcessorRegistry _innerRegistry;
-    private readonly IMemoryCache _cache;
-    // Note: No locking needed in Blazor WASM (single-threaded environment)
-    
-    public IDocumentProcessor GetProcessor(DocumentType type)
-    {
-        return _cache.GetOrCreate($"processor_{type}", entry =>
-        {
-            entry.SlidingExpiration = TimeSpan.FromHours(1);
-            entry.RegisterPostEvictionCallback((key, value, reason, state) =>
-            {
-                if (value is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            });
-            
-            return _innerRegistry.GetProcessor(type);
-        });
-    }
-    
-    public async Task WarmupProcessorsAsync(IEnumerable<DocumentType> types)
-    {
-        var tasks = types.Select(async type =>
-        {
-            await _loadLock.WaitAsync();
-            try
-            {
-                var processor = GetProcessor(type);
-                if (processor is IDocumentProcessorPlugin plugin)
-                {
-                    await plugin.HealthCheckAsync();
-                }
-            }
-            finally
-            {
-                _loadLock.Release();
-            }
-        });
-        
-        await Task.WhenAll(tasks);
-    }
-}
+**Optimization Techniques:**
+- Lazy loading of document processors
+- Virtual scrolling for large galleries
+- Progressive image loading
+- Browser cache utilization
 ```
 
 ### Monitoring and Metrics
 
-```csharp
-public class ProcessorMetricsCollector
-{
-    private readonly IMetrics _metrics;
+**Metrics Collection:**
+- **Processing Metrics**: Total documents, success rate, duration histogram
+- **Validation Metrics**: Failure counts by reason
+- **Performance Metrics**: API latency, cache hit rate
+- **Error Metrics**: Error rate by type
+
+```mermaid
+graph LR
+    APP[Application] --> METRICS[Metrics Collector]
+    METRICS --> PROM[Prometheus]
+    PROM --> GRAF[Grafana]
     
-    public void RecordProcessing(DocumentType type, TimeSpan duration, bool success)
-    {
-        _metrics.Measure.Counter.Increment(
-            new CounterOptions 
-            { 
-                Name = "document_processing_total",
-                Tags = new MetricTags("type", type.ToString(), "success", success.ToString())
-            });
-        
-        _metrics.Measure.Histogram.Update(
-            new HistogramOptions
-            {
-                Name = "document_processing_duration_seconds",
-                Tags = new MetricTags("type", type.ToString())
-            },
-            (long)duration.TotalMilliseconds);
-    }
-    
-    public void RecordValidationFailure(DocumentType type, string reason)
-    {
-        _metrics.Measure.Counter.Increment(
-            new CounterOptions
-            {
-                Name = "document_validation_failures_total",
+    METRICS --> COUNTS[Counters]
+    METRICS --> HIST[Histograms]
+    METRICS --> GAUGE[Gauges]
+```
+
+**Key Metrics:**
+- `document_processing_total`: Counter by type and success
+- `document_processing_duration_seconds`: Histogram
+- `document_validation_failures_total`: Counter by reason
+- `ocr_api_latency_ms`: Histogram
+- `cache_hit_rate`: Gauge
                 Tags = new MetricTags("type", type.ToString(), "reason", reason)
             });
     }
@@ -2143,15 +1527,6 @@ openapi-generator-cli generate \
 ```
 
 ### Service Integration Pattern
-
-```csharp
-public interface IOCRServiceAdapter
-{
-    Task<ReceiptData> ProcessReceiptAsync(byte[] imageData, CancellationToken cancellationToken = default);
-    Task<CheckData> ProcessCheckAsync(byte[] imageData, CancellationToken cancellationToken = default);
-    Task<HealthStatus> GetHealthStatusAsync(CancellationToken cancellationToken = default);
-}
-```
 
 ```mermaid
 classDiagram
@@ -2415,7 +1790,8 @@ NoLock.Social.DocumentScanner/
 - **Polly**: Retry and resilience policies
 
 ### State Management
-- **System.Reactive**: Reactive state management
+- **Stateless**: Finite state machine for workflows (lightweight, async-capable)
+- **System.Reactive**: Reactive event streams
 - **Blazored.LocalStorage**: Offline storage
 
 ### JavaScript Interop
@@ -2599,201 +1975,86 @@ classDiagram
 
 ### Error Handling and Retry Logic
 
-```csharp
-public class RetryPolicyConfiguration
-{
-    public static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
-    {
-        return HttpPolicyExtensions
-            .HandleTransientHttpError()
-            .OrResult(msg => !msg.IsSuccessStatusCode)
-            .WaitAndRetryAsync(
-                3,
-                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-                onRetry: (outcome, timespan, retryCount, context) =>
-                {
-                    var logger = context.Values["logger"] as ILogger;
-                    logger?.LogWarning($"Retry {retryCount} after {timespan}s");
-                });
-    }
-    
-    public static IAsyncPolicy GetCircuitBreakerPolicy()
-    {
-        return Policy
-            .Handle<HttpRequestException>()
-            .CircuitBreakerAsync(
-                handledEventsAllowedBeforeBreaking: 3,
-                durationOfBreak: TimeSpan.FromSeconds(30),
-                onBreak: (exception, duration) =>
-                {
-                    // Log circuit breaker opening
-                },
-                onReset: () =>
-                {
-                    // Log circuit breaker closing
-                });
-    }
-}
+**Resilience Patterns (using Polly library):**
+- **Retry Policy**: 3 attempts with exponential backoff (2, 4, 8 seconds)
+- **Circuit Breaker**: Opens after 3 failures, stays open for 30 seconds
+- **Timeout Policy**: 30-second timeout per OCR request
+- **Bulkhead Isolation**: Max 10 concurrent OCR requests
+
+```mermaid
+stateDiagram-v2
+    [*] --> Attempt
+    Attempt --> Success: API Success
+    Attempt --> Retry: Transient Error
+    Retry --> Attempt: Backoff Complete
+    Retry --> CircuitOpen: Max Retries
+    CircuitOpen --> Failed: Circuit Open
+    Success --> [*]
+    Failed --> [*]
 ```
 
 ### Offline Support
 
-```csharp
-public class OfflineScanManager
-{
-    private readonly ILocalStorageService _localStorage;
-    private readonly IOCRServiceAdapter _ocrService;
-    
-    public async Task QueueForProcessingAsync(CapturedImage image)
-    {
-        var queue = await GetQueueAsync();
-        queue.Add(new QueuedScan
-        {
-            Id = Guid.NewGuid(),
-            Image = image,
-            QueuedAt = DateTime.UtcNow,
-            Status = ProcessingStatus.Pending
-        });
-        
-        await _localStorage.SetItemAsync("scan_queue", queue);
-    }
-    
-    public async Task ProcessQueueAsync()
-    {
-        var queue = await GetQueueAsync();
-        var pending = queue.Where(x => x.Status == ProcessingStatus.Pending);
-        
-        foreach (var item in pending)
-        {
-            try
-            {
-                var result = await _ocrService.ProcessReceiptAsync(item.Image.Data);
-                item.Status = ProcessingStatus.Completed;
-                item.Result = result;
-            }
-            catch (Exception ex)
-            {
-                item.Status = ProcessingStatus.Failed;
-                item.Error = ex.Message;
-            }
-        }
-        
-        await _localStorage.SetItemAsync("scan_queue", queue);
-    }
-}
+**Queue Management Strategy:**
+- **Local Storage**: Blazored.LocalStorage for offline queue
+- **Queue Processing**: Background service processes when online
+- **Sync Strategy**: FIFO with retry on connection restore
+
+```mermaid
+flowchart LR
+    CAP[Capture] --> CHK{Online?}
+    CHK -->|Yes| API[Process via API]
+    CHK -->|No| QUEUE[Queue Locally]
+    QUEUE --> STORE[LocalStorage]
+    STORE --> SYNC[Sync Service]
+    SYNC --> MON{Monitor Connection}
+    MON -->|Online| PROC[Process Queue]
+    PROC --> API
+    API --> CAS[Store in CAS]
 ```
 
 ## Error Handling and Resilience Patterns
 
 ### Comprehensive Error Management
 
-```csharp
-public class OcrProcessingErrorHandler
-{
-    private readonly ILogger<OcrProcessingErrorHandler> _logger;
-    private readonly ICASStorage _casStorage;
-    private readonly INotificationService _notifications;
+```mermaid
+graph TB
+    ERR[Exception] --> CLASS[Classify Error]
+    CLASS --> TO[Timeout]
+    CLASS --> RL[Rate Limited]
+    CLASS --> NET[Network Error]
+    CLASS --> INV[Invalid Image]
+    CLASS --> SVC[Service Unavailable]
     
-    public async Task HandleProcessingError(
-        Guid documentId, 
-        Exception exception,
-        int attemptNumber)
-    {
-        var errorType = ClassifyError(exception);
-        
-        switch (errorType)
-        {
-            case ErrorType.Timeout:
-                await HandleTimeout(documentId, attemptNumber);
-                break;
-                
-            case ErrorType.RateLimited:
-                await HandleRateLimit(documentId, attemptNumber);
-                break;
-                
-            case ErrorType.NetworkError:
-                await HandleNetworkError(documentId, attemptNumber);
-                break;
-                
-            case ErrorType.InvalidImage:
-                await HandleInvalidImage(documentId);
-                break;
-                
-            case ErrorType.ServiceUnavailable:
-                await HandleServiceUnavailable(documentId, attemptNumber);
-                break;
-                
-            default:
-                await HandleUnknownError(documentId, exception);
-                break;
-        }
-    }
+    TO --> RETRY1{Attempt < 3?}
+    RETRY1 -->|Yes| BACKOFF[Exponential Backoff]
+    RETRY1 -->|No| FAIL[Mark Failed]
     
-    private async Task HandleTimeout(Guid documentId, int attemptNumber)
-    {
-        if (attemptNumber < 3)
-        {
-            // Retry with exponential backoff
-            var delay = TimeSpan.FromSeconds(Math.Pow(2, attemptNumber) * 10);
-            await ScheduleRetry(documentId, delay);
-            
-            _logger.LogWarning(
-                "OCR timeout for document {DocumentId}, retry {Attempt} scheduled in {Delay}",
-                documentId, attemptNumber + 1, delay);
-        }
-        else
-        {
-            // Mark as failed after max retries
-            await UpdateDocumentState(documentId, ProcessingState.OcrTimeout);
-            await _notifications.NotifyUserAsync(
-                documentId, 
-                "OCR processing timed out after multiple attempts");
-        }
-    }
+    RL --> DELAY[Delay & Retry]
+    NET --> RETRY2[Retry with Jitter]
+    INV --> REJECT[Reject & Notify]
+    SVC --> CB[Circuit Breaker]
     
-    private async Task HandleRateLimit(Guid documentId, int attemptNumber)
-    {
-        // Implement exponential backoff for rate limiting
-        var delay = TimeSpan.FromMinutes(Math.Pow(2, attemptNumber));
-        await ScheduleRetry(documentId, delay);
-        
-        _logger.LogInformation(
-            "Rate limited for document {DocumentId}, retry scheduled in {Delay}",
-            documentId, delay);
-    }
+    BACKOFF --> SCHEDULE[Schedule Retry]
+    DELAY --> SCHEDULE
+    RETRY2 --> SCHEDULE
     
-    private ErrorType ClassifyError(Exception exception)
-    {
-        return exception switch
-        {
-            OcrTimeoutException => ErrorType.Timeout,
-            HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests } => ErrorType.RateLimited,
-            HttpRequestException { StatusCode: HttpStatusCode.ServiceUnavailable } => ErrorType.ServiceUnavailable,
-            HttpRequestException => ErrorType.NetworkError,
-            InvalidImageException => ErrorType.InvalidImage,
-            _ => ErrorType.Unknown
-        };
-    }
-}
+    style ERR fill:#f99
+    style FAIL fill:#f66
+    style REJECT fill:#fa6
+```
 
-public class CircuitBreakerOcrProxy : IOCRServiceProxy
-{
-    private readonly IOCRServiceProxy _innerProxy;
-    private readonly ICircuitBreaker _circuitBreaker;
-    
-    public async Task<OcrStatus> GetStatusAsync(Guid taskId)
-    {
-        return await _circuitBreaker.ExecuteAsync(async () =>
-        {
-            return await _innerProxy.GetStatusAsync(taskId);
-        });
-    }
-    
-    public async Task<Guid> SubmitForProcessingAsync(byte[] imageData)
-    {
-        // Check for duplicate submissions
-        var imageHash = ComputeHash(imageData);
-        var cached = await CheckCache(imageHash);
+**Error Classification:**
+- **Timeout**: OCR processing exceeds 30 seconds
+- **Rate Limited**: HTTP 429 response
+- **Network Error**: Connection failures
+- **Invalid Image**: Unsupported format or corrupt file
+- **Service Unavailable**: HTTP 503 response
+
+**Recovery Strategies:**
+- **Exponential Backoff**: 10s, 20s, 40s delays
+- **Circuit Breaker**: Protects against cascading failures
+- **Duplicate Detection**: SHA-256 hash prevents resubmission
         
         if (cached != null)
         {
@@ -2813,51 +2074,44 @@ public class CircuitBreakerOcrProxy : IOCRServiceProxy
 
 ### Retry Strategy Configuration
 
-```csharp
-public class RetryConfiguration
-{
-    public static IAsyncPolicy<T> GetRetryPolicy<T>()
-    {
-        return Policy<T>
-            .Handle<HttpRequestException>()
-            .OrResult(r => ShouldRetry(r))
-            .WaitAndRetryAsync(
-                retryCount: 3,
-                sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-                onRetry: (outcome, timespan, retryCount, context) =>
-                {
-                    var logger = context.Values["logger"] as ILogger;
-                    logger?.LogWarning(
-                        "Retry {RetryCount} after {Timespan}s for operation {Operation}",
-                        retryCount, timespan.TotalSeconds, context.OperationKey);
-                });
-    }
+```mermaid
+stateDiagram-v2
+    [*] --> Request: API Call
+    Request --> Success: 200 OK
+    Request --> Retry1: Error/Timeout
     
-    public static IAsyncPolicy GetCircuitBreakerPolicy()
-    {
-        return Policy
-            .Handle<HttpRequestException>()
-            .CircuitBreakerAsync(
-                handledEventsAllowedBeforeBreaking: 5,
-                durationOfBreak: TimeSpan.FromMinutes(1),
-                onBreak: (exception, duration) =>
-                {
-                    // Log and notify about circuit breaker opening
-                    LogCircuitBreakerOpen(exception, duration);
-                },
-                onReset: () =>
-                {
-                    // Log circuit breaker closing
-                    LogCircuitBreakerReset();
-                },
-                onHalfOpen: () =>
-                {
-                    // Log circuit breaker testing
-                    LogCircuitBreakerHalfOpen();
-                });
-    }
-}
+    Retry1 --> Wait2s: Wait 2s
+    Wait2s --> Request2: Retry #1
+    Request2 --> Success: 200 OK
+    Request2 --> Retry2: Error
+    
+    Retry2 --> Wait4s: Wait 4s
+    Wait4s --> Request3: Retry #2
+    Request3 --> Success: 200 OK
+    Request3 --> Retry3: Error
+    
+    Retry3 --> Wait8s: Wait 8s
+    Wait8s --> Request4: Retry #3
+    Request4 --> Success: 200 OK
+    Request4 --> CircuitOpen: Max Retries
+    
+    CircuitOpen --> Failed: Circuit Opens
+    Success --> [*]
+    Failed --> [*]
+    
+    note right of CircuitOpen
+        Circuit breaker opens after:
+        - 5 consecutive failures
+        - Stays open for 1 minute
+        - Half-open state for testing
+    end note
 ```
+
+**Resilience Configuration (Polly):**
+- **Retry Policy**: 3 attempts with exponential backoff (2s, 4s, 8s)
+- **Circuit Breaker**: Opens after 5 failures, 1-minute break duration
+- **Logging**: Structured logging for all retry attempts and circuit state changes
+- **Context**: Operation key tracking for correlation
 
 ## Security and Privacy
 
@@ -2870,29 +2124,9 @@ public class RetryConfiguration
    - Client-side image preprocessing to minimize data transfer
 
 2. **Permission Management**
-   ```csharp
-   public async Task<PermissionStatus> RequestCameraPermissionAsync()
-   {
-       try
-       {
-           var result = await _jsRuntime.InvokeAsync<PermissionResult>(
-               "navigator.permissions.query", 
-               new { name = "camera" });
-           
-           return result.State switch
-           {
-               "granted" => PermissionStatus.Granted,
-               "denied" => PermissionStatus.Denied,
-               "prompt" => PermissionStatus.Prompt,
-               _ => PermissionStatus.Unknown
-           };
-       }
-       catch
-       {
-           return PermissionStatus.Unknown;
-       }
-   }
-   ```
+   - Uses browser Permissions API via JS interop
+   - Handles states: granted, denied, prompt, unknown
+   - Graceful fallback on unsupported browsers
 
 3. **Content Security Policy**
    ```html
@@ -2922,301 +2156,105 @@ public class RetryConfiguration
 
 ## State Management for Pending OCR Requests
 
-### Processing Queue State Manager
+### Processing Queue State Management
 
-```csharp
-public class OcrProcessingStateManager
-{
-    private readonly ConcurrentDictionary<Guid, ProcessingState> _activeJobs;
-    private readonly IMemoryCache _cache;
-    private readonly IHubContext<OcrStatusHub> _hubContext;
-    
-    public event EventHandler<ProcessingStateChangedEventArgs>? StateChanged;
-    
-    public async Task TrackJobAsync(OcrProcessingJob job)
-    {
-        _activeJobs[job.DocumentId] = new ProcessingState
-        {
-            DocumentId = job.DocumentId,
-            TaskId = job.TaskId,
-            Status = OcrStatus.Pending,
-            StartedAt = DateTime.UtcNow,
-            LastPolledAt = null,
-            PollCount = 0
-        };
-        
-        // Notify UI components
-        await NotifyStateChange(job.DocumentId, OcrStatus.Pending);
-    }
-    
-    public async Task UpdatePollingStatusAsync(Guid documentId, OcrStatus status)
-    {
-        if (_activeJobs.TryGetValue(documentId, out var state))
-        {
-            state.Status = status;
-            state.LastPolledAt = DateTime.UtcNow;
-            state.PollCount++;
-            
-            // Update cache for UI components
-            _cache.Set($"ocr_status_{documentId}", state, TimeSpan.FromMinutes(5));
-            
-            // Send real-time update via SignalR
-            await _hubContext.Clients.All.SendAsync("OcrStatusUpdate", new
-            {
-                DocumentId = documentId,
-                Status = status.ToString(),
-                Progress = CalculateProgress(state),
-                Message = GetStatusMessage(status)
-            });
-            
-            // Raise event for local subscribers
-            StateChanged?.Invoke(this, new ProcessingStateChangedEventArgs(documentId, status));
-        }
-    }
-    
-    public async Task CompleteJobAsync(Guid documentId, OcrResult result)
-    {
-        if (_activeJobs.TryRemove(documentId, out var state))
-        {
-            state.Status = OcrStatus.Completed;
-            state.CompletedAt = DateTime.UtcNow;
-            
-            // Store completion in cache
-            _cache.Set($"ocr_result_{documentId}", result, TimeSpan.FromHours(1));
-            
-            // Notify all subscribers
-            await NotifyStateChange(documentId, OcrStatus.Completed);
-        }
-    }
-    
-    private int CalculateProgress(ProcessingState state)
-    {
-        // Calculate progress based on elapsed time vs expected duration
-        var elapsed = (DateTime.UtcNow - state.StartedAt).TotalSeconds;
-        var expectedDuration = 90.0; // 1.5 minutes average
-        
-        return Math.Min(95, (int)(elapsed / expectedDuration * 100));
-    }
-    
-    public IEnumerable<ProcessingState> GetActiveJobs()
-    {
-        return _activeJobs.Values
-            .Where(j => j.Status != OcrStatus.Completed && j.Status != OcrStatus.Failed)
-            .OrderBy(j => j.StartedAt);
-    }
-}
-
-// SignalR Hub for real-time updates
-public class OcrStatusHub : Hub
-{
-    private readonly OcrProcessingStateManager _stateManager;
-    
-    public async Task SubscribeToDocument(Guid documentId)
-    {
-        await Groups.AddToGroupAsync(Context.ConnectionId, $"doc_{documentId}");
-        
-        // Send current status immediately
-        var status = _stateManager.GetJobStatus(documentId);
-        if (status != null)
-        {
-            await Clients.Caller.SendAsync("CurrentStatus", status);
-        }
-    }
-    
-    public async Task UnsubscribeFromDocument(Guid documentId)
-    {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"doc_{documentId}");
-    }
-}
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: Job Created
+    Pending --> Processing: API Call Initiated
+    Processing --> Polling: Awaiting Result
+    Polling --> Polling: Check Status
+    Polling --> Completed: Result Ready
+    Polling --> Failed: Error/Timeout
+    Failed --> Pending: Retry
+    Completed --> [*]
+    Failed --> [*]
 ```
+
+**State Management Components:**
+- **Job Tracking**: Concurrent dictionary for active jobs
+- **Cache Layer**: IMemoryCache with 5-minute TTL
+- **SignalR Hub**: Real-time status broadcasting
+- **Event System**: Observable state change events
+- **Progress Calculation**: Time-based progress estimation
 
 ### UI State Synchronization
 
-```csharp
-@implements IAsyncDisposable
-@inject OcrProcessingStateManager StateManager
-@inject NavigationManager Navigation
+### OCR Processing Dashboard Component
 
-<div class="processing-dashboard">
-    <h4>OCR Processing Queue</h4>
+```mermaid
+graph TB
+    subgraph "Processing Dashboard"
+        UI[Dashboard UI]
+        STATE[State Manager]
+        HUB[SignalR Hub]
+        TIMER[Refresh Timer]
+    end
     
-    @if (activeJobs.Any())
-    {
-        <div class="active-jobs">
-            @foreach (var job in activeJobs)
-            {
-                <div class="job-card">
-                    <div class="job-header">
-                        <span>Document @job.DocumentId.ToString().Substring(0, 8)</span>
-                        <span class="status-badge @GetStatusClass(job.Status)">
-                            @job.Status
-                        </span>
-                    </div>
-                    
-                    <div class="job-progress">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: @(job.Progress)%"></div>
-                        </div>
-                        <span class="progress-text">@job.Progress%</span>
-                    </div>
-                    
-                    <div class="job-timing">
-                        <span>Started: @job.StartedAt.ToLocalTime().ToString("HH:mm:ss")</span>
-                        @if (job.LastPolledAt.HasValue)
-                        {
-                            <span>Last check: @((DateTime.UtcNow - job.LastPolledAt.Value).TotalSeconds)s ago</span>
-                        }
-                    </div>
-                    
-                    @if (job.Status == OcrStatus.Failed || job.Status == OcrStatus.Timeout)
-                    {
-                        <button class="retry-btn" @onclick="() => RetryJob(job.DocumentId)">
-                            Retry Processing
-                        </button>
-                    }
-                </div>
-            }
-        </div>
-    }
-    else
-    {
-        <p class="no-jobs">No documents currently processing</p>
-    }
-</div>
-
-@code {
-    private List<ProcessingJobViewModel> activeJobs = new();
-    private HubConnection? hubConnection;
-    private Timer? refreshTimer;
+    subgraph "Real-time Updates"
+        POLL[5s Polling]
+        PUSH[SignalR Push]
+        EVENT[State Events]
+    end
     
-    protected override async Task OnInitializedAsync()
-    {
-        // Load initial state
-        await RefreshActiveJobs();
-        
-        // Set up SignalR connection
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/hubs/ocr-status"))
-            .WithAutomaticReconnect()
-            .Build();
-        
-        hubConnection.On<OcrStatusUpdate>("OcrStatusUpdate", async (update) =>
-        {
-            await InvokeAsync(() =>
-            {
-                UpdateJobStatus(update);
-                StateHasChanged();
-            });
-        });
-        
-        await hubConnection.StartAsync();
-        
-        // Set up periodic refresh
-        refreshTimer = new Timer(async _ => await RefreshActiveJobs(), 
-            null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        
-        // Subscribe to state changes
-        StateManager.StateChanged += OnStateChanged;
-    }
+    UI --> STATE
+    STATE --> HUB
+    HUB --> PUSH
+    TIMER --> POLL
+    POLL --> STATE
+    EVENT --> UI
     
-    private async Task RefreshActiveJobs()
-    {
-        activeJobs = StateManager.GetActiveJobs()
-            .Select(j => new ProcessingJobViewModel(j))
-            .ToList();
-        
-        await InvokeAsync(StateHasChanged);
-    }
-    
-    private void OnStateChanged(object? sender, ProcessingStateChangedEventArgs e)
-    {
-        InvokeAsync(async () =>
-        {
-            await RefreshActiveJobs();
-        });
-    }
-    
-    public async ValueTask DisposeAsync()
-    {
-        StateManager.StateChanged -= OnStateChanged;
-        refreshTimer?.Dispose();
-        
-        if (hubConnection != null)
-        {
-            await hubConnection.DisposeAsync();
-        }
-    }
-}
+    style UI fill:#9cf
+    style HUB fill:#fc9
 ```
+
+**Component Features:**
+- **Real-time Updates**: SignalR for push notifications
+- **Polling Fallback**: 5-second refresh timer
+- **State Management**: Observable state pattern
+- **Progress Tracking**: Visual progress bars
+- **Retry Capability**: Failed job retry buttons
 
 ## Testing Strategy
 
-### Unit Testing
-
-```csharp
-[TestClass]
-public class CameraServiceTests
-{
-    [TestMethod]
-    public async Task StartCamera_WithValidOptions_ReturnsStream()
-    {
-        // Arrange
-        var jsRuntime = new Mock<IJSRuntime>();
-        var service = new CameraService(jsRuntime.Object);
-        
-        // Act
-        var result = await service.StartCameraAsync(new CameraOptions());
-        
-        // Assert
-        Assert.IsNotNull(result);
-    }
-}
+```mermaid
+graph TB
+    subgraph "Testing Pyramid"
+        UT[Unit Tests<br/>70% Coverage]
+        IT[Integration Tests<br/>20% Coverage]
+        E2E[E2E Tests<br/>10% Coverage]
+    end
+    
+    subgraph "Test Targets"
+        COMP[Components<br/>- Camera Service<br/>- Gallery Component<br/>- Scanner Component]
+        API[API Integration<br/>- OCR Service<br/>- Polling Logic<br/>- Error Handling]
+        FLOW[User Flows<br/>- Scan Document<br/>- View Gallery<br/>- Export Results]
+    end
+    
+    subgraph "Test Data"
+        MOCK[Mock Data<br/>- Sample Images<br/>- API Responses]
+        FIX[Fixtures<br/>- Receipt JSONs<br/>- W4 Forms<br/>- Error Cases]
+    end
+    
+    UT --> COMP
+    IT --> API
+    E2E --> FLOW
+    
+    MOCK --> UT
+    MOCK --> IT
+    FIX --> E2E
+    
+    style UT fill:#90EE90
+    style IT fill:#FFE4B5
+    style E2E fill:#FFB6C1
 ```
 
-### Integration Testing
+### Testing Approach
 
-```csharp
-[TestClass]
-public class OCRServiceIntegrationTests
-{
-    [TestMethod]
-    [TestCategory("Integration")]
-    public async Task ProcessReceipt_WithValidImage_ReturnsData()
-    {
-        // Arrange
-        var client = new OCRServiceClient(new HttpClient());
-        var adapter = new OCRServiceAdapter(client);
-        var testImage = File.ReadAllBytes("TestData/receipt.jpg");
-        
-        // Act
-        var result = await adapter.ProcessReceiptAsync(testImage);
-        
-        // Assert
-        Assert.IsNotNull(result);
-        Assert.IsNotNull(result.MerchantName);
-        Assert.IsTrue(result.Total > 0);
-    }
-}
-```
-
-### Component Testing
-
-```csharp
-[TestClass]
-public class DocumentScannerComponentTests : TestContext
-{
-    [TestMethod]
-    public void Component_RendersCorrectly()
-    {
-        // Arrange & Act
-        var component = RenderComponent<DocumentScannerComponent>();
-        
-        // Assert
-        Assert.IsNotNull(component.Find(".scanner-container"));
-        Assert.IsNotNull(component.Find(".camera-view"));
-    }
-}
-```
+- **Unit Tests**: Mock browser APIs, test component logic in isolation
+- **Integration Tests**: Test OCR API integration with mock responses
+- **E2E Tests**: Full workflow testing with Playwright/Selenium
+- **Test Framework**: MSTest or xUnit for .NET, bUnit for Blazor components
 
 ### E2E Testing Scenarios
 
@@ -3243,14 +2281,10 @@ public class DocumentScannerComponentTests : TestContext
 ### Optimization Strategies
 
 1. **Image Optimization**
-   ```csharp
-   public async Task<byte[]> OptimizeForOCR(byte[] image)
-   {
-       // Resize to optimal dimensions (max 2048px)
-       // Convert to grayscale if color not needed
-       // Compress using appropriate quality (85-90%)
-       // Remove metadata
-   }
+   - Resize to optimal dimensions (max 2048px)
+   - Convert to grayscale if color not needed  
+   - Compress using appropriate quality (85-90%)
+   - Remove metadata
    ```
 
 2. **Lazy Loading**
@@ -3259,24 +2293,9 @@ public class DocumentScannerComponentTests : TestContext
    - Progressive enhancement
 
 3. **Caching Strategy**
-   ```csharp
-   public class OCRResultCache
-   {
-       private readonly IMemoryCache _cache;
-       
-       public async Task<T> GetOrProcessAsync<T>(
-           string key, 
-           Func<Task<T>> factory,
-           TimeSpan expiration)
-       {
-           return await _cache.GetOrCreateAsync(key, async entry =>
-           {
-               entry.AbsoluteExpirationRelativeToNow = expiration;
-               return await factory();
-           });
-       }
-   }
-   ```
+   - IMemoryCache with configurable TTL
+   - Cache-aside pattern implementation
+   - SHA-256 based cache keys
 
 4. **Bundle Size Optimization**
    - Tree shaking for unused code
@@ -3292,69 +2311,64 @@ public class DocumentScannerComponentTests : TestContext
   - Results rendering: < 500ms
 
 - **Monitoring**
-  ```csharp
-  public class PerformanceMonitor
-  {
-      public async Task<T> MeasureAsync<T>(string operation, Func<Task<T>> action)
-      {
-          var stopwatch = Stopwatch.StartNew();
-          try
-          {
-              return await action();
-          }
-          finally
-          {
-              _telemetry.TrackMetric($"Scanner.{operation}", stopwatch.ElapsedMilliseconds);
-          }
-      }
-  }
+  - Telemetry for operation timing
+  - Performance metrics tracking
+  - Application Insights integration
   ```
 
 ## CAS-Based State Management (Future Design)
 
 ### Overview
-Instead of traditional queues, the system will evolve to use CAS entries for processing state management. This approach provides natural persistence and P2P synchronization capabilities.
+Instead of traditional queues, the system will evolve to use CAS entries for processing state management. This approach provides natural persistence and recovery capabilities.
 
 ### CAS Processing Entry Structure
-```csharp
-public class ProcessingEntry
-{
-    public string DocumentHash { get; set; }     // CAS address of original document
-    public string ProcessorType { get; set; }    // Which plugin to use
-    public ProcessingStatus Status { get; set; } // Pending, InProgress, Complete, Failed
-    public string ResultHash { get; set; }       // CAS address of OCR result (when complete)
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public ECDSASignature Signature { get; set; }  // ECDSA P-256 signature
-}
+```mermaid
+classDiagram
+    class ProcessingEntry {
+        +string DocumentHash
+        +string ProcessorType
+        +ProcessingStatus Status
+        +string ResultHash
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+        +ECDSASignature Signature
+    }
+    
+    class ProcessingStatus {
+        <<enumeration>>
+        Pending
+        InProgress
+        Complete
+        Failed
+    }
+    
+    ProcessingEntry --> ProcessingStatus : uses
+    
+    note for ProcessingEntry "All hashes reference CAS storage\nImmutable entries track processing state"
 ```
 
 ### Benefits of CAS-Based Approach
 - **Automatic persistence**: No separate state storage needed
 - **Immutable audit trail**: Every state change creates new entry
-- **P2P synchronization**: Entries can sync across devices
+- **Persistence**: Entries persist in CAS storage
 - **No ordering required**: Set-based processing, not queue-based
 - **Natural recovery**: On refresh, scan CAS for incomplete entries
 
 ### Recovery After Browser Refresh
-```csharp
-public class CASStateRecovery
-{
-    public async Task<IEnumerable<ProcessingEntry>> RecoverIncompleteJobsAsync()
-    {
-        // Scan CAS for entries with Status != Complete
-        var incompleteEntries = await _casStorage
-            .QueryAsync<ProcessingEntry>(e => e.Status != ProcessingStatus.Complete);
-        
-        // Resume processing for each incomplete entry
-        foreach (var entry in incompleteEntries)
-        {
-            await ResumeProcessingAsync(entry);
-        }
-        
-        return incompleteEntries;
-    }
-}
+
+**Recovery Strategy:**
+1. Scan CAS for ProcessingEntry objects with Status != Complete
+2. Resume processing for each incomplete entry
+3. Update status in new CAS entries (immutable append)
+4. Continue from last known state
+
+```mermaid
+flowchart LR
+    START[Browser Refresh] --> SCAN[Scan CAS]
+    SCAN --> FILTER[Filter Incomplete]
+    FILTER --> RESUME[Resume Each]
+    RESUME --> UPDATE[Create New Entry]
+    UPDATE --> CAS[Store in CAS]
 ```
 
 ## Implementation Focus (KISS/YAGNI Applied)
@@ -3386,38 +2400,38 @@ public class CASStateRecovery
 - Processing status indicator
 - Console logging for debugging
 
-### Architectural Simplifications (P2P Benefits)
+### Architectural Simplifications
 
 #### What We DON'T Need
 - **No complex security**: Same-device capture/processing eliminates attack surface
 - **No streaming**: Mistral API doesn't support it
 - **No distributed tracing**: Console.log is sufficient
 - **No WebSockets**: Simple polling works perfectly
-- **No horizontal scaling**: P2P doesn't scale traditionally
+- **No horizontal scaling**: Client-side processing model
 - **No complex monitoring**: Browser console handles debugging
 - **No rate limiting**: OCR service already limits
 - **No plugin sandboxing beyond browser**: WASM provides isolation
 
 #### What We DEFER (Future Considerations)
 - **CAS-based queue**: Will replace in-memory processing later
-- **P2P sync protocol**: Design when multi-device support needed
+- **Multi-device sync**: Future consideration
 - **State versioning**: Add when migration needed
 - **Lazy loading plugins**: Investigate if initial load becomes issue
 
 ## Conclusion
 
-This architecture implements a **P2P document scanning system** optimized for client-side processing in Blazor WebAssembly. The design prioritizes simplicity (KISS), avoids premature optimization (YAGNI), and leverages the inherent security of same-device processing.
+This architecture implements a **document scanning system** optimized for client-side processing in Blazor WebAssembly. The design prioritizes simplicity (KISS), avoids premature optimization (YAGNI), and leverages browser security features.
 
 ### Key Architectural Strengths
 
-1. **P2P Security Model**: Documents captured and processed on the same device eliminate traditional network attack vectors. The browser sandbox provides natural isolation for plugins.
+1. **Client-Side Security Model**: Documents captured and processed in the browser eliminate many traditional attack vectors. The browser sandbox provides natural isolation for plugins.
 
 2. **Pluggable Processor Design**: Following SOLID's Open/Closed principle, new document types (W4, W2, 1099) can be added without modifying the core system. Each processor has single responsibility for one document type.
 
-3. **Immutable CAS with Signatures**: ECDSA P-256 signatures (with Ed25519-compatible API) combined with content-addressable storage ensure document integrity while enabling future P2P synchronization across user's devices.
+3. **Immutable CAS with Signatures**: ECDSA P-256 signatures (with Ed25519-compatible API) combined with content-addressable storage ensure document integrity.
    - **TODO**: Migrate to native Ed25519 when browser WebCrypto API adds support
 
-4. **Simple Polling Strategy**: Exponential backoff (5s, 10s, 15s, 30s) is optimal for the P2P model - works offline, battery-efficient, and requires no complex infrastructure.
+4. **Simple Polling Strategy**: Exponential backoff (5s, 10s, 15s, 30s) is optimal for client-side processing - works offline, battery-efficient, and requires no complex infrastructure.
 
 5. **Gallery-First UI**: Removal of image editing tools in favor of a browsable gallery provides better user experience for reviewing multiple documents and their OCR results.
 
@@ -3447,33 +2461,31 @@ This architecture implements a **P2P document scanning system** optimized for cl
 - **Customer-Specific Processors**: Custom processors for specific client needs
 - **Gradual Rollout**: New processors can be enabled selectively
 
-### Adding New Document Types (Simple Process)
+### Adding New Document Types (Simplified Process)
 
-When adding a new document type (e.g., Form 1040):
+When the OCR API adds support for a new document type (e.g., Form 1040):
 
-1. **Create Processor Plugin**
-   ```csharp
-   public class Form1040Processor : IDocumentProcessorPlugin
-   {
-       public DocumentType DocumentType => DocumentType.Form1040;
-       // Implementation follows interface contract
+1. **Create Simple Mapper**
+   - Implement IDocumentMapper interface
+   - Define DocumentType property
+   - Map API response to domain model
    }
    ```
 
-2. **Register in Configuration**
-   ```yaml
-   - type: Form1040
-     enabled: true
-     className: Form1040Processor
+2. **Register in DI**
+   ```csharp
+   services.AddSingleton<IDocumentMapper, Form1040Mapper>();
    ```
 
-3. **Deploy**
-   - Add to Blazor WASM project
-   - Plugin loads automatically
-   - No server deployment needed (P2P)
+3. **Update Configuration**
+   ```json
+   "SupportedDocumentTypes": [
+       "Receipt", "W4", "Check", "Form1040"
+   ]
+   ```
 
 ### Key Success Factors
-- **Plugin Architecture**: Enables rapid addition of new document types
+- **Simplicity**: No complex plugin system needed - just simple mappers
 - **Consistent Pipeline**: All documents flow through same processing stages
 - **Automatic Discovery**: New processors are discovered and registered automatically
 - **Configuration-Driven**: Enable/disable processors via configuration
@@ -3484,16 +2496,16 @@ When adding a new document type (e.g., Form 1040):
 - **Mobile-optimized polling**: Prevents device sleep
 - **Background job processing**: Reliable OCR completion
 
-### P2P Security Model
+### Security Model
 - **Device-local processing**: Documents captured and processed on same device (no network attack surface)
 - **Browser sandbox**: Blazor WASM provides inherent plugin isolation
 - **ECDSA P-256 signatures**: Cryptographic integrity for all documents (simulating Ed25519 API)
 - **Immutable CAS**: Content-addressable storage prevents tampering
-- **P2P synchronization**: Signed items enable secure cross-device sync
+- **Data integrity**: Signed items ensure authenticity
 - **No external threats**: Same-device model eliminates traditional security concerns
 
 ### Future Considerations (YAGNI Applied)
-- **Cross-device sync**: P2P synchronization when protocol is designed
+- **Future expansion**: Multi-device support when needed
 - **Additional document types**: New plugins added as business needs arise
 - **CAS-based processing**: Replace in-memory queue with CAS entries (no ordering required)
 - **Homomorphic encryption**: For processing encrypted documents
@@ -3502,6 +2514,6 @@ When adding a new document type (e.g., Form 1040):
 
 *Document Version: 4.0*  
 *Last Updated: 2025-08-15*  
-*Architecture Type: Peer-to-Peer (P2P) Client-Side Processing*  
-*Major Update: Refocused on P2P architecture, simplified for Blazor WASM, applied KISS/YAGNI principles*  
+*Architecture Type: Client-Side Processing with Blazor WebAssembly*  
+*Major Update: Simplified architecture for Blazor WASM, applied KISS/YAGNI principles*  
 *Previous Update (v3.0): Added Pluggable Document Processor Architecture*
