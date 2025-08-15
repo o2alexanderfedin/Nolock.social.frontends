@@ -1,8 +1,8 @@
-# Document Scanner and OCR Feature Architecture
+# Document Scanner and OCR Feature Architecture with Pluggable Processor System
 
 ## Executive Summary
 
-This document outlines the architecture for implementing a document scanning and OCR (Optical Character Recognition) feature in the NoLock.Social platform. The feature enables users to capture documents using their device cameras and extract text/data through an external OCR service. The implementation follows a component-based architecture using Blazor WebAssembly with a focus on responsiveness, reusability, and maintainability.
+This document outlines the architecture for implementing a pluggable document scanning and OCR (Optical Character Recognition) system in the NoLock.Social platform. The architecture features a plugin-based design that enables seamless addition of new document types (receipts, checks, W4, W2, 1099, and future tax forms) without modifying the core system. Each document type is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic for validation, parsing, and data extraction. The implementation follows SOLID principles and clean architecture patterns to ensure extensibility, maintainability, and scalability.
 
 ## Table of Contents
 
@@ -1161,6 +1161,785 @@ public class CASStorage : ICASStorage
         }
         
         return await _blockStore.RetrieveBlocksAsync(hash);
+    }
+}
+```
+
+## Pluggable Document Processor Architecture
+
+### Overview
+
+The pluggable document processor architecture enables seamless addition of new document types without modifying the core OCR scanning system. Each document type (receipt, check, W4, W2, 1099, etc.) is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic for parsing, validation, and data extraction.
+
+### Architecture Principles
+
+1. **Open/Closed Principle**: System is open for extension (new document types) but closed for modification (core pipeline remains unchanged)
+2. **Single Responsibility**: Each document processor handles exactly one document type
+3. **Dependency Inversion**: Core system depends on abstractions (interfaces), not concrete implementations
+4. **Plugin Discovery**: Automatic registration of new document processors via reflection or configuration
+5. **Pipeline Consistency**: All documents flow through the same processing stages
+
+### High-Level Plugin Architecture
+
+```mermaid
+graph TB
+    subgraph "API Layer"
+        API[API Gateway]
+        R1[/receipts endpoint]
+        R2[/checks endpoint]
+        R3[/w4 endpoint]
+        R4[/w2 endpoint]
+        R5[/1099 endpoint]
+    end
+    
+    subgraph "Routing Layer"
+        ROUTER[Document Router]
+        REGISTRY[Processor Registry]
+    end
+    
+    subgraph "Core Pipeline"
+        PIPELINE[Processing Pipeline]
+        PRE[Preprocessing Stage]
+        OCR[OCR Stage]
+        POST[Postprocessing Stage]
+        VAL[Validation Stage]
+        TRANS[Transform Stage]
+    end
+    
+    subgraph "Plugin Layer"
+        P1[Receipt Processor]
+        P2[Check Processor]
+        P3[W4 Processor]
+        P4[W2 Processor]
+        P5[1099 Processor]
+        PNEW[... Future Processors]
+    end
+    
+    subgraph "Storage"
+        CAS[Content-Addressable Storage]
+        META[Metadata Store]
+    end
+    
+    R1 --> API
+    R2 --> API
+    R3 --> API
+    R4 --> API
+    R5 --> API
+    
+    API --> ROUTER
+    ROUTER --> REGISTRY
+    REGISTRY --> PIPELINE
+    
+    PIPELINE --> PRE
+    PRE --> OCR
+    OCR --> POST
+    POST --> VAL
+    VAL --> TRANS
+    
+    P1 -.->|implements| PIPELINE
+    P2 -.->|implements| PIPELINE
+    P3 -.->|implements| PIPELINE
+    P4 -.->|implements| PIPELINE
+    P5 -.->|implements| PIPELINE
+    PNEW -.->|implements| PIPELINE
+    
+    TRANS --> CAS
+    TRANS --> META
+    
+    style PIPELINE fill:#f9f,stroke:#333,stroke-width:2px
+    style REGISTRY fill:#9ff,stroke:#333,stroke-width:2px
+    style PNEW stroke-dasharray: 5 5
+```
+
+### Core Interfaces
+
+#### IDocumentProcessor Interface
+
+```csharp
+public interface IDocumentProcessor
+{
+    // Metadata
+    DocumentType DocumentType { get; }
+    string ProcessorVersion { get; }
+    string[] SupportedFormats { get; }
+    
+    // Validation
+    Task<ValidationResult> ValidateImageAsync(byte[] imageData);
+    Task<ValidationResult> ValidateOcrResultAsync(OcrRawResult ocrResult);
+    
+    // Processing
+    Task<PreprocessingResult> PreprocessAsync(byte[] imageData, ProcessingContext context);
+    Task<ExtractionResult> ExtractDataAsync(OcrRawResult ocrResult, ProcessingContext context);
+    Task<TransformationResult> TransformAsync(ExtractionResult extracted, ProcessingContext context);
+    
+    // Configuration
+    ProcessorConfiguration GetConfiguration();
+    Task<bool> CanProcessAsync(DocumentMetadata metadata);
+}
+
+public interface IDocumentProcessorPlugin : IDocumentProcessor
+{
+    // Plugin lifecycle
+    Task InitializeAsync(IServiceProvider services);
+    Task<HealthCheckResult> HealthCheckAsync();
+    void Dispose();
+    
+    // Plugin metadata
+    PluginMetadata GetMetadata();
+}
+```
+
+#### Processing Context
+
+```csharp
+public class ProcessingContext
+{
+    public Guid DocumentId { get; set; }
+    public DocumentType DocumentType { get; set; }
+    public ProcessingOptions Options { get; set; }
+    public Dictionary<string, object> CustomData { get; set; }
+    public ILogger Logger { get; set; }
+    public CancellationToken CancellationToken { get; set; }
+}
+
+public class ProcessingOptions
+{
+    public bool EnhanceImage { get; set; }
+    public bool AutoRotate { get; set; }
+    public string Language { get; set; } = "en";
+    public OcrEngine PreferredEngine { get; set; }
+    public ValidationLevel ValidationLevel { get; set; }
+    public Dictionary<string, string> ProcessorSpecificOptions { get; set; }
+}
+```
+
+### Document Processor Registry
+
+```csharp
+public interface IDocumentProcessorRegistry
+{
+    Task RegisterProcessorAsync(IDocumentProcessorPlugin processor);
+    Task UnregisterProcessorAsync(DocumentType type);
+    IDocumentProcessor GetProcessor(DocumentType type);
+    IEnumerable<IDocumentProcessor> GetAllProcessors();
+    bool IsTypeSupported(DocumentType type);
+    Task<IDocumentProcessor> DiscoverAndLoadAsync(string assemblyPath);
+}
+
+public class DocumentProcessorRegistry : IDocumentProcessorRegistry
+{
+    private readonly ConcurrentDictionary<DocumentType, IDocumentProcessorPlugin> _processors;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<DocumentProcessorRegistry> _logger;
+    
+    public async Task RegisterProcessorAsync(IDocumentProcessorPlugin processor)
+    {
+        var metadata = processor.GetMetadata();
+        _logger.LogInformation("Registering processor: {Name} v{Version} for {Type}", 
+            metadata.Name, metadata.Version, processor.DocumentType);
+        
+        // Initialize the processor
+        await processor.InitializeAsync(_serviceProvider);
+        
+        // Verify health
+        var health = await processor.HealthCheckAsync();
+        if (health.Status != HealthStatus.Healthy)
+        {
+            throw new ProcessorRegistrationException(
+                $"Processor {metadata.Name} failed health check: {health.Message}");
+        }
+        
+        // Register
+        _processors[processor.DocumentType] = processor;
+        
+        // Emit registration event
+        await _eventBus.PublishAsync(new ProcessorRegisteredEvent
+        {
+            DocumentType = processor.DocumentType,
+            ProcessorName = metadata.Name,
+            Version = metadata.Version
+        });
+    }
+    
+    public IDocumentProcessor GetProcessor(DocumentType type)
+    {
+        if (_processors.TryGetValue(type, out var processor))
+        {
+            return processor;
+        }
+        
+        throw new ProcessorNotFoundException($"No processor registered for type: {type}");
+    }
+}
+```
+
+### Processing Pipeline
+
+```csharp
+public interface IDocumentProcessingPipeline
+{
+    Task<ProcessingResult> ProcessAsync(
+        byte[] imageData, 
+        DocumentType documentType,
+        ProcessingContext context);
+}
+
+public class DocumentProcessingPipeline : IDocumentProcessingPipeline
+{
+    private readonly IDocumentProcessorRegistry _registry;
+    private readonly IOcrService _ocrService;
+    private readonly ICASStorage _casStorage;
+    private readonly IDocumentSigner _signer;
+    private readonly IMetricsCollector _metrics;
+    
+    public async Task<ProcessingResult> ProcessAsync(
+        byte[] imageData, 
+        DocumentType documentType,
+        ProcessingContext context)
+    {
+        using var activity = Activity.StartActivity("DocumentProcessing");
+        activity?.SetTag("document.type", documentType.ToString());
+        
+        // Get appropriate processor
+        var processor = _registry.GetProcessor(documentType);
+        
+        // Stage 1: Validation
+        var validationResult = await processor.ValidateImageAsync(imageData);
+        if (!validationResult.IsValid)
+        {
+            return ProcessingResult.ValidationFailed(validationResult.Errors);
+        }
+        
+        // Stage 2: Preprocessing
+        var preprocessResult = await processor.PreprocessAsync(imageData, context);
+        
+        // Stage 3: OCR Processing
+        var ocrResult = await _ocrService.ProcessAsync(
+            preprocessResult.ProcessedImage,
+            new OcrOptions
+            {
+                Language = context.Options.Language,
+                Engine = context.Options.PreferredEngine
+            });
+        
+        // Stage 4: OCR Validation
+        var ocrValidation = await processor.ValidateOcrResultAsync(ocrResult);
+        if (!ocrValidation.IsValid)
+        {
+            return ProcessingResult.OcrValidationFailed(ocrValidation.Errors);
+        }
+        
+        // Stage 5: Data Extraction
+        var extractionResult = await processor.ExtractDataAsync(ocrResult, context);
+        
+        // Stage 6: Transformation
+        var transformResult = await processor.TransformAsync(extractionResult, context);
+        
+        // Stage 7: Storage
+        var storageResult = await StoreResultsAsync(
+            imageData, 
+            preprocessResult,
+            ocrResult, 
+            transformResult,
+            processor.DocumentType);
+        
+        // Record metrics
+        await _metrics.RecordProcessingAsync(new ProcessingMetrics
+        {
+            DocumentType = documentType,
+            ProcessorVersion = processor.ProcessorVersion,
+            ProcessingTime = activity?.Duration ?? TimeSpan.Zero,
+            Success = true
+        });
+        
+        return ProcessingResult.Success(storageResult);
+    }
+}
+```
+
+### Example Document Processor Implementations
+
+#### Receipt Processor Plugin
+
+```csharp
+public class ReceiptProcessor : IDocumentProcessorPlugin
+{
+    public DocumentType DocumentType => DocumentType.Receipt;
+    public string ProcessorVersion => "1.0.0";
+    public string[] SupportedFormats => new[] { "image/jpeg", "image/png", "application/pdf" };
+    
+    private IReceiptParser _parser;
+    private IReceiptValidator _validator;
+    private ITaxCalculator _taxCalculator;
+    
+    public async Task<ValidationResult> ValidateImageAsync(byte[] imageData)
+    {
+        var errors = new List<string>();
+        
+        // Check image size
+        if (imageData.Length > 10_000_000) // 10MB
+            errors.Add("Image size exceeds 10MB limit");
+        
+        // Check image format
+        var format = ImageFormatDetector.Detect(imageData);
+        if (!SupportedFormats.Contains(format))
+            errors.Add($"Unsupported format: {format}");
+        
+        // Check image quality
+        var quality = await ImageQualityAnalyzer.AnalyzeAsync(imageData);
+        if (quality.Score < 0.5)
+            errors.Add("Image quality too low for reliable OCR");
+        
+        return new ValidationResult
+        {
+            IsValid = errors.Count == 0,
+            Errors = errors
+        };
+    }
+    
+    public async Task<ExtractionResult> ExtractDataAsync(
+        OcrRawResult ocrResult, 
+        ProcessingContext context)
+    {
+        var receipt = new ReceiptData();
+        
+        // Extract merchant information
+        receipt.MerchantName = await _parser.ExtractMerchantAsync(ocrResult.Text);
+        receipt.MerchantAddress = await _parser.ExtractAddressAsync(ocrResult.Text);
+        receipt.MerchantPhone = await _parser.ExtractPhoneAsync(ocrResult.Text);
+        
+        // Extract line items
+        receipt.LineItems = await _parser.ExtractLineItemsAsync(ocrResult.Lines);
+        
+        // Extract totals
+        receipt.Subtotal = await _parser.ExtractAmountAsync(ocrResult.Text, "subtotal");
+        receipt.Tax = await _parser.ExtractAmountAsync(ocrResult.Text, "tax");
+        receipt.Total = await _parser.ExtractAmountAsync(ocrResult.Text, "total");
+        
+        // Extract date/time
+        receipt.TransactionDate = await _parser.ExtractDateAsync(ocrResult.Text);
+        
+        // Validate extracted data
+        var validation = await _validator.ValidateReceiptAsync(receipt);
+        
+        return new ExtractionResult
+        {
+            Data = receipt,
+            Confidence = CalculateConfidence(receipt, ocrResult),
+            ValidationResult = validation
+        };
+    }
+    
+    public PluginMetadata GetMetadata()
+    {
+        return new PluginMetadata
+        {
+            Name = "Receipt Processor",
+            Description = "Processes retail receipts and extracts transaction data",
+            Author = "NoLock Team",
+            Version = ProcessorVersion,
+            MinimumSystemVersion = "1.0.0",
+            Dependencies = new[] { "TaxCalculator", "CurrencyConverter" }
+        };
+    }
+}
+```
+
+#### W4 Tax Form Processor Plugin
+
+```csharp
+public class W4Processor : IDocumentProcessorPlugin
+{
+    public DocumentType DocumentType => DocumentType.W4;
+    public string ProcessorVersion => "1.0.0";
+    
+    private IIrsFormValidator _irsValidator;
+    private ITaxFormParser _formParser;
+    
+    public async Task<ValidationResult> ValidateOcrResultAsync(OcrRawResult ocrResult)
+    {
+        var errors = new List<string>();
+        
+        // Verify form number
+        if (!ocrResult.Text.Contains("Form W-4", StringComparison.OrdinalIgnoreCase))
+            errors.Add("Document does not appear to be a W-4 form");
+        
+        // Check for required fields
+        var requiredFields = new[] 
+        { 
+            "First name", 
+            "Last name", 
+            "Social Security Number",
+            "Filing Status"
+        };
+        
+        foreach (var field in requiredFields)
+        {
+            if (!ContainsField(ocrResult, field))
+                errors.Add($"Required field missing: {field}");
+        }
+        
+        // Verify form year
+        var year = ExtractFormYear(ocrResult.Text);
+        if (year < DateTime.Now.Year - 1)
+            errors.Add($"Form year {year} is outdated");
+        
+        return new ValidationResult
+        {
+            IsValid = errors.Count == 0,
+            Errors = errors
+        };
+    }
+    
+    public async Task<ExtractionResult> ExtractDataAsync(
+        OcrRawResult ocrResult, 
+        ProcessingContext context)
+    {
+        var w4Data = new W4FormData();
+        
+        // Extract employee information
+        w4Data.FirstName = await _formParser.ExtractFieldAsync(ocrResult, "First name");
+        w4Data.LastName = await _formParser.ExtractFieldAsync(ocrResult, "Last name");
+        w4Data.SSN = await _formParser.ExtractSSNAsync(ocrResult);
+        w4Data.Address = await _formParser.ExtractAddressBlockAsync(ocrResult);
+        
+        // Extract filing status
+        w4Data.FilingStatus = await _formParser.ExtractCheckboxAsync(ocrResult, 
+            new[] { "Single", "Married filing jointly", "Head of household" });
+        
+        // Extract withholding information
+        w4Data.MultipleJobs = await _formParser.ExtractCheckboxAsync(ocrResult, "Multiple jobs");
+        w4Data.DependentsAmount = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 3");
+        w4Data.OtherIncome = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(a)");
+        w4Data.Deductions = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(b)");
+        w4Data.ExtraWithholding = await _formParser.ExtractCurrencyAsync(ocrResult, "Step 4(c)");
+        
+        // Extract signature
+        w4Data.HasSignature = await _formParser.DetectSignatureAsync(ocrResult);
+        w4Data.SignatureDate = await _formParser.ExtractDateAsync(ocrResult, "Date");
+        
+        // Validate with IRS rules
+        var validation = await _irsValidator.ValidateW4Async(w4Data);
+        
+        return new ExtractionResult
+        {
+            Data = w4Data,
+            Confidence = CalculateFormConfidence(w4Data, ocrResult),
+            ValidationResult = validation
+        };
+    }
+}
+```
+
+### Plugin Configuration
+
+```yaml
+# document-processors.yaml
+processors:
+  - type: Receipt
+    enabled: true
+    assembly: NoLock.Processors.Receipt.dll
+    className: NoLock.Processors.Receipt.ReceiptProcessor
+    configuration:
+      maxImageSize: 10485760  # 10MB
+      minQualityScore: 0.5
+      supportedCurrencies: ["USD", "EUR", "GBP"]
+      
+  - type: Check
+    enabled: true
+    assembly: NoLock.Processors.Banking.dll
+    className: NoLock.Processors.Banking.CheckProcessor
+    configuration:
+      micr:
+        enabled: true
+        validateChecksum: true
+      routing:
+        validateWithABA: true
+        
+  - type: W4
+    enabled: true
+    assembly: NoLock.Processors.TaxForms.dll
+    className: NoLock.Processors.TaxForms.W4Processor
+    configuration:
+      formYear: 2024
+      validateSSN: true
+      requireSignature: true
+      
+  - type: W2
+    enabled: false  # Coming soon
+    assembly: NoLock.Processors.TaxForms.dll
+    className: NoLock.Processors.TaxForms.W2Processor
+    
+  - type: Form1099
+    enabled: false  # Coming soon
+    assembly: NoLock.Processors.TaxForms.dll
+    className: NoLock.Processors.TaxForms.Form1099Processor
+```
+
+### Plugin Loading and Discovery
+
+```csharp
+public class PluginLoader
+{
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<PluginLoader> _logger;
+    private readonly IServiceProvider _serviceProvider;
+    
+    public async Task<IEnumerable<IDocumentProcessorPlugin>> LoadPluginsAsync()
+    {
+        var plugins = new List<IDocumentProcessorPlugin>();
+        var config = _configuration.GetSection("processors").Get<ProcessorConfig[]>();
+        
+        foreach (var processorConfig in config.Where(c => c.Enabled))
+        {
+            try
+            {
+                var plugin = await LoadPluginAsync(processorConfig);
+                plugins.Add(plugin);
+                _logger.LogInformation("Loaded plugin: {Type} from {Assembly}", 
+                    processorConfig.Type, processorConfig.Assembly);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load plugin: {Type}", processorConfig.Type);
+            }
+        }
+        
+        return plugins;
+    }
+    
+    private async Task<IDocumentProcessorPlugin> LoadPluginAsync(ProcessorConfig config)
+    {
+        // Load assembly
+        var assemblyPath = Path.Combine(AppContext.BaseDirectory, "plugins", config.Assembly);
+        var assembly = Assembly.LoadFrom(assemblyPath);
+        
+        // Find and instantiate processor type
+        var processorType = assembly.GetType(config.ClassName);
+        if (processorType == null)
+        {
+            throw new TypeLoadException($"Type {config.ClassName} not found in {config.Assembly}");
+        }
+        
+        // Create instance with dependency injection
+        var processor = (IDocumentProcessorPlugin)ActivatorUtilities.CreateInstance(
+            _serviceProvider, processorType);
+        
+        // Apply configuration
+        if (config.Configuration != null)
+        {
+            await processor.ConfigureAsync(config.Configuration);
+        }
+        
+        return processor;
+    }
+}
+```
+
+### Dynamic Endpoint Registration
+
+```csharp
+public class DynamicEndpointRegistration
+{
+    public static void RegisterDocumentEndpoints(
+        this IEndpointRouteBuilder endpoints, 
+        IDocumentProcessorRegistry registry)
+    {
+        foreach (var processor in registry.GetAllProcessors())
+        {
+            var documentType = processor.DocumentType;
+            var routePath = $"/api/ocr/{documentType.ToString().ToLower()}";
+            
+            endpoints.MapPost(routePath, async (
+                HttpRequest request,
+                IDocumentProcessingPipeline pipeline,
+                ILogger<Program> logger) =>
+            {
+                try
+                {
+                    // Read image from request
+                    using var ms = new MemoryStream();
+                    await request.Body.CopyToAsync(ms);
+                    var imageData = ms.ToArray();
+                    
+                    // Create processing context
+                    var context = new ProcessingContext
+                    {
+                        DocumentId = Guid.NewGuid(),
+                        DocumentType = documentType,
+                        Options = GetOptionsFromHeaders(request.Headers),
+                        Logger = logger,
+                        CancellationToken = request.HttpContext.RequestAborted
+                    };
+                    
+                    // Process document
+                    var result = await pipeline.ProcessAsync(imageData, documentType, context);
+                    
+                    return result.Success 
+                        ? Results.Ok(result.Data)
+                        : Results.BadRequest(result.Errors);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error processing {DocumentType}", documentType);
+                    return Results.Problem("An error occurred processing the document");
+                }
+            })
+            .WithName($"Process{documentType}")
+            .WithOpenApi(operation =>
+            {
+                operation.Summary = $"Process {documentType} document";
+                operation.Description = $"Submits a {documentType} for OCR processing";
+                return operation;
+            })
+            .RequireAuthorization()
+            .DisableAntiforgery();
+        }
+    }
+}
+```
+
+### Error Handling and Validation Rules
+
+```csharp
+public abstract class BaseDocumentProcessor : IDocumentProcessorPlugin
+{
+    protected readonly ILogger _logger;
+    protected readonly IValidationRuleEngine _validationEngine;
+    
+    public async Task<ValidationResult> ValidateWithRulesAsync<T>(T data)
+    {
+        var rules = GetValidationRules();
+        var results = new List<ValidationError>();
+        
+        foreach (var rule in rules)
+        {
+            var result = await rule.ValidateAsync(data);
+            if (!result.IsValid)
+            {
+                results.AddRange(result.Errors);
+            }
+        }
+        
+        return new ValidationResult
+        {
+            IsValid = results.Count == 0,
+            Errors = results.Select(e => e.Message).ToList()
+        };
+    }
+    
+    protected abstract IEnumerable<IValidationRule> GetValidationRules();
+}
+
+public interface IValidationRule
+{
+    string RuleName { get; }
+    ValidationLevel Level { get; }
+    Task<ValidationResult> ValidateAsync(object data);
+}
+
+public class RequiredFieldRule : IValidationRule
+{
+    public string RuleName => "RequiredField";
+    public ValidationLevel Level => ValidationLevel.Error;
+    
+    private readonly string _fieldName;
+    private readonly Func<object, string> _fieldExtractor;
+    
+    public async Task<ValidationResult> ValidateAsync(object data)
+    {
+        var value = _fieldExtractor(data);
+        
+        return string.IsNullOrWhiteSpace(value)
+            ? ValidationResult.Failed($"Required field '{_fieldName}' is missing")
+            : ValidationResult.Success();
+    }
+}
+```
+
+### Performance Optimization with Processor Caching
+
+```csharp
+public class CachedProcessorRegistry : IDocumentProcessorRegistry
+{
+    private readonly IDocumentProcessorRegistry _innerRegistry;
+    private readonly IMemoryCache _cache;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
+    
+    public IDocumentProcessor GetProcessor(DocumentType type)
+    {
+        return _cache.GetOrCreate($"processor_{type}", entry =>
+        {
+            entry.SlidingExpiration = TimeSpan.FromHours(1);
+            entry.RegisterPostEvictionCallback((key, value, reason, state) =>
+            {
+                if (value is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            });
+            
+            return _innerRegistry.GetProcessor(type);
+        });
+    }
+    
+    public async Task WarmupProcessorsAsync(IEnumerable<DocumentType> types)
+    {
+        var tasks = types.Select(async type =>
+        {
+            await _loadLock.WaitAsync();
+            try
+            {
+                var processor = GetProcessor(type);
+                if (processor is IDocumentProcessorPlugin plugin)
+                {
+                    await plugin.HealthCheckAsync();
+                }
+            }
+            finally
+            {
+                _loadLock.Release();
+            }
+        });
+        
+        await Task.WhenAll(tasks);
+    }
+}
+```
+
+### Monitoring and Metrics
+
+```csharp
+public class ProcessorMetricsCollector
+{
+    private readonly IMetrics _metrics;
+    
+    public void RecordProcessing(DocumentType type, TimeSpan duration, bool success)
+    {
+        _metrics.Measure.Counter.Increment(
+            new CounterOptions 
+            { 
+                Name = "document_processing_total",
+                Tags = new MetricTags("type", type.ToString(), "success", success.ToString())
+            });
+        
+        _metrics.Measure.Histogram.Update(
+            new HistogramOptions
+            {
+                Name = "document_processing_duration_seconds",
+                Tags = new MetricTags("type", type.ToString())
+            },
+            (long)duration.TotalMilliseconds);
+    }
+    
+    public void RecordValidationFailure(DocumentType type, string reason)
+    {
+        _metrics.Measure.Counter.Increment(
+            new CounterOptions
+            {
+                Name = "document_validation_failures_total",
+                Tags = new MetricTags("type", type.ToString(), "reason", reason)
+            });
     }
 }
 ```
@@ -2384,40 +3163,108 @@ This architecture provides a robust, cryptographically secure, and scalable solu
 
 ### Key Architectural Decisions
 
-1. **Cryptographic Document Structure**: Ed25519 signed documents ensure integrity and authenticity, with progressive enhancement allowing immediate image access while OCR processing continues asynchronously.
+1. **Pluggable Document Processor Architecture**: The plugin-based design enables seamless addition of new document types without modifying the core system. Each processor implements a common interface while providing document-specific logic for validation, parsing, and extraction.
 
-2. **Content-Addressable Storage**: CAS provides deduplication, efficient storage, and immutable content references, essential for maintaining document integrity.
+2. **Cryptographic Document Structure**: Ed25519 signed documents ensure integrity and authenticity, with progressive enhancement allowing immediate image access while OCR processing continues asynchronously.
 
-3. **Adaptive Polling Strategy**: Sophisticated polling with exponential backoff prevents mobile devices from sleeping while efficiently managing the 1-2 minute OCR processing window.
+3. **Content-Addressable Storage**: CAS provides deduplication, efficient storage, and immutable content references, essential for maintaining document integrity.
 
-4. **Gallery-First UI**: Removal of image editing tools in favor of a browsable gallery provides better user experience for reviewing multiple documents and their OCR results.
+4. **Adaptive Polling Strategy**: Sophisticated polling with exponential backoff prevents mobile devices from sleeping while efficiently managing the 1-2 minute OCR processing window.
+
+5. **Gallery-First UI**: Removal of image editing tools in favor of a browsable gallery provides better user experience for reviewing multiple documents and their OCR results.
+
+### Benefits of the Pluggable Architecture
+
+#### Extensibility
+- **Zero Core Modification**: New document types can be added without changing the core processing pipeline
+- **Plugin Isolation**: Each processor is independent, preventing changes to one from affecting others
+- **Dynamic Registration**: Processors can be loaded at runtime from configuration or discovered via reflection
+- **Hot Reload Capability**: Plugins can be updated without system downtime
+
+#### Maintainability
+- **Single Responsibility**: Each processor handles exactly one document type
+- **Clear Interfaces**: Well-defined contracts between processors and the core system
+- **Testability**: Each processor can be tested in isolation
+- **Version Management**: Different processor versions can coexist for backward compatibility
+
+#### Scalability
+- **Parallel Processing**: Different document types can be processed concurrently
+- **Resource Optimization**: Load only the processors that are needed
+- **Performance Tuning**: Each processor can be optimized independently
+- **Caching Strategy**: Processor-specific caching rules based on document characteristics
+
+#### Business Agility
+- **Rapid Feature Delivery**: New document types can be added quickly
+- **A/B Testing**: Multiple processor versions can run simultaneously for comparison
+- **Customer-Specific Processors**: Custom processors for specific client needs
+- **Gradual Rollout**: New processors can be enabled selectively
+
+### Implementation Strategy for New Document Types
+
+When adding a new document type (e.g., Form 1040):
+
+1. **Create Processor Plugin**
+   - Implement `IDocumentProcessorPlugin` interface
+   - Define validation rules specific to the document
+   - Implement extraction logic for form fields
+   - Add document-specific transformations
+
+2. **Register in Configuration**
+   ```yaml
+   - type: Form1040
+     enabled: true
+     assembly: NoLock.Processors.TaxForms.dll
+     className: NoLock.Processors.TaxForms.Form1040Processor
+   ```
+
+3. **Deploy Plugin**
+   - Drop assembly into plugins folder
+   - Update configuration
+   - Restart application or trigger hot reload
+
+4. **Automatic Endpoint Creation**
+   - System automatically creates `/api/ocr/form1040` endpoint
+   - OpenAPI documentation generated automatically
+   - Metrics and monitoring enabled by default
 
 ### Key Success Factors
-- Cryptographically signed documents with Ed25519 for integrity verification
-- Asynchronous processing architecture handling 2-minute delays gracefully
-- CAS integration for efficient, deduplicated storage
-- Progressive enhancement allowing immediate image access
-- Mobile-optimized polling preventing device sleep
-- Background job processing for reliable OCR completion
+- **Plugin Architecture**: Enables rapid addition of new document types
+- **Consistent Pipeline**: All documents flow through same processing stages
+- **Automatic Discovery**: New processors are discovered and registered automatically
+- **Configuration-Driven**: Enable/disable processors via configuration
+- **Cryptographically signed documents**: Ed25519 for integrity verification
+- **Asynchronous processing**: Handles 2-minute delays gracefully
+- **CAS integration**: Efficient, deduplicated storage
+- **Progressive enhancement**: Immediate image access while OCR processes
+- **Mobile-optimized polling**: Prevents device sleep
+- **Background job processing**: Reliable OCR completion
 
 ### Security Considerations
-- Ed25519 signatures prevent document tampering
-- SHA-256 hashing for content addressing
-- Secure key storage and management
-- Signature verification on document retrieval
-- Immutable content storage in CAS
+- **Plugin Sandboxing**: Processors run in isolated contexts
+- **Validation at Every Stage**: Multi-layer validation ensures data integrity
+- **Ed25519 signatures**: Prevent document tampering
+- **SHA-256 hashing**: Content addressing
+- **Secure key storage**: Protected key management
+- **Signature verification**: On document retrieval
+- **Immutable content storage**: In CAS
 
 ### Future Enhancements
-- Distributed CAS replication for redundancy
-- Blockchain anchoring for timestamping
-- Multi-signature support for document approval workflows
-- IPFS integration for decentralized storage
-- Zero-knowledge proofs for privacy-preserving verification
-- Homomorphic encryption for processing encrypted documents
+- **Machine Learning Integration**: Processors can leverage ML models for better extraction
+- **Template Learning**: Automatic template generation from sample documents
+- **Multi-Language Support**: Processors for documents in different languages
+- **Composite Documents**: Processors that handle multi-page, multi-type documents
+- **Workflow Integration**: Processors that trigger business workflows
+- **Distributed CAS replication**: For redundancy
+- **Blockchain anchoring**: For timestamping
+- **Multi-signature support**: For document approval workflows
+- **IPFS integration**: For decentralized storage
+- **Zero-knowledge proofs**: For privacy-preserving verification
+- **Homomorphic encryption**: For processing encrypted documents
 
 ---
 
-*Document Version: 2.0*  
+*Document Version: 3.0*  
 *Last Updated: 2025-01-14*  
 *Author: System Architecture Team*  
-*Major Update: Added Cryptographic Document Architecture, Async OCR Processing, and CAS Integration*
+*Major Update: Added Pluggable Document Processor Architecture for extensible document type support*  
+*Previous Update (v2.0): Added Cryptographic Document Architecture, Async OCR Processing, and CAS Integration*
