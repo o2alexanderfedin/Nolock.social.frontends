@@ -1,8 +1,8 @@
-# Document Scanner and OCR Feature Architecture with Pluggable Processor System
+# Document Scanner and OCR Feature Architecture - P2P Pluggable Processor System
 
 ## Executive Summary
 
-This document outlines the architecture for implementing a pluggable document scanning and OCR (Optical Character Recognition) system in the NoLock.Social platform. The architecture features a plugin-based design that enables seamless addition of new document types (receipts, checks, W4, W2, 1099, and future tax forms) without modifying the core system. Each document type is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic for validation, parsing, and data extraction. The implementation follows SOLID principles and clean architecture patterns to ensure extensibility, maintainability, and scalability.
+This document outlines the architecture for a **peer-to-peer (P2P) document scanning and OCR system** in the NoLock.Social platform. The architecture implements a **client-side, device-local processing model** where documents are captured and processed on the same device, eliminating traditional server-side security concerns. The plugin-based design enables seamless addition of new document types (receipts, checks, W4, W2, 1099, and future tax forms) without modifying the core system. Each document type is handled by a dedicated processor plugin that implements a common interface while providing document-specific logic. The implementation follows SOLID principles with a focus on simplicity (KISS) and avoiding premature optimization (YAGNI).
 
 ## Table of Contents
 
@@ -22,26 +22,24 @@ This document outlines the architecture for implementing a pluggable document sc
 ## Overview
 
 ### Business Requirements
-- Capture documents using device cameras (mobile and desktop)
-- Support multiple document types (receipts, checks, general documents)
-- Process captured images through OCR service with async polling (1-2 minute delays)
+- Capture documents using device cameras (same-device capture and processing)
+- Support multiple document types via plugins (receipts, checks, tax forms)
+- Process captured images through OCR service (1-2 minute processing time)
 - Display extracted data in a user-friendly format
-- Support offline capture with deferred processing
-- Ensure cross-device compatibility
-- Store documents in Content-Addressable Storage (CAS)
+- Store documents in immutable Content-Addressable Storage (CAS)
+- Enable P2P synchronization across user's devices
 - Provide browsable gallery for stored documents and OCR results
 
 ### Technical Requirements
-- Integration with external OCR service at `https://nolock-ocr-services-qbhx5.ondigitalocean.app`
-- Asynchronous OCR processing with polling mechanism (up to 2 minutes)
-- Cryptographically signed document structures
-- Content-Addressable Storage (CAS) integration
+- Integration with Mistral OCR API (non-streaming, complete document submission)
+- Simple exponential backoff polling (5s, 10s, 15s, 30s intervals)
+- Ed25519 cryptographic signatures for document integrity
+- Immutable Content-Addressable Storage (CAS) with signed entries
 - Camera access via browser MediaDevices API
-- Responsive design for mobile and desktop
-- Component isolation in separate project (NoLock.Social.DocumentScanner)
-- Auto-generated proxy using NSwag or OpenAPI Generator
-- Error handling and retry logic
-- Background job processing for OCR status polling
+- Blazor WebAssembly client-side execution
+- Plugin loading suitable for WASM environment
+- Circuit breakers for OCR service failures
+- Browser console logging for debugging (no distributed tracing)
 
 ## Architecture Overview
 
@@ -461,7 +459,8 @@ public class AdaptivePollingService : IPollingService
     private readonly ICASStorage _casStorage;
     private readonly ILogger<AdaptivePollingService> _logger;
     
-    // Adaptive polling intervals (milliseconds)
+    // Simple exponential backoff polling (KISS principle)
+    // Works offline, battery-efficient on mobile
     private readonly int[] _pollingIntervals = { 5000, 10000, 15000, 30000 };
     private const int MaxPollingDuration = 120000; // 2 minutes
     
@@ -1721,7 +1720,8 @@ public class PluginLoader
             throw new TypeLoadException($"Type {config.ClassName} not found in {config.Assembly}");
         }
         
-        // Create instance with dependency injection
+        // Create instance with dependency injection - suitable for Blazor WASM
+        // Browser sandbox provides inherent isolation
         var processor = (IDocumentProcessorPlugin)ActivatorUtilities.CreateInstance(
             _serviceProvider, processorType);
         
@@ -3073,103 +3073,113 @@ public class DocumentScannerComponentTests : TestContext
   }
   ```
 
-## Implementation Roadmap
+## CAS-Based State Management (Future Design)
 
-### Phase 1: Foundation & Cryptographic Infrastructure (Week 1)
-- [ ] Create NoLock.Social.DocumentScanner project
-- [ ] Set up project structure and dependencies
-- [ ] Implement Ed25519 document signer service
-- [ ] Create key management service
-- [ ] Design signed document schema
-- [ ] Set up secure key storage
+### Overview
+Instead of traditional queues, the system will evolve to use CAS entries for processing state management. This approach provides natural persistence and P2P synchronization capabilities.
 
-### Phase 2: Content-Addressable Storage (Week 1-2)
-- [ ] Implement CAS storage service
-- [ ] Create hash calculator for SHA-256
-- [ ] Build block store for content chunks
-- [ ] Add content deduplication logic
-- [ ] Implement content indexing
-- [ ] Create CAS metadata management
+### CAS Processing Entry Structure
+```csharp
+public class ProcessingEntry
+{
+    public string DocumentHash { get; set; }     // CAS address of original document
+    public string ProcessorType { get; set; }    // Which plugin to use
+    public ProcessingStatus Status { get; set; } // Pending, InProgress, Complete, Failed
+    public string ResultHash { get; set; }       // CAS address of OCR result (when complete)
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public Ed25519Signature Signature { get; set; }
+}
+```
 
-### Phase 3: Async OCR Processing (Week 2-3)
-- [ ] Generate OCR service proxy using NSwag
-- [ ] Implement adaptive polling service
-- [ ] Create background job processor
-- [ ] Add OCR status tracking
-- [ ] Implement timeout handling (2 minutes)
-- [ ] Build retry logic for failed requests
-- [ ] Handle duplicate submission caching
+### Benefits of CAS-Based Approach
+- **Automatic persistence**: No separate state storage needed
+- **Immutable audit trail**: Every state change creates new entry
+- **P2P synchronization**: Entries can sync across devices
+- **No ordering required**: Set-based processing, not queue-based
+- **Natural recovery**: On refresh, scan CAS for incomplete entries
 
-### Phase 4: Camera Integration (Week 3)
-- [ ] Implement camera service with JavaScript interop
-- [ ] Create camera view component
-- [ ] Add device selection and switching
-- [ ] Implement capture functionality
-- [ ] Add permission handling
-- [ ] Integrate with document signing
+### Recovery After Browser Refresh
+```csharp
+public class CASStateRecovery
+{
+    public async Task<IEnumerable<ProcessingEntry>> RecoverIncompleteJobsAsync()
+    {
+        // Scan CAS for entries with Status != Complete
+        var incompleteEntries = await _casStorage
+            .QueryAsync<ProcessingEntry>(e => e.Status != ProcessingStatus.Complete);
+        
+        // Resume processing for each incomplete entry
+        foreach (var entry in incompleteEntries)
+        {
+            await ResumeProcessingAsync(entry);
+        }
+        
+        return incompleteEntries;
+    }
+}
+```
 
-### Phase 5: Document Gallery & Preview (Week 4)
-- [ ] Create document gallery component
-- [ ] Implement thumbnail generation from CAS
-- [ ] Add virtual scrolling for performance
-- [ ] Build document preview component
-- [ ] Add image viewer with zoom/pan
-- [ ] Create OCR text viewer
-- [ ] Display signature verification status
+## Implementation Focus (KISS/YAGNI Applied)
 
-### Phase 6: Processing Status & Notifications (Week 4-5)
-- [ ] Create processing status component
-- [ ] Implement polling progress indicators
-- [ ] Add retry controls for failures
-- [ ] Build notification system
-- [ ] Handle mobile sleep prevention
-- [ ] Create timeout warnings
+### Core Components to Implement
 
-### Phase 7: UI/UX Implementation (Week 5)
-- [ ] Implement responsive layouts
-- [ ] Create mobile-optimized gallery
-- [ ] Add desktop layout variations
-- [ ] Remove image edit/crop tools
-- [ ] Update navigation flow
-- [ ] Add search and filter capabilities
+#### 1. Plugin System for Blazor WASM
+- Simple plugin instantiation (browser provides sandboxing)
+- Receipt processor plugin
+- Check processor plugin  
+- Future: W4, W2, 1099 processors as needed
 
-### Phase 8: Integration & Testing (Week 6)
-- [ ] Integrate all components
-- [ ] Test async OCR workflow end-to-end
-- [ ] Verify signature creation and validation
-- [ ] Test CAS storage and retrieval
-- [ ] Validate polling timeout scenarios
-- [ ] Test mobile sleep handling
+#### 2. OCR Integration (Mistral API)
+- Non-streaming API client (Mistral requirement)
+- Simple exponential backoff polling: 5s, 10s, 15s, 30s
+- Circuit breaker for service failures
+- 2-minute timeout handling
 
-### Phase 9: Security & Performance (Week 6-7)
-- [ ] Security audit of crypto implementation
-- [ ] Verify Ed25519 signatures
-- [ ] Test key rotation scenarios
-- [ ] Optimize CAS performance
-- [ ] Implement caching strategies
-- [ ] Profile and optimize polling intervals
+#### 3. Cryptographic Foundation
+- Ed25519 signatures for document integrity
+- SHA-256 for content addressing
+- Immutable CAS storage
+- Signature verification on retrieval
 
-### Phase 10: Documentation and Deployment (Week 7-8)
-- [ ] Document cryptographic architecture
-- [ ] Create CAS operation guides
-- [ ] Write async processing documentation
-- [ ] Set up monitoring for background jobs
-- [ ] Deploy to production environment
-- [ ] Monitor OCR processing metrics
+#### 4. User Interface Components
+- Camera capture via MediaDevices API
+- Document gallery with CAS retrieval
+- OCR result display
+- Processing status indicator
+- Console logging for debugging
+
+### Architectural Simplifications (P2P Benefits)
+
+#### What We DON'T Need
+- **No complex security**: Same-device capture/processing eliminates attack surface
+- **No streaming**: Mistral API doesn't support it
+- **No distributed tracing**: Console.log is sufficient
+- **No WebSockets**: Simple polling works perfectly
+- **No horizontal scaling**: P2P doesn't scale traditionally
+- **No complex monitoring**: Browser console handles debugging
+- **No rate limiting**: OCR service already limits
+- **No plugin sandboxing beyond browser**: WASM provides isolation
+
+#### What We DEFER (Future Considerations)
+- **CAS-based queue**: Will replace in-memory processing later
+- **P2P sync protocol**: Design when multi-device support needed
+- **State versioning**: Add when migration needed
+- **Lazy loading plugins**: Investigate if initial load becomes issue
 
 ## Conclusion
 
-This architecture provides a robust, cryptographically secure, and scalable solution for document scanning with asynchronous OCR processing. The implementation addresses critical challenges including long OCR processing delays, mobile device sleep issues, and the need for immediate image availability while OCR processes in the background.
+This architecture implements a **P2P document scanning system** optimized for client-side processing in Blazor WebAssembly. The design prioritizes simplicity (KISS), avoids premature optimization (YAGNI), and leverages the inherent security of same-device processing.
 
-### Key Architectural Decisions
+### Key Architectural Strengths
 
-1. **Pluggable Document Processor Architecture**: The plugin-based design enables seamless addition of new document types without modifying the core system. Each processor implements a common interface while providing document-specific logic for validation, parsing, and extraction.
+1. **P2P Security Model**: Documents captured and processed on the same device eliminate traditional network attack vectors. The browser sandbox provides natural isolation for plugins.
 
-2. **Cryptographic Document Structure**: Ed25519 signed documents ensure integrity and authenticity, with progressive enhancement allowing immediate image access while OCR processing continues asynchronously.
+2. **Pluggable Processor Design**: Following SOLID's Open/Closed principle, new document types (W4, W2, 1099) can be added without modifying the core system. Each processor has single responsibility for one document type.
 
-3. **Content-Addressable Storage**: CAS provides deduplication, efficient storage, and immutable content references, essential for maintaining document integrity.
+3. **Immutable CAS with Signatures**: Ed25519 signatures combined with content-addressable storage ensure document integrity while enabling future P2P synchronization across user's devices.
 
-4. **Adaptive Polling Strategy**: Sophisticated polling with exponential backoff prevents mobile devices from sleeping while efficiently managing the 1-2 minute OCR processing window.
+4. **Simple Polling Strategy**: Exponential backoff (5s, 10s, 15s, 30s) is optimal for the P2P model - works offline, battery-efficient, and requires no complex infrastructure.
 
 5. **Gallery-First UI**: Removal of image editing tools in favor of a browsable gallery provides better user experience for reviewing multiple documents and their OCR results.
 
@@ -3199,33 +3209,30 @@ This architecture provides a robust, cryptographically secure, and scalable solu
 - **Customer-Specific Processors**: Custom processors for specific client needs
 - **Gradual Rollout**: New processors can be enabled selectively
 
-### Implementation Strategy for New Document Types
+### Adding New Document Types (Simple Process)
 
 When adding a new document type (e.g., Form 1040):
 
 1. **Create Processor Plugin**
-   - Implement `IDocumentProcessorPlugin` interface
-   - Define validation rules specific to the document
-   - Implement extraction logic for form fields
-   - Add document-specific transformations
+   ```csharp
+   public class Form1040Processor : IDocumentProcessorPlugin
+   {
+       public DocumentType DocumentType => DocumentType.Form1040;
+       // Implementation follows interface contract
+   }
+   ```
 
 2. **Register in Configuration**
    ```yaml
    - type: Form1040
      enabled: true
-     assembly: NoLock.Processors.TaxForms.dll
-     className: NoLock.Processors.TaxForms.Form1040Processor
+     className: Form1040Processor
    ```
 
-3. **Deploy Plugin**
-   - Drop assembly into plugins folder
-   - Update configuration
-   - Restart application or trigger hot reload
-
-4. **Automatic Endpoint Creation**
-   - System automatically creates `/api/ocr/form1040` endpoint
-   - OpenAPI documentation generated automatically
-   - Metrics and monitoring enabled by default
+3. **Deploy**
+   - Add to Blazor WASM project
+   - Plugin loads automatically
+   - No server deployment needed (P2P)
 
 ### Key Success Factors
 - **Plugin Architecture**: Enables rapid addition of new document types
@@ -3239,32 +3246,24 @@ When adding a new document type (e.g., Form 1040):
 - **Mobile-optimized polling**: Prevents device sleep
 - **Background job processing**: Reliable OCR completion
 
-### Security Considerations
-- **Plugin Sandboxing**: Processors run in isolated contexts
-- **Validation at Every Stage**: Multi-layer validation ensures data integrity
-- **Ed25519 signatures**: Prevent document tampering
-- **SHA-256 hashing**: Content addressing
-- **Secure key storage**: Protected key management
-- **Signature verification**: On document retrieval
-- **Immutable content storage**: In CAS
+### P2P Security Model
+- **Device-local processing**: Documents captured and processed on same device (no network attack surface)
+- **Browser sandbox**: Blazor WASM provides inherent plugin isolation
+- **Ed25519 signatures**: Cryptographic integrity for all documents
+- **Immutable CAS**: Content-addressable storage prevents tampering
+- **P2P synchronization**: Signed items enable secure cross-device sync
+- **No external threats**: Same-device model eliminates traditional security concerns
 
-### Future Enhancements
-- **Machine Learning Integration**: Processors can leverage ML models for better extraction
-- **Template Learning**: Automatic template generation from sample documents
-- **Multi-Language Support**: Processors for documents in different languages
-- **Composite Documents**: Processors that handle multi-page, multi-type documents
-- **Workflow Integration**: Processors that trigger business workflows
-- **Distributed CAS replication**: For redundancy
-- **Blockchain anchoring**: For timestamping
-- **Multi-signature support**: For document approval workflows
-- **IPFS integration**: For decentralized storage
-- **Zero-knowledge proofs**: For privacy-preserving verification
+### Future Considerations (YAGNI Applied)
+- **Cross-device sync**: P2P synchronization when protocol is designed
+- **Additional document types**: New plugins added as business needs arise
+- **CAS-based processing**: Replace in-memory queue with CAS entries (no ordering required)
 - **Homomorphic encryption**: For processing encrypted documents
 
 ---
 
-*Document Version: 3.0*  
-*Last Updated: 2025-01-14*  
-*Author: System Architecture Team*  
-*Major Update: Added Pluggable Document Processor Architecture for extensible document type support*  
-*Previous Update (v2.0): Added Cryptographic Document Architecture, Async OCR Processing, and CAS Integration*
+*Document Version: 4.0*  
+*Last Updated: 2025-08-15*  
+*Architecture Type: Peer-to-Peer (P2P) Client-Side Processing*  
+*Major Update: Refocused on P2P architecture, simplified for Blazor WASM, applied KISS/YAGNI principles*  
+*Previous Update (v3.0): Added Pluggable Document Processor Architecture*
