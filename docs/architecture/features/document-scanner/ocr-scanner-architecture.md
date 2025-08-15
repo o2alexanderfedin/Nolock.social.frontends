@@ -26,7 +26,7 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 - Support multiple document types via plugins (receipts, checks, tax forms)
 - Process captured images through OCR service (1-2 minute processing time)
 - Display extracted data in a user-friendly format
-- Store documents in immutable Content-Addressable Storage (CAS)
+- Store all documents and data in immutable Content-Addressable Storage (CAS) - the single storage system
 - Enable P2P synchronization across user's devices
 - Provide browsable gallery for stored documents and OCR results
 
@@ -34,7 +34,7 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 - Integration with Mistral OCR API (non-streaming, complete document submission)
 - Simple exponential backoff polling (5s, 10s, 15s, 30s intervals)
 - Ed25519 cryptographic signatures for document integrity
-- Immutable Content-Addressable Storage (CAS) with signed entries
+- Immutable Content-Addressable Storage (CAS) as the sole storage system for all documents, OCR results, and metadata
 - Camera access via browser MediaDevices API
 - Blazor WebAssembly client-side execution
 - Plugin loading suitable for WASM environment
@@ -42,6 +42,16 @@ This document outlines the architecture for a **peer-to-peer (P2P) document scan
 - Browser console logging for debugging (no distributed tracing)
 
 ## Architecture Overview
+
+### Storage Architecture: CAS-Only Design
+
+This architecture uses **Content-Addressable Storage (CAS) as the sole storage system**. There are no separate document stores, databases, or repositories. Every piece of data - signed documents, images, OCR results, processing states, and metadata - is stored in and retrieved from CAS using content hashes. This design ensures:
+
+1. **Immutability**: All data is immutable once stored
+2. **Deduplication**: Identical content is stored only once
+3. **Simplicity**: Single storage system for all data types
+4. **P2P-ready**: Content addressing enables direct peer-to-peer synchronization
+5. **Integrity**: Content hashes guarantee data hasn't been modified
 
 ### High-Level Architecture Diagram
 
@@ -63,9 +73,8 @@ graph TB
         STORE[IndexedDB Storage]
     end
     
-    subgraph "Storage Layer"
-        CAS[Content-Addressable Storage]
-        DOCS[Signed Documents]
+    subgraph "Storage Layer (CAS Only)"
+        CAS[Content-Addressable Storage<br/>All Documents & Data]
     end
     
     subgraph "External Services"
@@ -78,14 +87,12 @@ graph TB
     CAM --> IMG
     IMG --> SIGN
     SIGN --> CAS
-    SIGN --> DOCS
     STATE --> POLL
     POLL --> PROXY
     PROXY --> OCR
     POLL --> CAS
     STATE --> STORE
     GALLERY --> CAS
-    GALLERY --> DOCS
     
     style UI fill:#f9f,stroke:#333,stroke-width:2px
     style OCR fill:#9ff,stroke:#333,stroke-width:2px
@@ -277,11 +284,11 @@ public class ScannerStateManager
 
 ### Signed Document Structure
 
-The system implements a cryptographically signed document structure that ensures integrity and authenticity of both images and OCR results. This structure allows for progressive enhancement where images are immediately available while OCR processing occurs asynchronously.
+The system implements a cryptographically signed document structure that ensures integrity and authenticity of both images and OCR results. ALL components - the signed document, images, and OCR results - are stored in the same Content-Addressable Storage (CAS) system. This structure allows for progressive enhancement where images are immediately available while OCR processing occurs asynchronously.
 
 ```mermaid
 graph TB
-    subgraph "Signed Document v1.0"
+    subgraph "Document Structure (Stored in CAS)"
         DOC[Document Container]
         DOC --> VER[Version: 1.0]
         DOC --> ID[Document ID: UUID]
@@ -292,9 +299,16 @@ graph TB
         DOC --> SIG[Digital Signature: Ed25519]
     end
     
-    subgraph "CAS Storage"
-        IMG_HASH --> IMG_CAS[Image Blob in CAS]
-        OCR_HASH --> OCR_CAS[OCR Result in CAS]
+    subgraph "Referenced Content (Also in CAS)"
+        IMG_HASH --> IMG_CAS[Image Blob]
+        OCR_HASH --> OCR_CAS[OCR Result]
+    end
+    
+    subgraph "CAS Storage System"
+        DOC_HASH[Document Hash] --> DOC
+        DOC_HASH --> CAS[(Single CAS Repository)]
+        IMG_CAS --> CAS
+        OCR_CAS --> CAS
     end
     
     subgraph "Verification"
@@ -355,24 +369,24 @@ sequenceDiagram
     participant User
     participant Camera
     participant Signer
-    participant CAS
-    participant DocStore
+    participant CAS as CAS (Single Storage)
     
     User->>Camera: Capture Image
     Camera->>Signer: Raw Image Data
     
     Note over Signer: Generate SHA-256 hash
     Signer->>CAS: Store Image by Hash
-    CAS-->>Signer: Confirm Storage
+    CAS-->>Signer: Image Hash (CAS Address)
     
     Note over Signer: Create Document Structure
     Note over Signer: Set OcrHash = null
     Note over Signer: Sign with Ed25519
+    Note over Signer: Hash Document Structure
     
-    Signer->>DocStore: Store Signed Document
-    DocStore-->>User: Document ID
+    Signer->>CAS: Store Signed Document by Hash
+    CAS-->>User: Document Hash (CAS Address)
     
-    Note over User: Image immediately available
+    Note over User: All data in CAS<br/>Access via hash
 ```
 
 ### Document Update Process (After OCR)
@@ -382,25 +396,28 @@ sequenceDiagram
     participant Poller
     participant OCR
     participant Signer
-    participant CAS
-    participant DocStore
+    participant CAS as CAS (Single Storage)
     
     Poller->>OCR: Check Status
     OCR-->>Poller: Results Ready
     
     Poller->>Signer: OCR Results
     Note over Signer: Generate SHA-256 hash
-    Signer->>CAS: Store OCR by Hash
+    Signer->>CAS: Store OCR Results by Hash
+    CAS-->>Signer: OCR Hash (CAS Address)
     
-    Signer->>DocStore: Fetch Original Document
-    DocStore-->>Signer: Original Document
+    Signer->>CAS: Fetch Original Document by Hash
+    CAS-->>Signer: Original Document
     
     Note over Signer: Update OcrHash field
     Note over Signer: Update ProcessingState
     Note over Signer: Re-sign Document
+    Note over Signer: Hash Updated Document
     
-    Signer->>DocStore: Update Signed Document
-    DocStore-->>Poller: Update Confirmed
+    Signer->>CAS: Store Updated Document by Hash
+    CAS-->>Poller: New Document Hash
+    
+    Note over CAS: Both versions immutably stored<br/>Old version still accessible
 ```
 
 ## Asynchronous OCR Processing
@@ -442,77 +459,72 @@ graph TB
     T4 --> TIMEOUT
 ```
 
-### Polling Service Implementation
+### Polling Service Architecture
 
+The polling service implements an adaptive exponential backoff strategy for checking OCR processing status, optimized for mobile battery life.
+
+```mermaid
+classDiagram
+    class IPollingService {
+        <<interface>>
+        +SubmitForProcessingAsync(document, imageData) Task~Guid~
+        +PollForResultAsync(taskId, token) Task~OcrResult~
+        +CancelPolling(taskId) void
+    }
+    
+    class AdaptivePollingService {
+        -IOCRServiceProxy ocrProxy
+        -IDocumentSigner signer
+        -ICASStorage casStorage
+        -int[] pollingIntervals
+        -int maxPollingDuration
+        +SubmitForProcessingAsync() Task~Guid~
+        +PollForResultAsync() Task~OcrResult~
+        +CancelPolling() void
+        -CalculateNextInterval()
+        -CheckTimeout()
+        -ProcessCompletedOcr()
+        -UpdateDocumentWithOcr()
+    }
+    
+    class PollingStrategy {
+        <<enumeration>>
+        ExponentialBackoff
+        FixedInterval
+        Adaptive
+    }
+    
+    AdaptivePollingService ..|> IPollingService
+    AdaptivePollingService --> PollingStrategy
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> Submitted: Submit to OCR
+    Submitted --> Polling: Start polling
+    Polling --> CheckStatus: Poll interval
+    CheckStatus --> Polling: Still processing
+    CheckStatus --> Completed: Results ready
+    CheckStatus --> Failed: Error
+    CheckStatus --> Timeout: >2 minutes
+    Completed --> UpdateCAS: Store results
+    UpdateCAS --> [*]
+    Failed --> [*]
+    Timeout --> [*]
+    
+    note right of Polling
+        Intervals: 5s, 10s, 15s, 30s
+        Max duration: 2 minutes
+    end note
+```
+
+**Key Interface Definition:**
 ```csharp
 public interface IPollingService
 {
     Task<Guid> SubmitForProcessingAsync(SignedDocument document, byte[] imageData);
     Task<OcrResult> PollForResultAsync(Guid taskId, CancellationToken cancellationToken);
     void CancelPolling(Guid taskId);
-}
-
-public class AdaptivePollingService : IPollingService
-{
-    private readonly IOCRServiceProxy _ocrProxy;
-    private readonly IDocumentSigner _signer;
-    private readonly ICASStorage _casStorage;
-    private readonly ILogger<AdaptivePollingService> _logger;
-    
-    // Simple exponential backoff polling (KISS principle)
-    // Works offline, battery-efficient on mobile
-    private readonly int[] _pollingIntervals = { 5000, 10000, 15000, 30000 };
-    private const int MaxPollingDuration = 120000; // 2 minutes
-    
-    public async Task<OcrResult> PollForResultAsync(Guid taskId, CancellationToken cancellationToken)
-    {
-        var startTime = DateTime.UtcNow;
-        var intervalIndex = 0;
-        
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            // Check timeout
-            if ((DateTime.UtcNow - startTime).TotalMilliseconds > MaxPollingDuration)
-            {
-                throw new OcrTimeoutException($"OCR processing exceeded {MaxPollingDuration}ms timeout");
-            }
-            
-            // Check OCR status
-            var status = await _ocrProxy.GetStatusAsync(taskId);
-            
-            switch (status.State)
-            {
-                case OcrState.Completed:
-                    return await ProcessCompletedOcr(taskId, status.ResultId);
-                    
-                case OcrState.Failed:
-                    throw new OcrProcessingException(status.ErrorMessage);
-                    
-                case OcrState.Processing:
-                case OcrState.Queued:
-                    // Continue polling with adaptive interval
-                    var delay = _pollingIntervals[Math.Min(intervalIndex++, _pollingIntervals.Length - 1)];
-                    await Task.Delay(delay, cancellationToken);
-                    break;
-            }
-        }
-        
-        throw new OperationCanceledException("Polling was cancelled");
-    }
-    
-    private async Task<OcrResult> ProcessCompletedOcr(Guid taskId, string resultId)
-    {
-        // Fetch OCR results
-        var ocrData = await _ocrProxy.GetResultAsync(resultId);
-        
-        // Store in CAS
-        var ocrHash = await _casStorage.StoreAsync(ocrData);
-        
-        // Update signed document
-        await UpdateDocumentWithOcr(taskId, ocrHash);
-        
-        return ocrData;
-    }
 }
 ```
 
@@ -593,132 +605,177 @@ public class OcrBackgroundProcessor : BackgroundService
     }
 }
 
-// JavaScript Wake Lock Implementation
-export class WakeLockManager {
-    constructor() {
-        this.locks = new Map();
-    }
+### Wake Lock Service Architecture
+
+The Wake Lock service prevents mobile devices from sleeping during OCR processing. The architecture follows Blazor best practices with C# handling all business logic and JavaScript only calling native browser APIs.
+
+```mermaid
+sequenceDiagram
+    participant Component as Blazor Component
+    participant Service as WakeLockService (C#)
+    participant JSInterop as JS Interop Module
+    participant Browser as Browser API
     
-    async request(lockId) {
-        if ('wakeLock' in navigator) {
-            try {
-                const wakeLock = await navigator.wakeLock.request('screen');
-                this.locks.set(lockId, wakeLock);
-                
-                // Re-acquire on visibility change
-                document.addEventListener('visibilitychange', async () => {
-                    if (document.visibilityState === 'visible' && this.locks.has(lockId)) {
-                        await this.request(lockId);
-                    }
-                });
-                
-                return true;
-            } catch (err) {
-                console.error(`Wake Lock error: ${err.message}`);
-                return false;
-            }
-        }
-        return false;
-    }
+    Component->>Service: RequestWakeLockAsync(lockId)
+    Service->>Service: Track lock in Dictionary
+    Service->>JSInterop: InvokeAsync("requestWakeLock")
+    JSInterop->>Browser: navigator.wakeLock.request('screen')
+    Browser-->>JSInterop: WakeLock object
+    JSInterop-->>Service: Success/Failure
+    Service-->>Component: Task<bool>
     
-    async release(lockId) {
-        const lock = this.locks.get(lockId);
-        if (lock) {
-            await lock.release();
-            this.locks.delete(lockId);
-        }
+    Note over Service: Handle visibility changes
+    Browser->>JSInterop: visibilitychange event
+    JSInterop->>Service: NotifyVisibilityChange
+    Service->>Service: Re-acquire if needed
+    
+    Component->>Service: ReleaseWakeLockAsync(lockId)
+    Service->>JSInterop: InvokeAsync("releaseWakeLock")
+    JSInterop->>Browser: wakeLock.release()
+    Service->>Service: Remove from tracking
+```
+
+**C# Service Implementation:**
+```csharp
+public interface IWakeLockService
+{
+    Task<bool> RequestWakeLockAsync(string lockId);
+    Task ReleaseWakeLockAsync(string lockId);
+    Task ReleaseAllLocksAsync();
+}
+
+public class WakeLockService : IWakeLockService, IAsyncDisposable
+{
+    private readonly IJSRuntime _jsRuntime;
+    private readonly Dictionary<string, bool> _activeLocks;
+    private IJSObjectReference? _wakeLockModule;
+    
+    public async Task<bool> RequestWakeLockAsync(string lockId)
+    {
+        _wakeLockModule ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
+            "import", "./js/wake-lock-interop.js");
+        
+        var success = await _wakeLockModule.InvokeAsync<bool>("requestWakeLock", lockId);
+        if (success)
+            _activeLocks[lockId] = true;
+        
+        return success;
     }
 }
 ```
 
-## Document Signing Implementation
+**Minimal JavaScript Interop (wake-lock-interop.js):**
+```javascript
+// Thin wrapper - only calls native browser APIs
+const locks = new Map();
+
+export async function requestWakeLock(lockId) {
+    if (!('wakeLock' in navigator)) return false;
+    
+    try {
+        const lock = await navigator.wakeLock.request('screen');
+        locks.set(lockId, lock);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function releaseWakeLock(lockId) {
+    const lock = locks.get(lockId);
+    if (lock) {
+        await lock.release();
+        locks.delete(lockId);
+    }
+}
+```
+
+## Document Signing Architecture
 
 ### Ed25519 Signature Service
 
+The document signing service ensures cryptographic integrity and authenticity using Ed25519 signatures.
+
+```mermaid
+classDiagram
+    class IDocumentSigner {
+        <<interface>>
+        +SignDocumentAsync(content) Task~SignedDocument~
+        +VerifyDocumentAsync(document) Task~bool~
+        +UpdateAndResignAsync(existing, update) Task~SignedDocument~
+    }
+    
+    class Ed25519DocumentSigner {
+        -IKeyManager keyManager
+        -ILogger logger
+        +SignDocumentAsync(content) Task~SignedDocument~
+        +VerifyDocumentAsync(document) Task~bool~
+        +UpdateAndResignAsync(existing, update) Task~SignedDocument~
+        -CreateCanonicalRepresentation(document) byte[]
+        -ValidateDocumentIntegrity(document) bool
+    }
+    
+    class IKeyManager {
+        <<interface>>
+        +GetSigningKeyPairAsync() Task~KeyPair~
+        +RotateKeysAsync() Task
+        +GetPublicKeyAsync(keyId) Task~byte[]~
+    }
+    
+    class SignedDocument {
+        +string Version
+        +Guid DocumentId
+        +DateTime CreatedAt
+        +string ImageHash
+        +string OcrHash
+        +DocumentMetadata Metadata
+        +ProcessingState State
+        +byte[] Signature
+        +string SignerPublicKey
+    }
+    
+    Ed25519DocumentSigner ..|> IDocumentSigner
+    Ed25519DocumentSigner --> IKeyManager
+    Ed25519DocumentSigner --> SignedDocument
+```
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Signer as DocumentSigner
+    participant KeyMgr as KeyManager
+    participant Crypto as Ed25519
+    
+    rect rgb(240, 248, 255)
+        Note over Client,Crypto: Signing Process
+        Client->>Signer: SignDocumentAsync(content)
+        Signer->>Signer: Create document structure
+        Signer->>KeyMgr: GetSigningKeyPairAsync()
+        KeyMgr-->>Signer: KeyPair
+        Signer->>Signer: CreateCanonicalRepresentation()
+        Signer->>Crypto: Sign(data, privateKey)
+        Crypto-->>Signer: Signature
+        Signer-->>Client: SignedDocument
+    end
+    
+    rect rgb(255, 248, 240)
+        Note over Client,Crypto: Verification Process
+        Client->>Signer: VerifyDocumentAsync(document)
+        Signer->>Signer: Extract public key
+        Signer->>Signer: CreateCanonicalRepresentation()
+        Signer->>Crypto: Verify(signature, data, publicKey)
+        Crypto-->>Signer: Boolean result
+        Signer-->>Client: Verification result
+    end
+```
+
+**Key Interface:**
 ```csharp
 public interface IDocumentSigner
 {
     Task<SignedDocument> SignDocumentAsync(DocumentContent content);
     Task<bool> VerifyDocumentAsync(SignedDocument document);
     Task<SignedDocument> UpdateAndResignAsync(SignedDocument existing, Action<SignedDocument> update);
-}
-
-public class Ed25519DocumentSigner : IDocumentSigner
-{
-    private readonly IKeyManager _keyManager;
-    private readonly ILogger<Ed25519DocumentSigner> _logger;
-    
-    public async Task<SignedDocument> SignDocumentAsync(DocumentContent content)
-    {
-        var document = new SignedDocument
-        {
-            Version = "1.0",
-            DocumentId = Guid.NewGuid(),
-            CreatedAt = DateTime.UtcNow,
-            ImageHash = content.ImageHash,
-            OcrHash = content.OcrHash,
-            Metadata = content.Metadata,
-            State = ProcessingState.ImageCaptured
-        };
-        
-        // Get signing key
-        var keyPair = await _keyManager.GetSigningKeyPairAsync();
-        document.SignerPublicKey = Convert.ToBase64String(keyPair.PublicKey);
-        
-        // Create canonical representation for signing
-        var canonicalData = CreateCanonicalRepresentation(document);
-        
-        // Sign with Ed25519
-        document.Signature = Ed25519.Sign(canonicalData, keyPair.PrivateKey);
-        
-        return document;
-    }
-    
-    public async Task<bool> VerifyDocumentAsync(SignedDocument document)
-    {
-        try
-        {
-            // Extract public key
-            var publicKey = Convert.FromBase64String(document.SignerPublicKey);
-            
-            // Create canonical representation
-            var signature = document.Signature;
-            document.Signature = null; // Remove signature for verification
-            var canonicalData = CreateCanonicalRepresentation(document);
-            document.Signature = signature; // Restore
-            
-            // Verify signature
-            return Ed25519.Verify(signature, canonicalData, publicKey);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Signature verification failed");
-            return false;
-        }
-    }
-    
-    private byte[] CreateCanonicalRepresentation(SignedDocument doc)
-    {
-        // Create deterministic JSON representation
-        var json = JsonSerializer.Serialize(new
-        {
-            version = doc.Version,
-            documentId = doc.DocumentId,
-            createdAt = doc.CreatedAt.ToUniversalTime().ToString("O"),
-            updatedAt = doc.UpdatedAt?.ToUniversalTime().ToString("O"),
-            imageHash = doc.ImageHash,
-            ocrHash = doc.OcrHash,
-            metadata = doc.Metadata,
-            state = doc.State.ToString()
-        }, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = false
-        });
-        
-        return Encoding.UTF8.GetBytes(json);
-    }
 }
 ```
 
@@ -770,10 +827,83 @@ public class SecureKeyManager : IKeyManager
 }
 ```
 
-## Gallery Component Implementation
+## Gallery Component Architecture
 
 ### Document Gallery Service
 
+The gallery service manages document retrieval, filtering, pagination, and thumbnail generation from the CAS storage.
+
+```mermaid
+classDiagram
+    class IDocumentGalleryService {
+        <<interface>>
+        +GetDocumentsAsync(page, pageSize, filter) Task~PagedResult~
+        +GenerateThumbnailAsync(imageHash) Task~byte[]~
+        +GetDocumentDetailsAsync(documentId) Task~DocumentDetails~
+        +DeleteDocumentAsync(documentId) Task
+    }
+    
+    class DocumentGalleryService {
+        -ICASStorage casStorage
+        -IThumbnailGenerator thumbnailGen
+        -IDocumentSigner signer
+        +GetDocumentsAsync() Task~PagedResult~
+        +GenerateThumbnailAsync() Task~byte[]~
+        +GetDocumentDetailsAsync() Task~DocumentDetails~
+        +DeleteDocumentAsync() Task
+        -ApplyFilters(documents, filter)
+        -GenerateThumbnailUrl(imageHash)
+    }
+    
+    class DocumentFilter {
+        +DocumentType? Type
+        +ProcessingState? State
+        +string SearchText
+        +DateTime? StartDate
+        +DateTime? EndDate
+    }
+    
+    class PagedResult~T~ {
+        +List~T~ Items
+        +int TotalCount
+        +int Page
+        +int PageSize
+        +int TotalPages
+    }
+    
+    DocumentGalleryService ..|> IDocumentGalleryService
+    DocumentGalleryService --> DocumentFilter
+    DocumentGalleryService --> PagedResult
+```
+
+```mermaid
+sequenceDiagram
+    participant UI as Gallery Component
+    participant Service as GalleryService
+    participant CAS as CAS Storage
+    participant Thumb as ThumbnailGenerator
+    
+    UI->>Service: GetDocumentsAsync(page, filter)
+    Service->>CAS: GetDocumentHashesAsync()
+    CAS-->>Service: Document hashes
+    
+    loop For each hash
+        Service->>CAS: RetrieveAsync<SignedDocument>(hash)
+        CAS-->>Service: SignedDocument
+    end
+    
+    Service->>Service: ApplyFilters(documents, filter)
+    Service->>Service: Paginate results
+    
+    loop For each document
+        Service->>Thumb: GenerateThumbnailUrl(imageHash)
+        Thumb-->>Service: Thumbnail URL
+    end
+    
+    Service-->>UI: PagedResult<DocumentSummary>
+```
+
+**Key Interface:**
 ```csharp
 public interface IDocumentGalleryService
 {
@@ -782,80 +912,6 @@ public interface IDocumentGalleryService
     Task<byte[]> GenerateThumbnailAsync(string imageHash);
     Task<DocumentDetails> GetDocumentDetailsAsync(Guid documentId);
     Task DeleteDocumentAsync(Guid documentId);
-}
-
-public class DocumentGalleryService : IDocumentGalleryService
-{
-    private readonly ICASStorage _casStorage;
-    private readonly IDocumentRepository _documentRepo;
-    private readonly IThumbnailGenerator _thumbnailGen;
-    private readonly IDocumentSigner _signer;
-    
-    public async Task<PagedResult<DocumentSummary>> GetDocumentsAsync(
-        int page, int pageSize, DocumentFilter filter)
-    {
-        var query = _documentRepo.Query();
-        
-        // Apply filters
-        if (filter.DocumentType.HasValue)
-            query = query.Where(d => d.Metadata.Type == filter.DocumentType);
-        
-        if (filter.ProcessingState.HasValue)
-            query = query.Where(d => d.State == filter.ProcessingState);
-        
-        if (!string.IsNullOrEmpty(filter.SearchText))
-        {
-            // Search in OCR content if available
-            query = query.Where(d => d.OcrHash != null && 
-                _casStorage.SearchContent(d.OcrHash, filter.SearchText));
-        }
-        
-        // Sort by creation date descending
-        query = query.OrderByDescending(d => d.CreatedAt);
-        
-        // Apply pagination
-        var total = await query.CountAsync();
-        var documents = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(d => new DocumentSummary
-            {
-                DocumentId = d.DocumentId,
-                ThumbnailUrl = GenerateThumbnailUrl(d.ImageHash),
-                DocumentType = d.Metadata.Type,
-                ProcessingState = d.State,
-                CreatedAt = d.CreatedAt,
-                HasOcr = d.OcrHash != null
-            })
-            .ToListAsync();
-        
-        return new PagedResult<DocumentSummary>
-        {
-            Items = documents,
-            TotalCount = total,
-            Page = page,
-            PageSize = pageSize
-        };
-    }
-    
-    public async Task<byte[]> GenerateThumbnailAsync(string imageHash)
-    {
-        // Check thumbnail cache
-        var thumbnailHash = $"thumb_{imageHash}";
-        if (await _casStorage.ExistsAsync(thumbnailHash))
-        {
-            return await _casStorage.RetrieveAsync(thumbnailHash);
-        }
-        
-        // Generate thumbnail
-        var imageData = await _casStorage.RetrieveAsync(imageHash);
-        var thumbnail = await _thumbnailGen.GenerateAsync(imageData, 200, 200);
-        
-        // Store in CAS for future use
-        await _casStorage.StoreAsync(thumbnail, thumbnailHash);
-        
-        return thumbnail;
-    }
 }
 ```
 
@@ -1070,6 +1126,17 @@ public class DocumentGalleryService : IDocumentGalleryService
 
 ## Content-Addressable Storage (CAS) Integration
 
+### CAS as the Single Storage System
+
+**IMPORTANT**: Content-Addressable Storage (CAS) is the ONLY storage system in this architecture. There is no separate document database, no document repository, and no other storage mechanism. Everything - documents, images, OCR results, processing entries, and metadata - is stored in CAS.
+
+Key principles:
+- **Everything is content-addressed**: All data is stored and retrieved using its content hash
+- **Immutable storage**: Once stored, content never changes (updates create new entries)
+- **Natural deduplication**: Identical content automatically shares storage
+- **P2P-ready**: Content-addressed design enables seamless peer-to-peer synchronization
+- **No separate databases**: CAS replaces traditional document databases entirely
+
 ### CAS Architecture
 
 ```mermaid
@@ -1113,11 +1180,21 @@ graph TB
 ```csharp
 public interface ICASStorage
 {
+    // Core CAS operations
     Task<string> StoreAsync(byte[] content);
     Task<byte[]> RetrieveAsync(string hash);
     Task<bool> ExistsAsync(string hash);
     Task DeleteAsync(string hash);
     Task<CASMetadata> GetMetadataAsync(string hash);
+    
+    // Document-specific operations (all stored in CAS)
+    Task<IEnumerable<string>> GetDocumentHashesAsync();
+    Task<T> RetrieveAsync<T>(string hash) where T : class;
+    Task<string> StoreAsync<T>(T obj) where T : class;
+    
+    // Search operations (searches within CAS-stored content)
+    Task<bool> SearchContent(string hash, string searchText);
+    Task<IEnumerable<string>> FindByType(string contentType);
 }
 
 public class CASStorage : ICASStorage
@@ -1214,9 +1291,8 @@ graph TB
         PNEW[... Future Processors]
     end
     
-    subgraph "Storage"
-        CAS[Content-Addressable Storage]
-        META[Metadata Store]
+    subgraph "Storage (CAS Only)"
+        CAS[Content-Addressable Storage<br/>Including All Metadata]
     end
     
     R1 --> API
@@ -1243,7 +1319,6 @@ graph TB
     PNEW -.->|implements| PIPELINE
     
     TRANS --> CAS
-    TRANS --> META
     
     style PIPELINE fill:#f9f,stroke:#333,stroke-width:2px
     style REGISTRY fill:#9ff,stroke:#333,stroke-width:2px
@@ -1993,22 +2068,29 @@ public interface IOCRServiceAdapter
     Task<HealthStatus> GetHealthStatusAsync(CancellationToken cancellationToken = default);
 }
 
-public class OCRServiceAdapter : IOCRServiceAdapter
-{
-    private readonly IOCRServiceClient _client;
-    private readonly ILogger<OCRServiceAdapter> _logger;
-    private readonly IRetryPolicy _retryPolicy;
-    
-    public async Task<ReceiptData> ProcessReceiptAsync(byte[] imageData, CancellationToken cancellationToken)
-    {
-        return await _retryPolicy.ExecuteAsync(async () =>
-        {
-            using var stream = new MemoryStream(imageData);
-            var response = await _client.ProcessReceiptAsync(stream, cancellationToken);
-            return MapToReceiptData(response);
-        });
+```mermaid
+classDiagram
+    class IOCRServiceAdapter {
+        <<interface>>
+        +ProcessReceiptAsync(imageData, token) Task~ReceiptData~
+        +ProcessCheckAsync(imageData, token) Task~CheckData~
+        +GetHealthStatusAsync(token) Task~HealthStatus~
     }
-}
+    
+    class OCRServiceAdapter {
+        -IOCRServiceClient client
+        -ILogger logger
+        -IRetryPolicy retryPolicy
+        +ProcessReceiptAsync() Task~ReceiptData~
+        +ProcessCheckAsync() Task~CheckData~
+        +GetHealthStatusAsync() Task~HealthStatus~
+        -MapToReceiptData(response)
+        -MapToCheckData(response)
+    }
+    
+    OCRServiceAdapter ..|> IOCRServiceAdapter
+    OCRServiceAdapter --> IOCRServiceClient
+    OCRServiceAdapter --> IRetryPolicy
 ```
 
 ## UI/UX Design
@@ -2258,106 +2340,176 @@ NoLock.Social.DocumentScanner/
 
 ## Implementation Details
 
-### Camera Integration
+### Camera Integration Architecture
 
-```csharp
-public class CameraService : ICameraService
-{
-    private readonly IJSRuntime _jsRuntime;
-    private IJSObjectReference? _cameraModule;
-    
-    public async Task<MediaStream> StartCameraAsync(CameraOptions options)
-    {
-        _cameraModule ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", "./js/camera-interop.js");
-            
-        return await _cameraModule.InvokeAsync<MediaStream>(
-            "startCamera", options);
+The camera service manages device camera access, stream handling, and frame capture. All business logic resides in C# with minimal JavaScript for native API calls only.
+
+```mermaid
+classDiagram
+    class ICameraService {
+        <<interface>>
+        +RequestPermissionAsync() Task~bool~
+        +GetAvailableDevicesAsync() Task~List~CameraDevice~~
+        +StartStreamAsync(options) Task~string~
+        +StopStreamAsync() Task
+        +CaptureFrameAsync() Task~byte[]~
+        +SwitchCameraAsync(deviceId) Task
     }
     
-    public async Task<byte[]> CaptureFrameAsync()
-    {
-        if (_cameraModule == null)
-            throw new InvalidOperationException("Camera not initialized");
-            
-        var base64 = await _cameraModule.InvokeAsync<string>("captureFrame");
-        return Convert.FromBase64String(base64.Split(',')[1]);
+    class CameraService {
+        -IJSRuntime jsRuntime
+        -IJSObjectReference cameraModule
+        -CameraState currentState
+        -string activeStreamId
+        -Dictionary~string,CameraDevice~ devices
+        +RequestPermissionAsync() Task~bool~
+        +GetAvailableDevicesAsync() Task~List~CameraDevice~~
+        +StartStreamAsync(options) Task~string~
+        +CaptureFrameAsync() Task~byte[]~
+        -ValidateState()
+        -BuildConstraints(options)
     }
-}
+    
+    class CameraOptions {
+        +string DeviceId
+        +CameraFacingMode FacingMode
+        +int PreferredWidth
+        +int PreferredHeight
+        +bool EnableTorch
+    }
+    
+    class CameraDevice {
+        +string DeviceId
+        +string Label
+        +CameraKind Kind
+    }
+    
+    CameraService ..|> ICameraService
+    CameraService --> CameraOptions
+    CameraService --> CameraDevice
 ```
 
-### JavaScript Camera Module
-
-```javascript
-// camera-interop.js
-export async function startCamera(options) {
-    const constraints = {
-        video: {
-            facingMode: options.facingMode || 'environment',
-            width: { ideal: options.width || 1920 },
-            height: { ideal: options.height || 1080 }
-        }
-    };
+```mermaid
+sequenceDiagram
+    participant Component
+    participant CameraService as CameraService (C#)
+    participant JSInterop as JS Interop
+    participant MediaAPI as MediaDevices API
     
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        return stream;
-    } catch (error) {
-        console.error('Camera access error:', error);
-        throw error;
-    }
+    Component->>CameraService: StartStreamAsync(options)
+    CameraService->>CameraService: BuildConstraints(options)
+    CameraService->>JSInterop: InvokeAsync("startCamera", constraints)
+    JSInterop->>MediaAPI: getUserMedia(constraints)
+    MediaAPI-->>JSInterop: MediaStream
+    JSInterop->>JSInterop: Attach to video element
+    JSInterop-->>CameraService: streamId
+    CameraService->>CameraService: Track active stream
+    CameraService-->>Component: streamId
+    
+    Component->>CameraService: CaptureFrameAsync()
+    CameraService->>CameraService: ValidateState()
+    CameraService->>JSInterop: InvokeAsync("captureFrame")
+    JSInterop->>JSInterop: Canvas capture
+    JSInterop-->>CameraService: base64 image
+    CameraService->>CameraService: Convert to byte[]
+    CameraService-->>Component: byte[] image data
+```
+
+**Minimal JavaScript Interop (camera-interop.js):**
+```javascript
+// Thin wrapper for native MediaDevices API only
+let activeStream = null;
+
+export async function startCamera(constraints) {
+    activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('camera-preview');
+    video.srcObject = activeStream;
+    return activeStream.id;
 }
 
-export function captureFrame(videoElement) {
+export function captureFrame() {
+    const video = document.getElementById('camera-preview');
     const canvas = document.createElement('canvas');
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    
-    const context = canvas.getContext('2d');
-    context.drawImage(videoElement, 0, 0);
-    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
     return canvas.toDataURL('image/jpeg', 0.9);
 }
-```
 
-### Image Preprocessing
-
-```csharp
-public class ImageProcessingService : IImageProcessingService
-{
-    public async Task<byte[]> PreprocessImageAsync(byte[] imageData, ProcessingOptions options)
-    {
-        using var image = Image.Load(imageData);
-        
-        // Auto-orient based on EXIF data
-        image.Mutate(x => x.AutoOrient());
-        
-        // Apply preprocessing
-        if (options.EnhanceContrast)
-        {
-            image.Mutate(x => x.Contrast(1.2f));
-        }
-        
-        if (options.ConvertToGrayscale)
-        {
-            image.Mutate(x => x.Grayscale());
-        }
-        
-        if (options.ResizeToMaxDimension.HasValue)
-        {
-            var maxDim = options.ResizeToMaxDimension.Value;
-            image.Mutate(x => x.Resize(new ResizeOptions
-            {
-                Mode = ResizeMode.Max,
-                Size = new Size(maxDim, maxDim)
-            }));
-        }
-        
-        using var output = new MemoryStream();
-        await image.SaveAsJpegAsync(output);
-        return output.ToArray();
+export function stopCamera() {
+    if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+        activeStream = null;
     }
 }
+```
+
+### Image Preprocessing Architecture
+
+The image preprocessing service optimizes captured images for OCR processing using various enhancement techniques.
+
+```mermaid
+flowchart LR
+    subgraph Input
+        RAW[Raw Image]
+        OPTIONS[Processing Options]
+    end
+    
+    subgraph Processing Pipeline
+        ORIENT[Auto-Orient<br/>EXIF Correction]
+        ENHANCE[Enhance<br/>Contrast]
+        GRAY[Convert to<br/>Grayscale]
+        RESIZE[Resize<br/>Optimization]
+        COMPRESS[JPEG<br/>Compression]
+    end
+    
+    subgraph Output
+        RESULT[Processed Image]
+    end
+    
+    RAW --> ORIENT
+    OPTIONS --> ORIENT
+    ORIENT --> ENHANCE
+    ENHANCE --> GRAY
+    GRAY --> RESIZE
+    RESIZE --> COMPRESS
+    COMPRESS --> RESULT
+    
+    style RAW fill:#f9f
+    style RESULT fill:#9f9
+```
+
+```mermaid
+classDiagram
+    class IImageProcessingService {
+        <<interface>>
+        +PreprocessImageAsync(imageData, options) Task~byte[]~
+        +ValidateImageAsync(imageData) Task~bool~
+        +GetImageMetadataAsync(imageData) Task~ImageMetadata~
+    }
+    
+    class ImageProcessingService {
+        -ILogger logger
+        +PreprocessImageAsync(imageData, options) Task~byte[]~
+        +ValidateImageAsync(imageData) Task~bool~
+        +GetImageMetadataAsync(imageData) Task~ImageMetadata~
+        -ApplyAutoOrientation(image)
+        -ApplyContrastEnhancement(image, factor)
+        -ConvertToGrayscale(image)
+        -OptimizeSize(image, maxDimension)
+    }
+    
+    class ProcessingOptions {
+        +bool EnhanceContrast
+        +float ContrastFactor
+        +bool ConvertToGrayscale
+        +int? ResizeToMaxDimension
+        +int JpegQuality
+        +bool AutoOrient
+    }
+    
+    ImageProcessingService ..|> IImageProcessingService
+    ImageProcessingService --> ProcessingOptions
 ```
 
 ### Error Handling and Retry Logic
@@ -2454,7 +2606,7 @@ public class OfflineScanManager
 public class OcrProcessingErrorHandler
 {
     private readonly ILogger<OcrProcessingErrorHandler> _logger;
-    private readonly IDocumentRepository _documentRepo;
+    private readonly ICASStorage _casStorage;
     private readonly INotificationService _notifications;
     
     public async Task HandleProcessingError(
