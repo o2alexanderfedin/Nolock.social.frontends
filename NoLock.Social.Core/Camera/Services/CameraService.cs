@@ -697,6 +697,20 @@ namespace NoLock.Social.Core.Camera.Services
             return session.Pages.ToArray();
         }
 
+        public async Task<DocumentSession> GetDocumentSessionAsync(string sessionId)
+        {
+            ThrowIfDisposed();
+            
+            if (string.IsNullOrEmpty(sessionId))
+                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+                
+            if (!_activeSessions.TryGetValue(sessionId, out var session))
+                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                
+            session.UpdateActivity(); // Track activity for timeout management
+            return session;
+        }
+
         public async Task RemovePageFromSessionAsync(string sessionId, int pageIndex)
         {
             ThrowIfDisposed();
