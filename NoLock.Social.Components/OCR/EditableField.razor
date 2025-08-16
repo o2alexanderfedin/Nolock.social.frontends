@@ -1,0 +1,409 @@
+@using NoLock.Social.Core.OCR.Models
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JSRuntime
+
+<div class="editable-field @GetFieldCssClass()" 
+     role="@(IsEditing ? "textbox" : "button")"
+     aria-label="@GetAriaLabel()"
+     aria-describedby="@($"{FieldId}-description")"
+     tabindex="0"
+     @onclick="HandleFieldClick"
+     @onkeydown="HandleKeyDown">
+    
+    <div class="editable-field-header">
+        <label for="@FieldId" class="editable-field-label">
+            @FieldName
+            @if (IsRequired)
+            {
+                <span class="required-indicator" aria-label="Required">*</span>
+            }
+        </label>
+        
+        <div class="editable-field-actions">
+            @if (ShowConfidence)
+            {
+                <ConfidenceIndicator Score="EffectiveConfidence"
+                                   ShowPercentage="false"
+                                   ShowIcon="true"
+                                   ShowTooltip="true"
+                                   Size="small" />
+            }
+            
+            @if (IsEditing)
+            {
+                <button type="button" 
+                        class="btn-field-action btn-save"
+                        @onclick="HandleSave"
+                        @onclick:stopPropagation="true"
+                        disabled="@(!IsValid)"
+                        title="Save changes">
+                    ✓
+                </button>
+                <button type="button" 
+                        class="btn-field-action btn-cancel"
+                        @onclick="HandleCancel"
+                        @onclick:stopPropagation="true"
+                        title="Cancel editing">
+                    ✗
+                </button>
+            }
+            else
+            {
+                <button type="button" 
+                        class="btn-field-action btn-edit"
+                        @onclick="HandleEdit"
+                        @onclick:stopPropagation="true"
+                        title="Edit field">
+                    ✏️
+                </button>
+                @if (HasCorrection)
+                {
+                    <button type="button" 
+                            class="btn-field-action btn-revert"
+                            @onclick="HandleRevert"
+                            @onclick:stopPropagation="true"
+                            title="Revert to original value">
+                        ↶
+                    </button>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="editable-field-content">
+        @if (IsEditing)
+        {
+            @switch (FieldType)
+            {
+                case FieldType.Decimal:
+                case FieldType.Currency:
+                    <input id="@FieldId"
+                           type="number"
+                           step="0.01"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@EditingValue"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           min="@MinValue"
+                           max="@MaxValue"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+                
+                case FieldType.Integer:
+                    <input id="@FieldId"
+                           type="number"
+                           step="1"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@EditingValue"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           min="@MinValue"
+                           max="@MaxValue"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+                
+                case FieldType.Date:
+                    <input id="@FieldId"
+                           type="date"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@(EditingValue?.ToString() ?? "")"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+                
+                case FieldType.Email:
+                    <input id="@FieldId"
+                           type="email"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@(EditingValue?.ToString() ?? "")"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           maxlength="@MaxLength"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+                
+                case FieldType.Phone:
+                    <input id="@FieldId"
+                           type="tel"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@(EditingValue?.ToString() ?? "")"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           maxlength="@MaxLength"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+                
+                default:
+                    <input id="@FieldId"
+                           type="text"
+                           class="editable-field-input @GetInputCssClass()"
+                           value="@(EditingValue?.ToString() ?? "")"
+                           @oninput="HandleInput"
+                           @onblur="HandleBlur"
+                           @onkeydown="HandleInputKeyDown"
+                           maxlength="@MaxLength"
+                           aria-invalid="@(!IsValid)"
+                           aria-describedby="@($"{FieldId}-validation")" />
+                    break;
+            }
+        }
+        else
+        {
+            <div class="editable-field-value @GetValueCssClass()" 
+                 title="@GetDisplayValue()">
+                @GetDisplayValue()
+            </div>
+        }
+    </div>
+
+    @if (IsEditing && (!IsValid || ValidationWarnings.Count > 0))
+    {
+        <div id="@($"{FieldId}-validation")" class="editable-field-validation" role="alert">
+            @if (!IsValid && ValidationErrors.Count > 0)
+            {
+                <div class="validation-errors">
+                    @foreach (var error in ValidationErrors)
+                    {
+                        <div class="validation-error">⚠️ @error</div>
+                    }
+                </div>
+            }
+            @if (ValidationWarnings.Count > 0)
+            {
+                <div class="validation-warnings">
+                    @foreach (var warning in ValidationWarnings)
+                    {
+                        <div class="validation-warning">💡 @warning</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <div id="@($"{FieldId}-description")" class="sr-only">
+        @if (ShouldHighlight)
+        {
+            <span>Low confidence field requiring review. </span>
+        }
+        @if (HasCorrection)
+        {
+            <span>Field has been modified. </span>
+        }
+        @if (IsRequired)
+        {
+            <span>This field is required. </span>
+        }
+        Original value: @(OriginalValue?.ToString() ?? "None")
+    </div>
+</div>
+
+@code {
+    [Parameter] public string FieldName { get; set; } = string.Empty;
+    [Parameter] public object? OriginalValue { get; set; }
+    [Parameter] public object? CorrectedValue { get; set; }
+    [Parameter] public double OriginalConfidence { get; set; }
+    [Parameter] public double UpdatedConfidence { get; set; }
+    [Parameter] public FieldType FieldType { get; set; } = FieldType.Text;
+    [Parameter] public bool ShouldHighlight { get; set; } = false;
+    [Parameter] public bool IsRequired { get; set; } = false;
+    [Parameter] public bool ShowConfidence { get; set; } = true;
+    [Parameter] public int? MaxLength { get; set; }
+    [Parameter] public decimal? MinValue { get; set; }
+    [Parameter] public decimal? MaxValue { get; set; }
+    [Parameter] public EventCallback<FieldCorrectionEventArgs> OnFieldChanged { get; set; }
+    [Parameter] public EventCallback<string> OnFieldEdit { get; set; }
+    [Parameter] public EventCallback<string> OnFieldSave { get; set; }
+    [Parameter] public EventCallback<string> OnFieldCancel { get; set; }
+    [Parameter] public EventCallback<string> OnFieldRevert { get; set; }
+
+    private bool IsEditing { get; set; } = false;
+    private object? EditingValue { get; set; }
+    private bool IsValid { get; set; } = true;
+    private List<string> ValidationErrors { get; set; } = new();
+    private List<string> ValidationWarnings { get; set; } = new();
+
+    private string FieldId => $"field-{FieldName.Replace(" ", "-").ToLower()}";
+    private bool HasCorrection => CorrectedValue != null && !Equals(OriginalValue, CorrectedValue);
+    private double EffectiveConfidence => HasCorrection ? UpdatedConfidence : OriginalConfidence;
+
+    private string GetDisplayValue()
+    {
+        var value = HasCorrection ? CorrectedValue : OriginalValue;
+        if (value == null) return "—";
+        
+        return FieldType switch
+        {
+            FieldType.Currency => ((decimal)value).ToString("C"),
+            FieldType.Percentage => ((decimal)value).ToString("P"),
+            FieldType.Date => ((DateTime)value).ToString("yyyy-MM-dd"),
+            FieldType.DateTime => ((DateTime)value).ToString("yyyy-MM-dd HH:mm"),
+            _ => value.ToString() ?? ""
+        };
+    }
+
+    private string GetFieldCssClass()
+    {
+        var classes = new List<string> { "editable-field" };
+        
+        if (IsEditing) classes.Add("editing");
+        if (ShouldHighlight) classes.Add("highlight");
+        if (HasCorrection) classes.Add("corrected");
+        if (!IsValid && IsEditing) classes.Add("invalid");
+        
+        return string.Join(" ", classes);
+    }
+
+    private string GetInputCssClass()
+    {
+        var classes = new List<string> { "form-control" };
+        if (!IsValid) classes.Add("is-invalid");
+        return string.Join(" ", classes);
+    }
+
+    private string GetValueCssClass()
+    {
+        var classes = new List<string> { "field-value" };
+        if (HasCorrection) classes.Add("corrected-value");
+        if (ShouldHighlight) classes.Add("highlight-value");
+        return string.Join(" ", classes);
+    }
+
+    private string GetAriaLabel()
+    {
+        var label = $"{FieldName} field";
+        if (ShouldHighlight) label += ", low confidence";
+        if (HasCorrection) label += ", corrected";
+        if (IsEditing) label += ", editing mode";
+        return label;
+    }
+
+    private async Task HandleFieldClick()
+    {
+        if (!IsEditing)
+        {
+            await StartEditing();
+        }
+    }
+
+    private async Task HandleEdit()
+    {
+        await StartEditing();
+    }
+
+    private async Task StartEditing()
+    {
+        IsEditing = true;
+        EditingValue = HasCorrection ? CorrectedValue : OriginalValue;
+        await OnFieldEdit.InvokeAsync(FieldName);
+        StateHasChanged();
+        
+        // Focus the input after render
+        await Task.Delay(10);
+        await JSRuntime.InvokeVoidAsync("document.getElementById", FieldId).AsTask()
+            .ContinueWith(async _ => await JSRuntime.InvokeVoidAsync("document.getElementById", FieldId + ".focus()"));
+    }
+
+    private async Task HandleSave()
+    {
+        if (IsValid)
+        {
+            var args = new FieldCorrectionEventArgs
+            {
+                FieldName = FieldName,
+                OriginalValue = OriginalValue,
+                CorrectedValue = EditingValue,
+                OriginalConfidence = OriginalConfidence
+            };
+            
+            await OnFieldChanged.InvokeAsync(args);
+            await OnFieldSave.InvokeAsync(FieldName);
+            
+            IsEditing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        IsEditing = false;
+        EditingValue = HasCorrection ? CorrectedValue : OriginalValue;
+        ValidationErrors.Clear();
+        ValidationWarnings.Clear();
+        IsValid = true;
+        
+        await OnFieldCancel.InvokeAsync(FieldName);
+        StateHasChanged();
+    }
+
+    private async Task HandleRevert()
+    {
+        await OnFieldRevert.InvokeAsync(FieldName);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (!IsEditing && (e.Key == "Enter" || e.Key == " "))
+        {
+            await StartEditing();
+        }
+    }
+
+    private async Task HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await HandleSave();
+        }
+        else if (e.Key == "Escape")
+        {
+            await HandleCancel();
+        }
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        EditingValue = e.Value;
+        await ValidateCurrentValue();
+    }
+
+    private async Task HandleBlur()
+    {
+        await ValidateCurrentValue();
+    }
+
+    private async Task ValidateCurrentValue()
+    {
+        // Basic validation - this will be enhanced when we implement the validation service
+        ValidationErrors.Clear();
+        ValidationWarnings.Clear();
+        IsValid = true;
+
+        if (IsRequired && (EditingValue == null || string.IsNullOrWhiteSpace(EditingValue.ToString())))
+        {
+            ValidationErrors.Add("This field is required.");
+            IsValid = false;
+        }
+
+        // Add more validation logic here based on FieldType
+        StateHasChanged();
+    }
+
+    public class FieldCorrectionEventArgs
+    {
+        public string FieldName { get; set; } = string.Empty;
+        public object? OriginalValue { get; set; }
+        public object? CorrectedValue { get; set; }
+        public double OriginalConfidence { get; set; }
+    }
+}

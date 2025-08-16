@@ -1,0 +1,222 @@
+@using NoLock.Social.Core.OCR.Models
+
+<div class="field-confidence @(IsInteractive ? "field-confidence-interactive" : "")"
+     tabindex="@(IsInteractive ? "0" : "-1")"
+     role="@(IsInteractive ? "button" : null)"
+     @onclick="HandleClick"
+     @onkeydown="HandleKeyDown">
+    <div class="field-confidence-content">
+        <span class="field-confidence-label">
+            @FieldName
+        </span>
+        @if (!string.IsNullOrEmpty(FieldValue))
+        {
+            <span class="field-confidence-value" title="@FieldValue">
+                @TruncateValue(FieldValue)
+            </span>
+        }
+    </div>
+    <div class="field-confidence-indicator">
+        @if (DisplayMode == ConfidenceDisplayMode.Icon || DisplayMode == ConfidenceDisplayMode.Both)
+        {
+            <ConfidenceIndicator Score="ConfidenceScore"
+                                ShowPercentage="false"
+                                ShowIcon="true"
+                                ShowTooltip="true"
+                                Size="small" />
+        }
+        @if (DisplayMode == ConfidenceDisplayMode.Bar || DisplayMode == ConfidenceDisplayMode.Both)
+        {
+            <div style="width: 100px;">
+                <ConfidenceBar Score="ConfidenceScore"
+                              ShowLabel="false"
+                              ShowValue="false"
+                              ShowDescription="false" />
+            </div>
+        }
+        @if (DisplayMode == ConfidenceDisplayMode.Percentage)
+        {
+            <ConfidenceIndicator Score="ConfidenceScore"
+                                ShowPercentage="true"
+                                ShowIcon="false"
+                                ShowTooltip="true"
+                                Size="small" />
+        }
+    </div>
+</div>
+
+<style>
+    .field-confidence {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem;
+        border-radius: 0.375rem;
+        background-color: #f9fafb;
+        margin-bottom: 0.5rem;
+        transition: background-color 0.2s ease;
+    }
+
+    .field-confidence-interactive {
+        cursor: pointer;
+    }
+
+    .field-confidence-interactive:hover {
+        background-color: #f3f4f6;
+    }
+
+    .field-confidence-interactive:focus {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+    }
+
+    .field-confidence-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .field-confidence-label {
+        font-weight: 500;
+        color: #374151;
+        font-size: 0.875rem;
+    }
+
+    .field-confidence-value {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin-top: 0.125rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .field-confidence-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    /* Dark mode support */
+    @@media (prefers-color-scheme: dark) {
+        .field-confidence {
+            background-color: #1f2937;
+        }
+
+        .field-confidence-interactive:hover {
+            background-color: #374151;
+        }
+
+        .field-confidence-label {
+            color: #e5e7eb;
+        }
+
+        .field-confidence-value {
+            color: #9ca3af;
+        }
+    }
+
+    /* Responsive design */
+    @@media (max-width: 640px) {
+        .field-confidence {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .field-confidence-indicator {
+            width: 100%;
+            justify-content: flex-end;
+        }
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// The name of the field being displayed.
+    /// </summary>
+    [Parameter]
+    public string FieldName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The value of the field (optional).
+    /// </summary>
+    [Parameter]
+    public string? FieldValue { get; set; }
+
+    /// <summary>
+    /// The confidence score for this field (0.0 to 1.0).
+    /// </summary>
+    [Parameter]
+    public double ConfidenceScore { get; set; }
+
+    /// <summary>
+    /// The display mode for the confidence indicator.
+    /// </summary>
+    [Parameter]
+    public ConfidenceDisplayMode DisplayMode { get; set; } = ConfidenceDisplayMode.Both;
+
+    /// <summary>
+    /// Whether the field is interactive (clickable).
+    /// </summary>
+    [Parameter]
+    public bool IsInteractive { get; set; } = false;
+
+    /// <summary>
+    /// Event callback when the field is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnFieldClick { get; set; }
+
+    /// <summary>
+    /// Maximum length for field value display before truncation.
+    /// </summary>
+    [Parameter]
+    public int MaxValueLength { get; set; } = 50;
+
+    /// <summary>
+    /// Truncates the field value if it exceeds the maximum length.
+    /// </summary>
+    private string TruncateValue(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= MaxValueLength)
+            return value;
+
+        return $"{value.Substring(0, MaxValueLength)}...";
+    }
+
+    /// <summary>
+    /// Handles click events on the field.
+    /// </summary>
+    private async Task HandleClick()
+    {
+        if (IsInteractive && OnFieldClick.HasDelegate)
+        {
+            await OnFieldClick.InvokeAsync(FieldName);
+        }
+    }
+
+    /// <summary>
+    /// Handles keyboard events for accessibility.
+    /// </summary>
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (IsInteractive && (e.Key == "Enter" || e.Key == " "))
+        {
+            await HandleClick();
+        }
+    }
+
+    /// <summary>
+    /// Defines the display modes for confidence indicators.
+    /// </summary>
+    public enum ConfidenceDisplayMode
+    {
+        Icon,
+        Bar,
+        Percentage,
+        Both
+    }
+}
