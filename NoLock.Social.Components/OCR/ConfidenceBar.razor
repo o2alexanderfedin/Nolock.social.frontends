@@ -1,0 +1,151 @@
+@using NoLock.Social.Core.OCR.Models
+
+<div class="confidence-bar-container">
+    @if (ShowLabel && !string.IsNullOrEmpty(Label))
+    {
+        <div class="confidence-bar-label">
+            @Label
+        </div>
+    }
+    <div class="confidence-bar-wrapper">
+        <div class="confidence-bar"
+             role="progressbar"
+             aria-valuemin="0"
+             aria-valuemax="100"
+             aria-valuenow="@PercentageValue"
+             aria-label="@AriaLabel">
+            <div class="confidence-bar-fill @CssClass"
+                 style="width: @PercentageValue%">
+            </div>
+        </div>
+        @if (ShowValue)
+        {
+            <span class="confidence-bar-value @CssClass">
+                @ConfidenceHelper.FormatAsPercentage(Score)
+            </span>
+        }
+    </div>
+    @if (ShowDescription)
+    {
+        <div class="confidence-bar-description">
+            @ConfidenceHelper.GetDescription(Score)
+        </div>
+    }
+</div>
+
+<style>
+    .confidence-bar-container {
+        width: 100%;
+    }
+
+    .confidence-bar-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #4b5563;
+        margin-bottom: 0.25rem;
+    }
+
+    .confidence-bar-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .confidence-bar-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        min-width: 3rem;
+        text-align: right;
+    }
+
+    .confidence-bar-value.confidence-high {
+        color: #10b981;
+    }
+
+    .confidence-bar-value.confidence-medium {
+        color: #f59e0b;
+    }
+
+    .confidence-bar-value.confidence-low {
+        color: #ef4444;
+    }
+
+    .confidence-bar-description {
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+
+    /* Dark mode support */
+    @@media (prefers-color-scheme: dark) {
+        .confidence-bar-label {
+            color: #d1d5db;
+        }
+
+        .confidence-bar-value.confidence-high {
+            color: #34d399;
+        }
+
+        .confidence-bar-value.confidence-medium {
+            color: #fbbf24;
+        }
+
+        .confidence-bar-value.confidence-low {
+            color: #f87171;
+        }
+
+        .confidence-bar-description {
+            color: #9ca3af;
+        }
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// The confidence score to display (0.0 to 1.0).
+    /// </summary>
+    [Parameter]
+    public double Score { get; set; }
+
+    /// <summary>
+    /// Optional label to display above the bar.
+    /// </summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Whether to show the label.
+    /// </summary>
+    [Parameter]
+    public bool ShowLabel { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show the percentage value next to the bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowValue { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show the description text below the bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowDescription { get; set; } = false;
+
+    /// <summary>
+    /// Gets the percentage value for display.
+    /// </summary>
+    private int PercentageValue => (int)(Math.Max(0, Math.Min(1, Score)) * 100);
+
+    /// <summary>
+    /// Gets the CSS class for the confidence level.
+    /// </summary>
+    private string CssClass => ConfidenceHelper.GetCssClass(Score);
+
+    /// <summary>
+    /// Gets the ARIA label for accessibility.
+    /// </summary>
+    private string AriaLabel => string.IsNullOrEmpty(Label) 
+        ? ConfidenceHelper.GetAriaLabel(Score)
+        : $"{Label}: {ConfidenceHelper.GetAriaLabel(Score)}";
+}

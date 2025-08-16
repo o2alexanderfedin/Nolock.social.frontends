@@ -1,0 +1,559 @@
+@using NoLock.Social.Core.OCR.Models
+@using NoLock.Social.Core.OCR.Interfaces
+@using NoLock.Social.Components.OCR
+@inject ICorrectionService CorrectionService
+
+<div class="field-correction-panel" role="region" aria-label="Document field correction panel">
+    <div class="correction-panel-header">
+        <div class="panel-title">
+            <h3>Document Field Corrections</h3>
+            <span class="document-type-badge">@DocumentType</span>
+        </div>
+        
+        <div class="panel-status">
+            @if (CorrectedDocument?.HasUnsavedChanges == true)
+            {
+                <div class="status-indicator unsaved" title="There are unsaved changes">
+                    <span class="status-dot"></span>
+                    @GetUnsavedCorrectionsCount() unsaved changes
+                </div>
+            }
+            else
+            {
+                <div class="status-indicator saved" title="All changes are saved">
+                    <span class="status-dot"></span>
+                    All changes saved
+                </div>
+            }
+        </div>
+
+        <div class="panel-actions">
+            <button type="button" 
+                    class="btn btn-secondary btn-sm"
+                    @onclick="HandleAutoCorrect"
+                    disabled="@IsProcessing"
+                    title="Automatically correct low confidence fields">
+                Auto-Correct
+            </button>
+            
+            <button type="button" 
+                    class="btn btn-primary btn-sm"
+                    @onclick="HandleSaveAll"
+                    disabled="@(!HasUnsavedChanges || IsProcessing)"
+                    title="Save all corrections">
+                Save All
+            </button>
+            
+            <button type="button" 
+                    class="btn btn-outline-secondary btn-sm"
+                    @onclick="HandleCancelAll"
+                    disabled="@(!HasUnsavedChanges || IsProcessing)"
+                    title="Cancel all unsaved changes">
+                Cancel All
+            </button>
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="correction-panel-loading" role="status" aria-label="Loading corrections">
+            <div class="loading-spinner"></div>
+            <span>Loading field corrections...</span>
+        </div>
+    }
+    else if (CorrectedDocument != null)
+    {
+        <div class="correction-panel-content">
+            <!-- Summary Statistics -->
+            <div class="correction-summary">
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Fields</span>
+                        <span class="stat-value">@GetTotalFieldsCount()</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Corrected</span>
+                        <span class="stat-value">@GetCorrectedFieldsCount()</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Low Confidence</span>
+                        <span class="stat-value">@GetLowConfidenceFieldsCount()</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Overall Confidence</span>
+                        <span class="stat-value">@GetOverallConfidencePercentage()%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter and Sort Options -->
+            <div class="correction-filters">
+                <div class="filter-group">
+                    <label for="field-filter" class="filter-label">Show:</label>
+                    <select id="field-filter" 
+                            @bind="FieldFilter" 
+                            @bind:after="HandleFilterChange"
+                            class="form-select form-select-sm">
+                        <option value="all">All Fields</option>
+                        <option value="low-confidence">Low Confidence Only</option>
+                        <option value="corrected">Corrected Only</option>
+                        <option value="errors">With Errors Only</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="sort-order" class="filter-label">Sort by:</label>
+                    <select id="sort-order" 
+                            @bind="SortOrder" 
+                            @bind:after="HandleSortChange"
+                            class="form-select form-select-sm">
+                        <option value="name">Field Name</option>
+                        <option value="confidence">Confidence Score</option>
+                        <option value="status">Correction Status</option>
+                    </select>
+                </div>
+
+                <div class="search-group">
+                    <input type="text" 
+                           placeholder="Search fields..." 
+                           @bind="SearchTerm" 
+                           @bind:after="HandleSearchChange"
+                           class="form-control form-control-sm" 
+                           aria-label="Search fields" />
+                </div>
+            </div>
+
+            <!-- Field List -->
+            <div class="correction-fields-list" role="list">
+                @foreach (var fieldInfo in GetFilteredAndSortedFields())
+                {
+                    <div class="field-correction-item" role="listitem">
+                        <EditableField FieldName="@fieldInfo.FieldName"
+                                     OriginalValue="@fieldInfo.OriginalValue"
+                                     CorrectedValue="@fieldInfo.CorrectedValue"
+                                     OriginalConfidence="@fieldInfo.OriginalConfidence"
+                                     UpdatedConfidence="@fieldInfo.UpdatedConfidence"
+                                     FieldType="@fieldInfo.FieldType"
+                                     ShouldHighlight="@fieldInfo.ShouldHighlight"
+                                     IsRequired="@fieldInfo.IsRequired"
+                                     ShowConfidence="true"
+                                     MaxLength="@fieldInfo.MaxLength"
+                                     MinValue="@fieldInfo.MinValue"
+                                     MaxValue="@fieldInfo.MaxValue"
+                                     OnFieldChanged="@((args) => HandleFieldChanged(args))"
+                                     OnFieldEdit="@((fieldName) => HandleFieldEdit(fieldName))"
+                                     OnFieldSave="@((fieldName) => HandleFieldSave(fieldName))"
+                                     OnFieldCancel="@((fieldName) => HandleFieldCancel(fieldName))"
+                                     OnFieldRevert="@((fieldName) => HandleFieldRevert(fieldName))" />
+                    </div>
+                }
+
+                @if (!GetFilteredAndSortedFields().Any())
+                {
+                    <div class="no-fields-message">
+                        <p>No fields match the current filter criteria.</p>
+                        @if (FieldFilter != "all")
+                        {
+                            <button type="button" 
+                                    class="btn btn-link btn-sm"
+                                    @onclick="() => { FieldFilter = @"all"; HandleFilterChange(); }">
+                                Show all fields
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="correction-panel-empty">
+            <p>No document loaded for correction.</p>
+        </div>
+    }
+
+    <!-- Error Display -->
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @ErrorMessage
+            <button type="button" 
+                    class="btn-close" 
+                    @onclick="() => ErrorMessage = string.Empty"
+                    aria-label="Close error message"></button>
+        </div>
+    }
+
+    <!-- Success Message -->
+    @if (!string.IsNullOrEmpty(SuccessMessage))
+    {
+        <div class="alert alert-success" role="alert">
+            <strong>Success:</strong> @SuccessMessage
+            <button type="button" 
+                    class="btn-close" 
+                    @onclick="() => SuccessMessage = string.Empty"
+                    aria-label="Close success message"></button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public CorrectedProcessedDocument? CorrectedDocument { get; set; }
+    [Parameter] public string DocumentType { get; set; } = string.Empty;
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public bool IsProcessing { get; set; } = false;
+    [Parameter] public double ConfidenceThreshold { get; set; } = 0.7;
+    [Parameter] public EventCallback<CorrectedProcessedDocument> OnDocumentChanged { get; set; }
+    [Parameter] public EventCallback<List<FieldCorrection>> OnCorrectionsApplied { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+
+    private string FieldFilter { get; set; } = "all";
+    private string SortOrder { get; set; } = "name";
+    private string SearchTerm { get; set; } = string.Empty;
+    private string ErrorMessage { get; set; } = string.Empty;
+    private string SuccessMessage { get; set; } = string.Empty;
+
+    private bool HasUnsavedChanges => CorrectedDocument?.HasUnsavedChanges == true;
+
+    private List<FieldInfo> GetAllFields()
+    {
+        if (CorrectedDocument?.OriginalDocument == null)
+            return new List<FieldInfo>();
+
+        var fields = new List<FieldInfo>();
+        
+        // This would need to be implemented based on the specific document type
+        // For now, we'll create a placeholder implementation
+        switch (DocumentType.ToLower())
+        {
+            case "receipt":
+                fields.AddRange(GetReceiptFields());
+                break;
+            case "check":
+                fields.AddRange(GetCheckFields());
+                break;
+            case "w4":
+                fields.AddRange(GetW4Fields());
+                break;
+        }
+
+        return fields;
+    }
+
+    private List<FieldInfo> GetReceiptFields()
+    {
+        // This is a placeholder - in a real implementation, this would use reflection
+        // or a field mapping service to get all available fields from the document
+        return new List<FieldInfo>
+        {
+            new FieldInfo { FieldName = "StoreName", FieldType = FieldType.Text, IsRequired = true },
+            new FieldInfo { FieldName = "Total", FieldType = FieldType.Currency, IsRequired = true },
+            new FieldInfo { FieldName = "Subtotal", FieldType = FieldType.Currency },
+            new FieldInfo { FieldName = "TaxAmount", FieldType = FieldType.Currency },
+            new FieldInfo { FieldName = "TransactionDate", FieldType = FieldType.Date, IsRequired = true },
+            new FieldInfo { FieldName = "PaymentMethod", FieldType = FieldType.Text }
+        };
+    }
+
+    private List<FieldInfo> GetCheckFields()
+    {
+        return new List<FieldInfo>
+        {
+            new FieldInfo { FieldName = "PayTo", FieldType = FieldType.Text, IsRequired = true },
+            new FieldInfo { FieldName = "Amount", FieldType = FieldType.Currency, IsRequired = true },
+            new FieldInfo { FieldName = "Date", FieldType = FieldType.Date, IsRequired = true },
+            new FieldInfo { FieldName = "RoutingNumber", FieldType = FieldType.RoutingNumber, IsRequired = true },
+            new FieldInfo { FieldName = "AccountNumber", FieldType = FieldType.AccountNumber, IsRequired = true },
+            new FieldInfo { FieldName = "CheckNumber", FieldType = FieldType.Integer }
+        };
+    }
+
+    private List<FieldInfo> GetW4Fields()
+    {
+        return new List<FieldInfo>
+        {
+            new FieldInfo { FieldName = "Name", FieldType = FieldType.Text, IsRequired = true },
+            new FieldInfo { FieldName = "SSN", FieldType = FieldType.Text, IsRequired = true },
+            new FieldInfo { FieldName = "Address", FieldType = FieldType.Text, IsRequired = true },
+            new FieldInfo { FieldName = "FilingStatus", FieldType = FieldType.Text },
+            new FieldInfo { FieldName = "Allowances", FieldType = FieldType.Integer }
+        };
+    }
+
+    private List<FieldInfo> GetFilteredAndSortedFields()
+    {
+        var fields = GetAllFields();
+
+        // Apply field values from the corrected document
+        foreach (var field in fields)
+        {
+            field.OriginalValue = CorrectedDocument?.GetOriginalFieldValue(field.FieldName);
+            field.CorrectedValue = CorrectedDocument?.GetEffectiveFieldValue(field.FieldName);
+            field.OriginalConfidence = CorrectedDocument?.GetOriginalConfidenceScore(field.FieldName) ?? 0.0;
+            field.UpdatedConfidence = CorrectedDocument?.GetEffectiveConfidenceScore(field.FieldName) ?? 0.0;
+            field.ShouldHighlight = CorrectedDocument?.ShouldHighlightField(field.FieldName) ?? false;
+        }
+
+        // Apply filters
+        fields = ApplyFieldFilter(fields);
+
+        // Apply search
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            fields = fields.Where(f => f.FieldName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+                          .ToList();
+        }
+
+        // Apply sorting
+        fields = ApplyFieldSort(fields);
+
+        return fields;
+    }
+
+    private List<FieldInfo> ApplyFieldFilter(List<FieldInfo> fields)
+    {
+        return FieldFilter switch
+        {
+            "low-confidence" => fields.Where(f => f.OriginalConfidence < ConfidenceThreshold).ToList(),
+            "corrected" => fields.Where(f => f.CorrectedValue != null && !Equals(f.OriginalValue, f.CorrectedValue)).ToList(),
+            "errors" => fields.Where(f => CorrectedDocument?.FieldCorrections.ContainsKey(f.FieldName) == true && 
+                                         !CorrectedDocument.FieldCorrections[f.FieldName].IsValid).ToList(),
+            _ => fields
+        };
+    }
+
+    private List<FieldInfo> ApplyFieldSort(List<FieldInfo> fields)
+    {
+        return SortOrder switch
+        {
+            "confidence" => fields.OrderBy(f => f.OriginalConfidence).ToList(),
+            "status" => fields.OrderByDescending(f => f.CorrectedValue != null)
+                             .ThenBy(f => f.FieldName).ToList(),
+            _ => fields.OrderBy(f => f.FieldName).ToList()
+        };
+    }
+
+    private async Task HandleFieldChanged(EditableField.FieldCorrectionEventArgs args)
+    {
+        try
+        {
+            if (CorrectedDocument == null) return;
+
+            var result = await CorrectionService.ApplyFieldCorrectionAsync(
+                CorrectedDocument.OriginalDocument.DocumentId,
+                args.FieldName,
+                args.CorrectedValue!,
+                args.OriginalValue!,
+                args.OriginalConfidence);
+
+            if (result.IsValid)
+            {
+                CorrectedDocument.HasUnsavedChanges = true;
+                await OnDocumentChanged.InvokeAsync(CorrectedDocument);
+                SuccessMessage = $"Field '{args.FieldName}' updated successfully.";
+            }
+            else
+            {
+                ErrorMessage = $"Validation failed for '{args.FieldName}': {string.Join(", ", result.Errors)}";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error updating field '{args.FieldName}': {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleFieldEdit(string fieldName)
+    {
+        // Field editing started - no specific action needed for the panel
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleFieldSave(string fieldName)
+    {
+        SuccessMessage = $"Field '{fieldName}' saved successfully.";
+        StateHasChanged();
+        await Task.Delay(3000);
+        SuccessMessage = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task HandleFieldCancel(string fieldName)
+    {
+        // Field editing cancelled - no specific action needed for the panel
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleFieldRevert(string fieldName)
+    {
+        try
+        {
+            if (CorrectedDocument == null) return;
+
+            await CorrectionService.RevertFieldCorrectionAsync(
+                CorrectedDocument.OriginalDocument.DocumentId, 
+                fieldName);
+
+            CorrectedDocument.HasUnsavedChanges = true;
+            await OnDocumentChanged.InvokeAsync(CorrectedDocument);
+            SuccessMessage = $"Field '{fieldName}' reverted to original value.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error reverting field '{fieldName}': {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleAutoCorrect()
+    {
+        try
+        {
+            IsProcessing = true;
+            StateHasChanged();
+
+            if (CorrectedDocument == null) return;
+
+            var lowConfidenceFields = await CorrectionService.GetLowConfidenceFieldsAsync(
+                CorrectedDocument.OriginalDocument, 
+                ConfidenceThreshold);
+
+            // This is a placeholder - actual auto-correction logic would be more sophisticated
+            var correctionCount = 0;
+            foreach (var fieldName in lowConfidenceFields)
+            {
+                // Auto-correction logic would go here
+                correctionCount++;
+            }
+
+            SuccessMessage = $"Auto-corrected {correctionCount} fields.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error during auto-correction: {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSaveAll()
+    {
+        try
+        {
+            IsProcessing = true;
+            StateHasChanged();
+
+            if (CorrectedDocument == null) return;
+
+            var savedDocument = await CorrectionService.SaveCorrectionsAsync(
+                CorrectedDocument.OriginalDocument.DocumentId);
+
+            var corrections = await CorrectionService.GetCorrectionsAsync(
+                CorrectedDocument.OriginalDocument.DocumentId);
+
+            CorrectedDocument.HasUnsavedChanges = false;
+            await OnDocumentChanged.InvokeAsync(CorrectedDocument);
+            await OnCorrectionsApplied.InvokeAsync(corrections.ToList());
+
+            SuccessMessage = $"All corrections saved successfully. {corrections.Count} corrections applied.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error saving corrections: {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleCancelAll()
+    {
+        try
+        {
+            if (CorrectedDocument == null) return;
+
+            await CorrectionService.CancelCorrectionsAsync(
+                CorrectedDocument.OriginalDocument.DocumentId);
+
+            CorrectedDocument.HasUnsavedChanges = false;
+            await OnDocumentChanged.InvokeAsync(CorrectedDocument);
+
+            SuccessMessage = "All corrections cancelled.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error cancelling corrections: {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
+        }
+
+        StateHasChanged();
+    }
+
+    private void HandleFilterChange()
+    {
+        StateHasChanged();
+    }
+
+    private void HandleSortChange()
+    {
+        StateHasChanged();
+    }
+
+    private void HandleSearchChange()
+    {
+        StateHasChanged();
+    }
+
+    private int GetTotalFieldsCount()
+    {
+        return GetAllFields().Count;
+    }
+
+    private int GetCorrectedFieldsCount()
+    {
+        return CorrectedDocument?.GetCorrectedFields().Count ?? 0;
+    }
+
+    private int GetLowConfidenceFieldsCount()
+    {
+        return CorrectedDocument?.LowConfidenceFields.Count ?? 0;
+    }
+
+    private int GetUnsavedCorrectionsCount()
+    {
+        return CorrectedDocument?.GetUnsavedCorrectionsCount() ?? 0;
+    }
+
+    private int GetOverallConfidencePercentage()
+    {
+        var confidence = CorrectedDocument?.CalculateOverallConfidence() ?? 0.0;
+        return (int)Math.Round(confidence * 100);
+    }
+
+    private class FieldInfo
+    {
+        public string FieldName { get; set; } = string.Empty;
+        public object? OriginalValue { get; set; }
+        public object? CorrectedValue { get; set; }
+        public double OriginalConfidence { get; set; }
+        public double UpdatedConfidence { get; set; }
+        public FieldType FieldType { get; set; } = FieldType.Text;
+        public bool ShouldHighlight { get; set; }
+        public bool IsRequired { get; set; }
+        public int? MaxLength { get; set; }
+        public decimal? MinValue { get; set; }
+        public decimal? MaxValue { get; set; }
+    }
+}

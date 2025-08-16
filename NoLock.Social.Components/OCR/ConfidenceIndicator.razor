@@ -1,0 +1,94 @@
+@using NoLock.Social.Core.OCR.Models
+
+@if (Score.HasValue)
+{
+    <span class="confidence-indicator @ConfidenceHelper.GetCssClass(Score.Value) @SizeClass"
+          aria-label="@ConfidenceHelper.GetAriaLabel(Score.Value)"
+          role="img"
+          title="@(ShowTooltip ? ConfidenceHelper.GetDescription(Score.Value) : null)">
+        @if (ShowIcon)
+        {
+            <span class="confidence-icon" aria-hidden="true">
+                @GetConfidenceIcon()
+            </span>
+        }
+        @if (ShowPercentage)
+        {
+            <span class="confidence-value">
+                @ConfidenceHelper.FormatAsPercentage(Score.Value)
+            </span>
+        }
+        @if (ShowLabel && !string.IsNullOrEmpty(Label))
+        {
+            <span class="confidence-label">
+                @Label
+            </span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>
+    /// The confidence score to display (0.0 to 1.0).
+    /// </summary>
+    [Parameter]
+    public double? Score { get; set; }
+
+    /// <summary>
+    /// Optional label to display alongside the confidence indicator.
+    /// </summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Whether to show the percentage value.
+    /// </summary>
+    [Parameter]
+    public bool ShowPercentage { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show an icon representing the confidence level.
+    /// </summary>
+    [Parameter]
+    public bool ShowIcon { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show the label text.
+    /// </summary>
+    [Parameter]
+    public bool ShowLabel { get; set; } = false;
+
+    /// <summary>
+    /// Whether to show a tooltip on hover.
+    /// </summary>
+    [Parameter]
+    public bool ShowTooltip { get; set; } = true;
+
+    /// <summary>
+    /// Size variant of the indicator (small, medium, large).
+    /// </summary>
+    [Parameter]
+    public string Size { get; set; } = "medium";
+
+    /// <summary>
+    /// Gets the CSS class for the size variant.
+    /// </summary>
+    private string SizeClass => $"confidence-{Size}";
+
+    /// <summary>
+    /// Gets the appropriate icon based on confidence level.
+    /// </summary>
+    private string GetConfidenceIcon()
+    {
+        if (!Score.HasValue) return "";
+        
+        var level = ConfidenceHelper.GetConfidenceLevel(Score.Value);
+        return level switch
+        {
+            ConfidenceLevel.High => "✓",
+            ConfidenceLevel.Medium => "!",
+            ConfidenceLevel.Low => "✗",
+            _ => "?"
+        };
+    }
+}

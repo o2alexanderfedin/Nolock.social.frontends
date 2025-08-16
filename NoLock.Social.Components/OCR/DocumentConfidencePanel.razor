@@ -1,0 +1,412 @@
+@using NoLock.Social.Core.OCR.Models
+
+<div class="document-confidence-panel" role="region" aria-labelledby="confidence-panel-title">
+    <div class="document-confidence-header">
+        <h3 id="confidence-panel-title" class="document-confidence-title">
+            @Title
+        </h3>
+        <div class="document-confidence-overall">
+            <span class="document-confidence-score @ConfidenceHelper.GetCssClass(OverallScore)"
+                  aria-label="@ConfidenceHelper.GetAriaLabel(OverallScore)">
+                @ConfidenceHelper.FormatAsPercentage(OverallScore)
+            </span>
+            <ConfidenceIndicator Score="OverallScore"
+                                ShowPercentage="false"
+                                ShowIcon="true"
+                                ShowTooltip="true"
+                                Size="medium" />
+        </div>
+    </div>
+
+    @if (ShowOverallBar)
+    {
+        <div class="document-confidence-bar-section">
+            <ConfidenceBar Score="OverallScore"
+                          Label="Overall Confidence"
+                          ShowLabel="true"
+                          ShowValue="false"
+                          ShowDescription="@ShowDescription" />
+        </div>
+    }
+
+    @if (FieldConfidences != null && FieldConfidences.Any() && ShowFieldBreakdown)
+    {
+        <div class="document-confidence-fields">
+            <h4 class="document-confidence-fields-title">Field Confidence Breakdown</h4>
+            
+            @if (ShowFieldsAsList)
+            {
+                <div class="document-confidence-fields-list">
+                    @foreach (var field in GetSortedFields())
+                    {
+                        <FieldConfidenceDisplay FieldName="@field.FieldName"
+                                              FieldValue="@field.FieldValue"
+                                              ConfidenceScore="@field.Confidence"
+                                              DisplayMode="@FieldDisplayMode"
+                                              IsInteractive="@AreFieldsInteractive"
+                                              OnFieldClick="@OnFieldClick" />
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="document-confidence-fields-grid">
+                    @foreach (var field in GetSortedFields())
+                    {
+                        <div class="document-confidence-field-item">
+                            <span class="field-name">@field.FieldName:</span>
+                            <ConfidenceIndicator Score="@field.Confidence"
+                                               ShowPercentage="true"
+                                               ShowIcon="false"
+                                               ShowTooltip="true"
+                                               Size="small" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (ShowStatistics && FieldConfidences != null && FieldConfidences.Any())
+    {
+        <div class="document-confidence-statistics">
+            <h4 class="document-confidence-fields-title">Statistics</h4>
+            <div class="statistics-grid">
+                <div class="statistic-item">
+                    <span class="statistic-label">High Confidence Fields:</span>
+                    <span class="statistic-value">@GetHighConfidenceCount()</span>
+                </div>
+                <div class="statistic-item">
+                    <span class="statistic-label">Medium Confidence Fields:</span>
+                    <span class="statistic-value">@GetMediumConfidenceCount()</span>
+                </div>
+                <div class="statistic-item">
+                    <span class="statistic-label">Low Confidence Fields:</span>
+                    <span class="statistic-value">@GetLowConfidenceCount()</span>
+                </div>
+                <div class="statistic-item">
+                    <span class="statistic-label">Average Field Confidence:</span>
+                    <span class="statistic-value">@GetAverageFieldConfidence()</span>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(AdditionalInfo))
+    {
+        <div class="document-confidence-info">
+            <p>@AdditionalInfo</p>
+        </div>
+    }
+</div>
+
+<style>
+    .document-confidence-panel {
+        padding: 1.25rem;
+        border-radius: 0.5rem;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    .document-confidence-bar-section {
+        margin: 1rem 0;
+        padding: 1rem 0;
+        border-top: 1px solid #e5e7eb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .document-confidence-fields-list {
+        max-height: 400px;
+        overflow-y: auto;
+        padding-right: 0.5rem;
+    }
+
+    .document-confidence-fields-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+    }
+
+    .document-confidence-field-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem;
+        background-color: #f9fafb;
+        border-radius: 0.25rem;
+    }
+
+    .field-name {
+        font-size: 0.875rem;
+        color: #4b5563;
+        font-weight: 500;
+    }
+
+    .document-confidence-statistics {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .statistics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 0.75rem;
+    }
+
+    .statistic-item {
+        display: flex;
+        flex-direction: column;
+        padding: 0.75rem;
+        background-color: #f9fafb;
+        border-radius: 0.375rem;
+    }
+
+    .statistic-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.25rem;
+    }
+
+    .statistic-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .document-confidence-info {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background-color: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        border-radius: 0.25rem;
+    }
+
+    .document-confidence-info p {
+        margin: 0;
+        color: #1e40af;
+        font-size: 0.875rem;
+    }
+
+    /* Dark mode support */
+    @@media (prefers-color-scheme: dark) {
+        .document-confidence-panel {
+            background-color: #1f2937;
+            border-color: #374151;
+        }
+
+        .document-confidence-bar-section {
+            border-color: #374151;
+        }
+
+        .document-confidence-field-item {
+            background-color: #111827;
+        }
+
+        .field-name {
+            color: #d1d5db;
+        }
+
+        .document-confidence-statistics {
+            border-top-color: #374151;
+        }
+
+        .statistic-item {
+            background-color: #111827;
+        }
+
+        .statistic-label {
+            color: #9ca3af;
+        }
+
+        .statistic-value {
+            color: #f9fafb;
+        }
+
+        .document-confidence-info {
+            background-color: #1e3a8a;
+            border-color: #3b82f6;
+        }
+
+        .document-confidence-info p {
+            color: #dbeafe;
+        }
+    }
+
+    /* Scrollbar styling */
+    .document-confidence-fields-list::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .document-confidence-fields-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+
+    .document-confidence-fields-list::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 3px;
+    }
+
+    .document-confidence-fields-list::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// Title of the confidence panel.
+    /// </summary>
+    [Parameter]
+    public string Title { get; set; } = "Document Confidence";
+
+    /// <summary>
+    /// Overall document confidence score (0.0 to 1.0).
+    /// </summary>
+    [Parameter]
+    public double OverallScore { get; set; }
+
+    /// <summary>
+    /// List of field-level confidence scores.
+    /// </summary>
+    [Parameter]
+    public List<FieldConfidence>? FieldConfidences { get; set; }
+
+    /// <summary>
+    /// Whether to show the overall confidence bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowOverallBar { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show the field breakdown section.
+    /// </summary>
+    [Parameter]
+    public bool ShowFieldBreakdown { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show fields as a list (true) or grid (false).
+    /// </summary>
+    [Parameter]
+    public bool ShowFieldsAsList { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show statistics section.
+    /// </summary>
+    [Parameter]
+    public bool ShowStatistics { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show description text for overall confidence.
+    /// </summary>
+    [Parameter]
+    public bool ShowDescription { get; set; } = true;
+
+    /// <summary>
+    /// Display mode for field confidence indicators.
+    /// </summary>
+    [Parameter]
+    public FieldConfidenceDisplay.ConfidenceDisplayMode FieldDisplayMode { get; set; } = 
+        FieldConfidenceDisplay.ConfidenceDisplayMode.Both;
+
+    /// <summary>
+    /// Whether fields are interactive (clickable).
+    /// </summary>
+    [Parameter]
+    public bool AreFieldsInteractive { get; set; } = false;
+
+    /// <summary>
+    /// Event callback when a field is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnFieldClick { get; set; }
+
+    /// <summary>
+    /// Additional information to display at the bottom of the panel.
+    /// </summary>
+    [Parameter]
+    public string? AdditionalInfo { get; set; }
+
+    /// <summary>
+    /// How to sort the fields (by confidence, name, or none).
+    /// </summary>
+    [Parameter]
+    public FieldSortOrder SortOrder { get; set; } = FieldSortOrder.ByConfidence;
+
+    /// <summary>
+    /// Gets the sorted list of fields based on the sort order.
+    /// </summary>
+    private IEnumerable<FieldConfidence> GetSortedFields()
+    {
+        if (FieldConfidences == null || !FieldConfidences.Any())
+            return Enumerable.Empty<FieldConfidence>();
+
+        return SortOrder switch
+        {
+            FieldSortOrder.ByConfidence => FieldConfidences.OrderBy(f => f.Confidence),
+            FieldSortOrder.ByName => FieldConfidences.OrderBy(f => f.FieldName),
+            _ => FieldConfidences
+        };
+    }
+
+    /// <summary>
+    /// Gets the count of high confidence fields.
+    /// </summary>
+    private int GetHighConfidenceCount()
+    {
+        return FieldConfidences?.Count(f => ConfidenceHelper.GetConfidenceLevel(f.Confidence) == ConfidenceLevel.High) ?? 0;
+    }
+
+    /// <summary>
+    /// Gets the count of medium confidence fields.
+    /// </summary>
+    private int GetMediumConfidenceCount()
+    {
+        return FieldConfidences?.Count(f => ConfidenceHelper.GetConfidenceLevel(f.Confidence) == ConfidenceLevel.Medium) ?? 0;
+    }
+
+    /// <summary>
+    /// Gets the count of low confidence fields.
+    /// </summary>
+    private int GetLowConfidenceCount()
+    {
+        return FieldConfidences?.Count(f => ConfidenceHelper.GetConfidenceLevel(f.Confidence) == ConfidenceLevel.Low) ?? 0;
+    }
+
+    /// <summary>
+    /// Gets the average field confidence as a formatted percentage.
+    /// </summary>
+    private string GetAverageFieldConfidence()
+    {
+        if (FieldConfidences == null || !FieldConfidences.Any())
+            return "N/A";
+
+        var average = FieldConfidences.Average(f => f.Confidence);
+        return ConfidenceHelper.FormatAsPercentage(average);
+    }
+
+    /// <summary>
+    /// Represents a field with its confidence score.
+    /// </summary>
+    public class FieldConfidence
+    {
+        public string FieldName { get; set; } = string.Empty;
+        public string? FieldValue { get; set; }
+        public double Confidence { get; set; }
+    }
+
+    /// <summary>
+    /// Defines the sort order for fields.
+    /// </summary>
+    public enum FieldSortOrder
+    {
+        None,
+        ByConfidence,
+        ByName
+    }
+}

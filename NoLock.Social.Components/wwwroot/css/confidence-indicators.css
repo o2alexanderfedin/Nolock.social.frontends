@@ -1,0 +1,363 @@
+/* Confidence Indicator Styles */
+
+/* Base styles */
+.confidence-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    cursor: default;
+}
+
+/* Size variants */
+.confidence-indicator.confidence-small {
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+}
+
+.confidence-indicator.confidence-medium {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.confidence-indicator.confidence-large {
+    font-size: 1rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Confidence level colors */
+.confidence-indicator.confidence-high {
+    background-color: #10b98120;
+    color: #10b981;
+    border: 1px solid #10b98140;
+}
+
+.confidence-indicator.confidence-high:hover {
+    background-color: #10b98130;
+    border-color: #10b98160;
+}
+
+.confidence-indicator.confidence-medium {
+    background-color: #f59e0b20;
+    color: #f59e0b;
+    border: 1px solid #f59e0b40;
+}
+
+.confidence-indicator.confidence-medium:hover {
+    background-color: #f59e0b30;
+    border-color: #f59e0b60;
+}
+
+.confidence-indicator.confidence-low {
+    background-color: #ef444420;
+    color: #ef4444;
+    border: 1px solid #ef444440;
+}
+
+.confidence-indicator.confidence-low:hover {
+    background-color: #ef444430;
+    border-color: #ef444460;
+}
+
+/* Icon styles */
+.confidence-icon {
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+/* Value styles */
+.confidence-value {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Label styles */
+.confidence-label {
+    opacity: 0.9;
+    margin-left: 0.125rem;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .confidence-indicator.confidence-high {
+        background-color: #10b98115;
+        color: #34d399;
+        border-color: #10b98130;
+    }
+    
+    .confidence-indicator.confidence-high:hover {
+        background-color: #10b98125;
+        border-color: #10b98150;
+    }
+    
+    .confidence-indicator.confidence-medium {
+        background-color: #f59e0b15;
+        color: #fbbf24;
+        border-color: #f59e0b30;
+    }
+    
+    .confidence-indicator.confidence-medium:hover {
+        background-color: #f59e0b25;
+        border-color: #f59e0b50;
+    }
+    
+    .confidence-indicator.confidence-low {
+        background-color: #ef444415;
+        color: #f87171;
+        border-color: #ef444430;
+    }
+    
+    .confidence-indicator.confidence-low:hover {
+        background-color: #ef444425;
+        border-color: #ef444450;
+    }
+}
+
+/* Confidence Bar Styles */
+.confidence-bar {
+    position: relative;
+    width: 100%;
+    height: 0.5rem;
+    background-color: #e5e7eb;
+    border-radius: 0.25rem;
+    overflow: hidden;
+}
+
+.confidence-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    transition: width 0.3s ease-in-out, background-color 0.3s ease-in-out;
+    border-radius: 0.25rem;
+}
+
+.confidence-bar-fill.confidence-high {
+    background-color: #10b981;
+}
+
+.confidence-bar-fill.confidence-medium {
+    background-color: #f59e0b;
+}
+
+.confidence-bar-fill.confidence-low {
+    background-color: #ef4444;
+}
+
+/* Dark mode for confidence bar */
+@media (prefers-color-scheme: dark) {
+    .confidence-bar {
+        background-color: #374151;
+    }
+    
+    .confidence-bar-fill.confidence-high {
+        background-color: #34d399;
+    }
+    
+    .confidence-bar-fill.confidence-medium {
+        background-color: #fbbf24;
+    }
+    
+    .confidence-bar-fill.confidence-low {
+        background-color: #f87171;
+    }
+}
+
+/* Field Confidence Display Styles */
+.field-confidence {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    background-color: #f9fafb;
+    margin-bottom: 0.5rem;
+}
+
+.field-confidence:hover {
+    background-color: #f3f4f6;
+}
+
+.field-confidence-label {
+    font-weight: 500;
+    color: #374151;
+    flex: 1;
+}
+
+.field-confidence-value {
+    color: #6b7280;
+    margin: 0 0.5rem;
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+.field-confidence-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Dark mode for field confidence */
+@media (prefers-color-scheme: dark) {
+    .field-confidence {
+        background-color: #1f2937;
+    }
+    
+    .field-confidence:hover {
+        background-color: #374151;
+    }
+    
+    .field-confidence-label {
+        color: #e5e7eb;
+    }
+    
+    .field-confidence-value {
+        color: #9ca3af;
+    }
+}
+
+/* Document Confidence Panel Styles */
+.document-confidence-panel {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.document-confidence-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.document-confidence-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.document-confidence-overall {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.document-confidence-score {
+    font-size: 1.5rem;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+}
+
+.document-confidence-score.confidence-high {
+    color: #10b981;
+}
+
+.document-confidence-score.confidence-medium {
+    color: #f59e0b;
+}
+
+.document-confidence-score.confidence-low {
+    color: #ef4444;
+}
+
+.document-confidence-fields {
+    margin-top: 1rem;
+}
+
+.document-confidence-fields-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+/* Dark mode for document panel */
+@media (prefers-color-scheme: dark) {
+    .document-confidence-panel {
+        background-color: #1f2937;
+        border-color: #374151;
+    }
+    
+    .document-confidence-header {
+        border-bottom-color: #374151;
+    }
+    
+    .document-confidence-title {
+        color: #f9fafb;
+    }
+    
+    .document-confidence-score.confidence-high {
+        color: #34d399;
+    }
+    
+    .document-confidence-score.confidence-medium {
+        color: #fbbf24;
+    }
+    
+    .document-confidence-score.confidence-low {
+        color: #f87171;
+    }
+    
+    .document-confidence-fields-title {
+        color: #9ca3af;
+    }
+}
+
+/* Tooltip styles */
+.confidence-tooltip {
+    position: relative;
+}
+
+.confidence-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.5rem 0.75rem;
+    background-color: #1f2937;
+    color: #f9fafb;
+    font-size: 0.75rem;
+    border-radius: 0.375rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    margin-bottom: 0.25rem;
+    z-index: 1000;
+}
+
+.confidence-tooltip:hover::after {
+    opacity: 1;
+}
+
+/* Accessibility focus styles */
+.confidence-indicator:focus,
+.field-confidence:focus-within {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .confidence-indicator {
+        border: 1px solid currentColor !important;
+        background-color: transparent !important;
+    }
+    
+    .confidence-bar {
+        border: 1px solid #000;
+    }
+    
+    .confidence-bar-fill {
+        background-color: #666 !important;
+    }
+}
