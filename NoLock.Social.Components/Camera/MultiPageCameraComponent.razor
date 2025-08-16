@@ -24,7 +24,7 @@
     <!-- Camera Preview -->
     <CameraPreview 
         OnImageAccepted="OnImageCaptured"
-        OnImageEnhanced="OnImageEnhanced" />
+        OnImageEnhanced="HandleImageEnhanced" />
 
     <!-- Action Buttons -->
     @if (HasCapturedPages)
@@ -177,7 +177,7 @@
         }
     }
     
-    private async Task OnImageEnhanced(CapturedImage enhancedImage)
+    private async Task HandleImageEnhanced(CapturedImage enhancedImage)
     {
         // Forward the enhanced image event to parent component
         if (OnImageEnhanced.HasDelegate)

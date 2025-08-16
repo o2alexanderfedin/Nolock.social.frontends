@@ -52,6 +52,22 @@ namespace NoLock.Social.Core.ImageProcessing.Models
         /// Quality assessment of the enhanced image (0-100)
         /// </summary>
         public int QualityScore { get; set; }
+
+        /// <summary>
+        /// Alias for overall success state
+        /// </summary>
+        public bool Success => IsSuccessful;
+
+        /// <summary>
+        /// Returns an enhanced CapturedImage object
+        /// </summary>
+        public Core.Camera.Models.CapturedImage EnhancedImage => new Core.Camera.Models.CapturedImage
+        {
+            ImageData = EnhancedImageData,
+            ImageUrl = EnhancedImageData,
+            Timestamp = DateTime.UtcNow,
+            Quality = QualityScore
+        };
     }
 
     /// <summary>

@@ -43,5 +43,10 @@ namespace NoLock.Social.Core.Camera.Models
         /// List of suggestions for improving image quality
         /// </summary>
         public List<string> Suggestions { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Indicates if the quality is acceptable for processing
+        /// </summary>
+        public bool IsAcceptable => OverallScore >= 70;
     }
 }

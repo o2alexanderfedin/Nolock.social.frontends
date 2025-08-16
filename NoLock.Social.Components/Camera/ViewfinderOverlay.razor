@@ -1,4 +1,5 @@
 @namespace NoLock.Social.Components.Camera
+@using NoLock.Social.Core.Camera.Models
 
 <style>
     .viewfinder-overlay {
@@ -109,8 +110,6 @@
 </div>
 
 @code {
-    using NoLock.Social.Models.Enums;
-    
     [Parameter]
     public DocumentType DocumentType { get; set; } = DocumentType.Generic;
     

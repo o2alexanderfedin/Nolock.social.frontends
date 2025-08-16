@@ -1,7 +1,6 @@
 @namespace NoLock.Social.Components.Camera
 @using NoLock.Social.Core.Camera.Interfaces
 @using NoLock.Social.Core.Camera.Models
-@using NoLock.Social.Core.Scanner.Models
 @using NoLock.Social.Components.Camera
 @using NoLock.Social.Core.Accessibility.Interfaces
 @using NoLock.Social.Core.ImageProcessing.Interfaces
@@ -375,12 +374,12 @@
             await AnnounceToScreenReader("Starting image enhancement. Please wait...");
             
             // Apply enhancement to the captured image
-            var enhancedImage = await ImageEnhancementService.EnhanceImageAsync(CapturedImage);
+            var enhancementResult = await ImageEnhancementService.EnhanceImageAsync(CapturedImage);
             
-            if (enhancedImage != null)
+            if (enhancementResult != null && enhancementResult.Success)
             {
                 // Replace the current image with the enhanced version
-                CapturedImage = enhancedImage;
+                CapturedImage = enhancementResult.EnhancedImage;
                 
                 // Re-analyze quality after enhancement
                 try

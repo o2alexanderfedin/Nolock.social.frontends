@@ -40,5 +40,10 @@ namespace NoLock.Social.Core.Camera.Models
         /// Quality assessment score (0-100) indicating image clarity and suitability for OCR
         /// </summary>
         public int Quality { get; set; }
+
+        /// <summary>
+        /// Data URL for displaying the image (alias for ImageUrl)
+        /// </summary>
+        public string DataUrl => ImageUrl;
     }
 }

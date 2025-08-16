@@ -34,6 +34,7 @@ namespace NoLock.Social.Core.Camera.Interfaces
         Task<string> CreateDocumentSessionAsync();
         Task AddPageToSessionAsync(string sessionId, CapturedImage capturedImage);
         Task<CapturedImage[]> GetSessionPagesAsync(string sessionId);
+        Task<DocumentSession> GetDocumentSessionAsync(string sessionId);
         Task RemovePageFromSessionAsync(string sessionId, int pageIndex);
         Task ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex);
         Task ClearDocumentSessionAsync(string sessionId);
