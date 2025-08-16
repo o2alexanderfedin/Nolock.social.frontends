@@ -1,0 +1,219 @@
+/* Accessibility Themes for Camera Components */
+/* High Contrast Mode Support - WCAG 2.1 AA Compliant */
+
+/* Base theme variables - normal mode */
+:root {
+  /* Camera component colors */
+  --camera-bg-primary: #ffffff;
+  --camera-bg-secondary: #f8f9fa;
+  --camera-text-primary: #212529;
+  --camera-text-secondary: #6c757d;
+  --camera-border-primary: #dee2e6;
+  --camera-border-focus: #0d6efd;
+  --camera-button-primary: #0d6efd;
+  --camera-button-primary-text: #ffffff;
+  --camera-button-secondary: #6c757d;
+  --camera-button-secondary-text: #ffffff;
+  --camera-success: #198754;
+  --camera-success-text: #ffffff;
+  --camera-danger: #dc3545;
+  --camera-danger-text: #ffffff;
+  --camera-warning: #ffc107;
+  --camera-warning-text: #000000;
+  
+  /* Camera overlay colors */
+  --camera-overlay-bg: rgba(0, 0, 0, 0.75);
+  --camera-overlay-text: #ffffff;
+  --camera-viewfinder-border: #ffffff;
+  --camera-focus-indicator: #00ff00;
+  
+  /* Interactive element spacing and sizing */
+  --camera-focus-outline-width: 2px;
+  --camera-touch-target-min: 44px;
+}
+
+/* High Contrast Dark Theme */
+[data-theme="high-contrast-dark"] {
+  /* Pure black and white for maximum contrast */
+  --camera-bg-primary: #000000;
+  --camera-bg-secondary: #000000;
+  --camera-text-primary: #ffffff;
+  --camera-text-secondary: #ffffff;
+  --camera-border-primary: #ffffff;
+  --camera-border-focus: #ffff00;
+  
+  /* High contrast button colors */
+  --camera-button-primary: #ffffff;
+  --camera-button-primary-text: #000000;
+  --camera-button-secondary: #ffffff;
+  --camera-button-secondary-text: #000000;
+  --camera-success: #00ff00;
+  --camera-success-text: #000000;
+  --camera-danger: #ff0000;
+  --camera-danger-text: #ffffff;
+  --camera-warning: #ffff00;
+  --camera-warning-text: #000000;
+  
+  /* Camera overlay high contrast */
+  --camera-overlay-bg: #000000;
+  --camera-overlay-text: #ffffff;
+  --camera-viewfinder-border: #ffff00;
+  --camera-focus-indicator: #00ffff;
+  
+  /* Enhanced focus indicators */
+  --camera-focus-outline-width: 4px;
+}
+
+/* High Contrast Light Theme */
+[data-theme="high-contrast-light"] {
+  /* Pure white and black for maximum contrast */
+  --camera-bg-primary: #ffffff;
+  --camera-bg-secondary: #ffffff;
+  --camera-text-primary: #000000;
+  --camera-text-secondary: #000000;
+  --camera-border-primary: #000000;
+  --camera-border-focus: #0000ff;
+  
+  /* High contrast button colors */
+  --camera-button-primary: #000000;
+  --camera-button-primary-text: #ffffff;
+  --camera-button-secondary: #000000;
+  --camera-button-secondary-text: #ffffff;
+  --camera-success: #008000;
+  --camera-success-text: #ffffff;
+  --camera-danger: #800000;
+  --camera-danger-text: #ffffff;
+  --camera-warning: #ff8000;
+  --camera-warning-text: #000000;
+  
+  /* Camera overlay high contrast */
+  --camera-overlay-bg: #ffffff;
+  --camera-overlay-text: #000000;
+  --camera-viewfinder-border: #0000ff;
+  --camera-focus-indicator: #ff00ff;
+  
+  /* Enhanced focus indicators */
+  --camera-focus-outline-width: 4px;
+}
+
+/* Camera Component Base Styles */
+.camera-preview-container,
+[data-accessibility-component="camera-preview"],
+[data-accessibility-component="camera-controls"],
+[data-accessibility-component="viewfinder"],
+[data-accessibility-component="image-quality"],
+[data-accessibility-component="document-capture"] {
+  background-color: var(--camera-bg-primary);
+  color: var(--camera-text-primary);
+  border: 2px solid var(--camera-border-primary);
+}
+
+/* High contrast focus indicators for all interactive elements */
+[data-theme^="high-contrast"] .camera-preview-container button:focus,
+[data-theme^="high-contrast"] .camera-preview-container video:focus,
+[data-theme^="high-contrast"] .camera-preview-container [tabindex]:focus {
+  outline: var(--camera-focus-outline-width) solid var(--camera-border-focus) !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+}
+
+/* Button styling for high contrast */
+[data-theme^="high-contrast"] .camera-preview-container .btn-primary {
+  background-color: var(--camera-button-primary) !important;
+  color: var(--camera-button-primary-text) !important;
+  border: 3px solid var(--camera-border-primary) !important;
+}
+
+[data-theme^="high-contrast"] .camera-preview-container .btn-secondary {
+  background-color: var(--camera-button-secondary) !important;
+  color: var(--camera-button-secondary-text) !important;
+  border: 3px solid var(--camera-border-primary) !important;
+}
+
+[data-theme^="high-contrast"] .camera-preview-container .btn-success {
+  background-color: var(--camera-success) !important;
+  color: var(--camera-success-text) !important;
+  border: 3px solid var(--camera-border-primary) !important;
+}
+
+[data-theme^="high-contrast"] .camera-preview-container .btn-danger {
+  background-color: var(--camera-danger) !important;
+  color: var(--camera-danger-text) !important;
+  border: 3px solid var(--camera-border-primary) !important;
+}
+
+/* Alert styling for high contrast */
+[data-theme^="high-contrast"] .camera-preview-container .alert-danger {
+  background-color: var(--camera-danger) !important;
+  color: var(--camera-danger-text) !important;
+  border: 3px solid var(--camera-border-primary) !important;
+}
+
+/* Overlay and metadata styling */
+[data-theme^="high-contrast"] .camera-preview-container .bg-dark {
+  background-color: var(--camera-overlay-bg) !important;
+}
+
+[data-theme^="high-contrast"] .camera-preview-container .text-white {
+  color: var(--camera-overlay-text) !important;
+}
+
+/* Viewfinder and focus indicators */
+[data-theme^="high-contrast"] .viewfinder-overlay {
+  border-color: var(--camera-viewfinder-border);
+}
+
+[data-theme^="high-contrast"] .focus-indicator {
+  background-color: var(--camera-focus-indicator);
+  border-color: var(--camera-focus-indicator);
+}
+
+/* Ensure minimum touch target size for accessibility */
+[data-theme^="high-contrast"] .camera-preview-container button {
+  min-width: var(--camera-touch-target-min);
+  min-height: var(--camera-touch-target-min);
+}
+
+/* Enhanced spinner visibility in high contrast */
+[data-theme^="high-contrast"] .camera-preview-container .spinner-border {
+  border-color: var(--camera-text-primary);
+  border-right-color: transparent;
+  border-width: 3px;
+}
+
+/* Flash overlay adjustments for high contrast */
+[data-theme="high-contrast-dark"] .flash-overlay {
+  background-color: #ffffff !important;
+}
+
+[data-theme="high-contrast-light"] .flash-overlay {
+  background-color: #000000 !important;
+}
+
+/* Auto-capture countdown styling */
+[data-theme^="high-contrast"] .camera-preview-container [role="timer"] .bg-primary {
+  background-color: var(--camera-button-primary) !important;
+  color: var(--camera-button-primary-text) !important;
+  border: 4px solid var(--camera-border-focus) !important;
+}
+
+/* Responsive font sizing for better readability */
+@media (max-width: 768px) {
+  [data-theme^="high-contrast"] .camera-preview-container {
+    font-size: 1.1rem;
+  }
+  
+  [data-theme^="high-contrast"] .camera-preview-container .btn {
+    font-size: 1.1rem;
+    padding: 0.75rem 1.5rem;
+  }
+}
+
+/* Print styles for high contrast themes */
+@media print {
+  [data-theme^="high-contrast"] .camera-preview-container {
+    background: white !important;
+    color: black !important;
+    border: 2px solid black !important;
+  }
+}

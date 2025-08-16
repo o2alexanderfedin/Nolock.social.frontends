@@ -1,0 +1,262 @@
+@using Microsoft.AspNetCore.Components
+@using NoLock.Social.Core.Storage.Interfaces
+@implements IDisposable
+@inject IConnectivityService ConnectivityService
+@inject IOfflineQueueService OfflineQueueService  
+@inject ISyncService SyncService
+
+<div class="offline-status-container">
+    @if (!_isOnline)
+    {
+        <!-- Offline Badge -->
+        <div class="alert alert-warning d-flex align-items-center mb-2" role="alert">
+            <svg class="bi flex-shrink-0 me-2" width="16" height="16" role="img" aria-label="Warning:">
+                <use xlink:href="#exclamation-triangle-fill"/>
+            </svg>
+            <div>
+                <strong>Offline</strong> - Changes will sync when connection is restored
+            </div>
+        </div>
+    }
+
+    @if (_queueStatus?.PendingOperations > 0)
+    {
+        <!-- Pending Operations Counter -->
+        <div class="alert alert-info d-flex align-items-center justify-content-between mb-2" role="alert">
+            <div class="d-flex align-items-center">
+                <svg class="bi flex-shrink-0 me-2" width="16" height="16" role="img" aria-label="Info:">
+                    <use xlink:href="#info-fill"/>
+                </svg>
+                <span>@_queueStatus.PendingOperations operations pending</span>
+            </div>
+            @if (_queueStatus.HighPriorityOperations > 0)
+            {
+                <span class="badge bg-warning text-dark">@_queueStatus.HighPriorityOperations high priority</span>
+            }
+        </div>
+    }
+
+    @if (_syncStatus?.IsSyncing == true)
+    {
+        <!-- Sync Progress -->
+        <div class="alert alert-primary mb-2" role="alert">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                    <span>Syncing @_syncStatus.CurrentOperation</span>
+                </div>
+                <span class="badge bg-primary">@(_syncStatus.ProgressPercentage.ToString("F0"))%</span>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="progress" style="height: 6px;">
+                <div class="progress-bar" 
+                     role="progressbar" 
+                     style="width: @(_syncStatus.ProgressPercentage)%" 
+                     aria-valuenow="@_syncStatus.ProgressPercentage" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                </div>
+            </div>
+            
+            <small class="text-muted d-block mt-1">
+                @_syncStatus.CompletedOperations of @_syncStatus.TotalOperations operations completed
+                @if (_syncStatus.EstimatedTimeRemaining.HasValue)
+                {
+                    <span> • @_syncStatus.EstimatedTimeRemaining.Value.ToString(@"mm\:ss") remaining</span>
+                }
+            </small>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_lastSyncMessage))
+    {
+        <!-- Success/Error Messages -->
+        <div class="alert @(_lastSyncSuccess ? "alert-success" : "alert-danger") alert-dismissible fade show mb-2" role="alert">
+            <div class="d-flex align-items-center">
+                @if (_lastSyncSuccess)
+                {
+                    <svg class="bi flex-shrink-0 me-2" width="16" height="16" role="img" aria-label="Success:">
+                        <use xlink:href="#check-circle-fill"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg class="bi flex-shrink-0 me-2" width="16" height="16" role="img" aria-label="Error:">
+                        <use xlink:href="#exclamation-circle-fill"/>
+                    </svg>
+                }
+                <span>@_lastSyncMessage</span>
+            </div>
+            <button type="button" class="btn-close" @onclick="ClearMessage" aria-label="Close"></button>
+        </div>
+    }
+</div>
+
+<!-- Bootstrap Icons SVG Definitions -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+    <symbol id="exclamation-triangle-fill" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+    </symbol>
+    <symbol id="info-fill" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+    </symbol>
+    <symbol id="check-circle-fill" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.061L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+    </symbol>
+    <symbol id="exclamation-circle-fill" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+    </symbol>
+</svg>
+
+@code {
+    private bool _isOnline = true;
+    private OfflineQueueStatus? _queueStatus;
+    private SyncStatus? _syncStatus;
+    private string _lastSyncMessage = string.Empty;
+    private bool _lastSyncSuccess = false;
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get initial connectivity status
+        _isOnline = await ConnectivityService.IsOnlineAsync();
+
+        // Subscribe to connectivity events
+        ConnectivityService.OnOnline += OnConnectivityChanged;
+        ConnectivityService.OnOffline += OnConnectivityChanged;
+
+        // Subscribe to sync events
+        SyncService.SyncStarted += OnSyncStarted;
+        SyncService.SyncProgress += OnSyncProgress;
+        SyncService.SyncCompleted += OnSyncCompleted;
+
+        // Subscribe to queue events
+        OfflineQueueService.QueueProcessingStarted += OnQueueProcessingStarted;
+        OfflineQueueService.QueueProcessingCompleted += OnQueueProcessingCompleted;
+        OfflineQueueService.OperationSucceeded += OnOperationSucceeded;
+        OfflineQueueService.OperationFailed += OnOperationFailed;
+
+        // Start monitoring connectivity
+        await ConnectivityService.StartMonitoringAsync();
+
+        // Start periodic refresh timer for queue status
+        _refreshTimer = new Timer(async _ => await RefreshQueueStatus(), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+    }
+
+    private async void OnConnectivityChanged(object? sender, ConnectivityEventArgs e)
+    {
+        _isOnline = e.IsOnline;
+        await InvokeAsync(StateHasChanged);
+        
+        // Refresh queue status when connectivity changes
+        await RefreshQueueStatus();
+    }
+
+    private async void OnSyncStarted(object? sender, SyncStartedEventArgs e)
+    {
+        _syncStatus = await SyncService.GetSyncStatusAsync();
+        ClearMessage();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnSyncProgress(object? sender, SyncProgressEventArgs e)
+    {
+        _syncStatus = await SyncService.GetSyncStatusAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnSyncCompleted(object? sender, SyncCompletedEventArgs e)
+    {
+        _syncStatus = null;
+        
+        if (e.IsSuccess)
+        {
+            _lastSyncMessage = $"Successfully synced {e.SuccessfulOperations} operations";
+            _lastSyncSuccess = true;
+        }
+        else
+        {
+            _lastSyncMessage = $"Sync failed: {e.ErrorMessage ?? "Unknown error"}";
+            _lastSyncSuccess = false;
+        }
+        
+        await RefreshQueueStatus();
+        await InvokeAsync(StateHasChanged);
+        
+        // Auto-hide success messages after 5 seconds
+        if (_lastSyncSuccess)
+        {
+            _ = Task.Delay(5000).ContinueWith(_ => 
+            {
+                _lastSyncMessage = string.Empty;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private async void OnQueueProcessingStarted(object? sender, OfflineQueueEventArgs e)
+    {
+        await RefreshQueueStatus();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnQueueProcessingCompleted(object? sender, OfflineQueueEventArgs e)
+    {
+        await RefreshQueueStatus();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnOperationSucceeded(object? sender, OfflineOperationEventArgs e)
+    {
+        await RefreshQueueStatus();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnOperationFailed(object? sender, OfflineOperationEventArgs e)
+    {
+        _lastSyncMessage = $"Operation failed: {e.ErrorMessage ?? "Unknown error"}";
+        _lastSyncSuccess = false;
+        await RefreshQueueStatus();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshQueueStatus()
+    {
+        try
+        {
+            _queueStatus = await OfflineQueueService.GetQueueStatusAsync();
+        }
+        catch (Exception)
+        {
+            // Silently handle errors to prevent UI disruption
+            _queueStatus = null;
+        }
+    }
+
+    private void ClearMessage()
+    {
+        _lastSyncMessage = string.Empty;
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from connectivity events
+        ConnectivityService.OnOnline -= OnConnectivityChanged;
+        ConnectivityService.OnOffline -= OnConnectivityChanged;
+
+        // Unsubscribe from sync events
+        SyncService.SyncStarted -= OnSyncStarted;
+        SyncService.SyncProgress -= OnSyncProgress;
+        SyncService.SyncCompleted -= OnSyncCompleted;
+
+        // Unsubscribe from queue events
+        OfflineQueueService.QueueProcessingStarted -= OnQueueProcessingStarted;
+        OfflineQueueService.QueueProcessingCompleted -= OnQueueProcessingCompleted;
+        OfflineQueueService.OperationSucceeded -= OnOperationSucceeded;
+        OfflineQueueService.OperationFailed -= OnOperationFailed;
+
+        // Dispose timer
+        _refreshTimer?.Dispose();
+    }
+}

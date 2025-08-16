@@ -6,6 +6,11 @@ namespace NoLock.Social.Core.Camera.Models;
 public enum CameraPermissionState
 {
     /// <summary>
+    /// Permission has not been requested yet
+    /// </summary>
+    NotRequested,
+    
+    /// <summary>
     /// Permission has been granted
     /// </summary>
     Granted,

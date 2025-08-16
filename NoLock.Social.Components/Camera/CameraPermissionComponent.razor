@@ -31,8 +31,10 @@
     
     protected override async Task OnInitializedAsync()
     {
-        // Check current permission state on component load
-        _currentState = await CameraService.GetPermissionStateAsync();
+        // TODO: Check current permission state on component load
+        // Waiting for GetPermissionStateAsync to be added to ICameraService
+        // _currentState = await CameraService.GetPermissionStateAsync();
+        await Task.CompletedTask; // Temporary to keep async signature
     }
     
     private async Task RequestCameraPermission()
@@ -42,7 +44,7 @@
         
         try
         {
-            _currentState = await CameraService.RequestPermissionAsync();
+            _currentState = await CameraService.RequestPermission();
         }
         finally
         {

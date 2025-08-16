@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using NoLock.Social.Core.Storage;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Storage.Services;
 using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
@@ -8,6 +9,12 @@ using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Services;
 using NoLock.Social.Core.Security;
 using NoLock.Social.Core.Performance;
+using NoLock.Social.Core.Accessibility.Interfaces;
+using NoLock.Social.Core.Accessibility.Services;
+using NoLock.Social.Core.Camera.Interfaces;
+using NoLock.Social.Core.Camera.Services;
+using NoLock.Social.Core.ImageProcessing.Interfaces;
+using NoLock.Social.Core.ImageProcessing.Services;
 
 namespace NoLock.Social.Core.Extensions
 {
@@ -84,6 +91,46 @@ namespace NoLock.Social.Core.Extensions
             // Use the secure session persistence that doesn't store private keys
             services.AddScoped<ISessionPersistenceService, SecureSessionPersistenceService>();
             services.AddScoped<ILoginAdapterService, LoginAdapterService>();
+            
+            return services;
+        }
+        
+        public static IServiceCollection AddOfflineStorageServices(this IServiceCollection services)
+        {
+            // Offline storage and queue services
+            services.AddScoped<IOfflineStorageService, IndexedDbStorageService>();
+            services.AddScoped<IOfflineQueueService, OfflineQueueService>();
+            services.AddScoped<IConnectivityService, ConnectivityService>();
+            
+            return services;
+        }
+        
+        public static IServiceCollection AddAccessibilityServices(this IServiceCollection services)
+        {
+            // Voice command service for accessibility
+            services.AddScoped<IVoiceCommandService, VoiceCommandService>();
+            
+            // Focus management service for keyboard navigation
+            services.AddScoped<IFocusManagementService, FocusManagementService>();
+            
+            // Live region announcement service for screen readers
+            services.AddScoped<IAnnouncementService, AnnouncementService>();
+            
+            return services;
+        }
+        
+        public static IServiceCollection AddCameraServices(this IServiceCollection services)
+        {
+            // Camera capture and document processing services
+            services.AddScoped<ICameraService, CameraService>();
+            
+            return services;
+        }
+        
+        public static IServiceCollection AddImageProcessingServices(this IServiceCollection services)
+        {
+            // Image enhancement services for OCR optimization
+            services.AddScoped<IImageEnhancementService, ImageEnhancementService>();
             
             return services;
         }

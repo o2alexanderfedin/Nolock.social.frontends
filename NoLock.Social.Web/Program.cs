@@ -30,6 +30,9 @@ builder.Services.AddSecurityServices();
 builder.Services.AddPerformanceMonitoring();
 // Add login services (wraps existing identity unlock with login semantics)
 builder.Services.AddLoginServices();
+// Add camera and accessibility services
+builder.Services.AddCameraServices();
+builder.Services.AddAccessibilityServices();
 
 var app = builder.Build();
 

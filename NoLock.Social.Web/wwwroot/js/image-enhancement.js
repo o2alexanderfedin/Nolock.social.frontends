@@ -225,13 +225,18 @@ window.imageEnhancement = {
     },
 
     /**
-     * Apply full enhancement chain to an image
+     * Apply full enhancement chain to an image with performance optimizations
      * @param {string} imageData - Base64 encoded image data
      * @param {Object} settings - Enhancement settings
      * @returns {Promise<string>} Fully enhanced base64 image data
      */
     async enhanceImage(imageData, settings = {}) {
         try {
+            // Check if this is a large image that needs optimized processing
+            if (settings.isLargeImage || settings.progressiveProcessing) {
+                return await this._optimizeForLargeImages(imageData, settings);
+            }
+            
             let enhanced = imageData;
             
             // Apply enhancements in sequence based on settings
@@ -278,6 +283,119 @@ window.imageEnhancement = {
             return !!(canvas.getContext && canvas.getContext('2d'));
         } catch {
             return false;
+        }
+    },
+
+    /**
+     * Analyze image size and dimensions for performance optimization decisions
+     * @param {string} imageData - Base64 encoded image data
+     * @returns {Promise<Object>} Image information including dimensions and size
+     */
+    async analyzeImageSize(imageData) {
+        try {
+            const canvas = await this._getCanvasFromBase64(imageData);
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Estimate file size from base64 data
+            const base64Length = imageData.replace(/^data:image\/[a-z]+;base64,/, '').length;
+            const sizeBytes = (base64Length * 3) / 4; // Base64 to bytes conversion
+            const sizeMB = sizeBytes / (1024 * 1024);
+            
+            // Detect format from data URL
+            const formatMatch = imageData.match(/^data:image\/([a-z]+);base64,/);
+            const format = formatMatch ? formatMatch[1] : 'unknown';
+            
+            return {
+                width: width,
+                height: height,
+                sizeMB: sizeMB,
+                format: format
+            };
+        } catch (error) {
+            console.error('Error analyzing image size:', error);
+            throw new Error(`Image size analysis failed: ${error.message}`);
+        }
+    },
+
+    /**
+     * Compress image for processing to reduce memory usage
+     * @param {string} imageData - Base64 encoded image data
+     * @param {Object} options - Compression options
+     * @param {number} options.maxWidth - Maximum width for compressed image
+     * @param {number} options.maxHeight - Maximum height for compressed image
+     * @param {number} options.quality - JPEG quality (0.1 to 1.0)
+     * @param {boolean} options.preserveAspectRatio - Preserve aspect ratio
+     * @returns {Promise<string>} Compressed base64 image data
+     */
+    async compressImage(imageData, options = {}) {
+        try {
+            const {
+                maxWidth = 1920,
+                maxHeight = 1920,
+                quality = 0.85,
+                preserveAspectRatio = true
+            } = options;
+
+            const sourceCanvas = await this._getCanvasFromBase64(imageData);
+            const sourceWidth = sourceCanvas.width;
+            const sourceHeight = sourceCanvas.height;
+            
+            // Calculate target dimensions
+            let targetWidth = sourceWidth;
+            let targetHeight = sourceHeight;
+            
+            if (preserveAspectRatio) {
+                const aspectRatio = sourceWidth / sourceHeight;
+                
+                if (sourceWidth > maxWidth || sourceHeight > maxHeight) {
+                    if (aspectRatio > 1) {
+                        // Landscape orientation
+                        targetWidth = Math.min(sourceWidth, maxWidth);
+                        targetHeight = targetWidth / aspectRatio;
+                    } else {
+                        // Portrait orientation
+                        targetHeight = Math.min(sourceHeight, maxHeight);
+                        targetWidth = targetHeight * aspectRatio;
+                    }
+                }
+            } else {
+                targetWidth = Math.min(sourceWidth, maxWidth);
+                targetHeight = Math.min(sourceHeight, maxHeight);
+            }
+            
+            // Skip compression if image is already small enough
+            if (targetWidth >= sourceWidth && targetHeight >= sourceHeight) {
+                return imageData;
+            }
+            
+            // Create compressed canvas
+            const compressedCanvas = document.createElement('canvas');
+            compressedCanvas.width = Math.round(targetWidth);
+            compressedCanvas.height = Math.round(targetHeight);
+            const ctx = compressedCanvas.getContext('2d');
+            
+            // Enable high-quality image scaling
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Draw compressed image
+            ctx.drawImage(sourceCanvas, 0, 0, sourceWidth, sourceHeight, 
+                         0, 0, compressedCanvas.width, compressedCanvas.height);
+            
+            // Cleanup source canvas
+            this._disposeCanvas(sourceCanvas);
+            
+            // Return compressed image as JPEG with specified quality
+            const compressedData = compressedCanvas.toDataURL('image/jpeg', quality);
+            
+            // Cleanup compressed canvas
+            this._disposeCanvas(compressedCanvas);
+            
+            return compressedData;
+        } catch (error) {
+            console.error('Error compressing image:', error);
+            throw new Error(`Image compression failed: ${error.message}`);
         }
     },
 
@@ -1989,27 +2107,242 @@ window.imageEnhancement = {
         }
     },
 
+    // Performance Optimization and Memory Management Methods
+    
+    /**
+     * Optimize enhancement chain for large images
+     * @param {string} imageData - Base64 encoded image data
+     * @param {Object} settings - Enhancement settings
+     * @returns {Promise<string>} Optimized enhanced image
+     */
+    async _optimizeForLargeImages(imageData, settings) {
+        try {
+            let processedData = imageData;
+            const canvasPool = new Set(); // Track canvases for cleanup
+            
+            // Apply enhancements in optimized order for memory efficiency
+            if (settings.enablePerspectiveCorrection) {
+                // Do perspective correction first on full resolution
+                processedData = await this.correctPerspective(processedData);
+            }
+            
+            // Compress after perspective correction if still large
+            if (settings.isLargeImage) {
+                const compressionOptions = {
+                    maxWidth: 1600,
+                    maxHeight: 1600,
+                    quality: 0.9,
+                    preserveAspectRatio: true
+                };
+                processedData = await this.compressImage(processedData, compressionOptions);
+            }
+            
+            // Apply other enhancements on compressed image
+            if (settings.enableShadowRemoval) {
+                processedData = await this.removeShadows(processedData, {
+                    intensity: settings.shadowRemovalIntensity || 0.7,
+                    mode: 'auto',
+                    preserveText: true
+                });
+            }
+            
+            if (settings.enableContrastAdjustment) {
+                processedData = await this.adjustContrast(processedData, {
+                    strength: settings.contrastStrength || null,
+                    mode: 'auto',
+                    preserveDetails: true
+                });
+            }
+            
+            if (settings.convertToGrayscale) {
+                processedData = await this.convertToGrayscale(processedData, {
+                    method: 'auto',
+                    enhanceText: true,
+                    preserveContrast: true
+                });
+            }
+            
+            return processedData;
+        } catch (error) {
+            console.error('Error in large image optimization:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Process image in tiles for very large images
+     * @param {HTMLCanvasElement} canvas - Source canvas
+     * @param {Function} processingFunction - Function to apply to each tile
+     * @param {number} tileSize - Size of each tile
+     * @returns {HTMLCanvasElement} Processed canvas
+     */
+    async _processTiled(canvas, processingFunction, tileSize = 512) {
+        const width = canvas.width;
+        const height = canvas.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Process in tiles to manage memory
+        for (let y = 0; y < height; y += tileSize) {
+            for (let x = 0; x < width; x += tileSize) {
+                const tileWidth = Math.min(tileSize, width - x);
+                const tileHeight = Math.min(tileSize, height - y);
+                
+                // Get tile data
+                const tileData = ctx.getImageData(x, y, tileWidth, tileHeight);
+                
+                // Process tile
+                await processingFunction(tileData.data, tileWidth, tileHeight);
+                
+                // Put processed data back
+                ctx.putImageData(tileData, x, y);
+            }
+            
+            // Yield control periodically to prevent blocking
+            if (y % (tileSize * 4) === 0) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+            }
+        }
+        
+        return canvas;
+    },
+
+    /**
+     * Optimized version of enhancement methods for large images
+     */
+    async _fastAdjustContrast(data, width, height, strength) {
+        // Simplified contrast adjustment for performance
+        const factor = strength;
+        const midpoint = 128;
+        
+        // Process in chunks to prevent blocking
+        const chunkSize = width * 50 * 4; // 50 rows at a time
+        
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const endIndex = Math.min(i + chunkSize, data.length);
+            
+            for (let j = i; j < endIndex; j += 4) {
+                data[j] = this._clamp(((data[j] - midpoint) * factor) + midpoint, 0, 255);
+                data[j + 1] = this._clamp(((data[j + 1] - midpoint) * factor) + midpoint, 0, 255);
+                data[j + 2] = this._clamp(((data[j + 2] - midpoint) * factor) + midpoint, 0, 255);
+            }
+            
+            // Yield control every chunk
+            if (i % (chunkSize * 4) === 0) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+            }
+        }
+    },
+
+    /**
+     * Fast grayscale conversion for large images
+     */
+    async _fastGrayscaleConversion(data, width, height) {
+        // Simplified grayscale for performance
+        const chunkSize = width * 50 * 4; // 50 rows at a time
+        
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const endIndex = Math.min(i + chunkSize, data.length);
+            
+            for (let j = i; j < endIndex; j += 4) {
+                const gray = Math.round(0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2]);
+                data[j] = gray;
+                data[j + 1] = gray;
+                data[j + 2] = gray;
+            }
+            
+            // Yield control every chunk
+            if (i % (chunkSize * 4) === 0) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+            }
+        }
+    },
+
     // Helper methods
     
     /**
-     * Create canvas from base64 image data
+     * Create canvas from base64 image data with memory optimization
      * @param {string} base64Data - Base64 encoded image
      * @returns {Promise<HTMLCanvasElement>} Canvas with loaded image
      */
     async _getCanvasFromBase64(base64Data) {
         return new Promise((resolve, reject) => {
             const img = new Image();
+            
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                resolve(canvas);
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Set canvas context options for better performance
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Clean up image reference
+                    img.onload = null;
+                    img.onerror = null;
+                    img.src = '';
+                    
+                    resolve(canvas);
+                } catch (error) {
+                    reject(new Error(`Canvas creation failed: ${error.message}`));
+                }
             };
-            img.onerror = () => reject(new Error('Failed to load image'));
+            
+            img.onerror = () => {
+                img.onload = null;
+                img.onerror = null;
+                reject(new Error('Failed to load image'));
+            };
+            
             img.src = base64Data;
         });
+    },
+
+    /**
+     * Dispose of canvas and free memory
+     * @param {HTMLCanvasElement} canvas - Canvas to dispose
+     */
+    _disposeCanvas(canvas) {
+        if (canvas && canvas.getContext) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            // Reset canvas dimensions to free memory
+            canvas.width = 1;
+            canvas.height = 1;
+        }
+    },
+
+    /**
+     * Cleanup resources and free memory
+     */
+    cleanup() {
+        // Force garbage collection hint (browsers may ignore)
+        if (window.gc && typeof window.gc === 'function') {
+            window.gc();
+        }
+    },
+
+    /**
+     * Monitor memory usage for debugging
+     * @returns {Object} Memory usage information
+     */
+    getMemoryUsage() {
+        if (performance.memory) {
+            return {
+                usedJSHeapSize: performance.memory.usedJSHeapSize,
+                totalJSHeapSize: performance.memory.totalJSHeapSize,
+                jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
+                usagePercentage: Math.round((performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit) * 100)
+            };
+        }
+        return { message: 'Memory API not available' };
     },
 
     /**
