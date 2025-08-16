@@ -16,6 +16,8 @@ disablePreview: true
 ## Overview
 This command orchestrates multiple specialized agents using **baby-steps pair programming** methodology. Agents alternate after each tiny step, ensuring continuous review, knowledge transfer, and quality control - exactly like developers switching keyboard control in pair programming.
 
+**NEW**: When working on todo lists, agents automatically track and update todo item status (pending → in_progress → completed/blocked/error) throughout the execution.
+
 ## Baby-Steps Rules
 
 ### 1. Micro-Task Decomposition
@@ -38,6 +40,7 @@ This command orchestrates multiple specialized agents using **baby-steps pair pr
 Each handoff MUST include:
 ```
 Agent A: "Completed: [specific micro-task]. State: [current state]. Next: [suggested next step]"
+         "Todo Status: [if applicable - in_progress/completed/blocked/error]"
 Agent B: "Acknowledged. Reviewing [micro-task]. Proceeding with [next step]"
 ```
 
@@ -54,6 +57,7 @@ Agent B: "Acknowledged. Reviewing [micro-task]. Proceeding with [next step]"
 /do-task <agent1,agent2,...> <task_description>
 /do-task <shortcut> <task_description>
 /do-task <task_description>  # Auto-selects best agents for the task
+/do-task <task_from_todo_list>  # Automatically tracks todo status
 ```
 
 ## Auto-Selection
@@ -171,6 +175,188 @@ Handoff: "Result type ready. Next: create implementation file."
 - Track baby steps completed
 - Note which agent did what
 - Maintain running context
+- **NEW**: Automatically update todo list items (see Todo List Integration below)
+
+## 📋 Todo List Integration
+
+When agents are working on tasks from a todo list, they **MUST** automatically update the todo item status:
+
+### Status Updates During Execution
+
+**1. Starting Work on a Todo Item:**
+```
+Agent: "Starting work on todo item: [item description]"
+Action: Mark todo item as 'in_progress' ⏳
+```
+
+**2. Completing a Todo Item:**
+```
+Agent: "Successfully completed: [item description]"
+Action: Mark todo item as 'completed' ✅
+```
+
+**3. Encountering Blockers:**
+```
+Agent: "Blocked on: [item description] - Reason: [specific blocker]"
+Action: Mark todo item as 'blocked' 🚫
+```
+
+**4. Encountering Errors:**
+```
+Agent: "Error on: [item description] - Error: [error details]"
+Action: Mark todo item as 'error' ❌
+```
+
+**5. Partial Completion:**
+```
+Agent: "Partially completed: [item description] - Done: [what's done], Remaining: [what's left]"
+Action: Mark todo item as 'partial' ⚠️
+```
+
+### Todo Status Lifecycle
+
+```mermaid
+graph LR
+    pending --> in_progress
+    in_progress --> completed
+    in_progress --> blocked
+    in_progress --> error
+    in_progress --> partial
+    blocked --> in_progress
+    error --> in_progress
+    partial --> in_progress
+    partial --> completed
+```
+
+### Integration with Baby-Steps
+
+When working on todo items, agents should:
+
+1. **At Baby-Step Start**: If starting a new todo item, mark it as `in_progress`
+2. **During Baby-Steps**: Keep the same status while working on the item
+3. **At Baby-Step Completion**: 
+   - If todo item is fully done → mark as `completed`
+   - If blocked → mark as `blocked` with reason
+   - If error → mark as `error` with details
+   - If partially done → mark as `partial` with progress notes
+4. **At Handoff**: Include todo status in handoff message
+
+### Example Todo-Integrated Workflow
+
+```
+Agent A: "Starting todo item: 'Implement user authentication'"
+[Marks todo as 'in_progress']
+Agent A: "Created auth interface file. Handoff: Todo still in progress, next: add methods"
+
+Agent B: "Continuing todo item: 'Implement user authentication'"
+Agent B: "Added login method. Handoff: Todo still in progress, next: add tests"
+
+Agent A: "Continuing todo item: 'Implement user authentication'"
+Agent A: "Added unit tests. Todo item complete!"
+[Marks todo as 'completed']
+```
+
+### Todo List Commands for Agents
+
+Agents should use these commands when working with todo lists:
+
+- `TodoWrite` - Update todo item status
+- `TodoRead` - Check current todo list status
+- `TodoReport` - Generate progress report on all todos
+
+### Best Practices for Todo Management
+
+1. **One Todo at a Time**: Focus on completing one todo item before moving to the next
+2. **Clear Status Updates**: Always provide clear reasons when marking as blocked/error
+3. **Progress Notes**: Add helpful notes when marking items as partial
+4. **Regular Syncs**: Check todo list status at micro-integration points
+5. **Completion Verification**: Ensure todo item acceptance criteria are met before marking complete
+
+## 📝 Epic and Story Status Updates
+
+When working on Epics and User Stories from Scrum documentation, agents **MUST** invoke the product-owner-scrum agent to update acceptance criteria checkboxes and story states:
+
+### When to Invoke Product Owner Agent
+
+**1. Starting a User Story:**
+```
+Agent: "Starting Story 1.2: Camera Stream Initialization"
+Action: Invoke product-owner-scrum agent to:
+  - Mark story as 'IN PROGRESS' in epic document
+  - Update story header with status badge
+  - Note start timestamp
+```
+
+**2. Completing Acceptance Criteria:**
+```
+Agent: "Completed: Camera preview displays within 2 seconds"
+Action: Invoke product-owner-scrum agent to:
+  - Check off specific acceptance criteria checkbox
+  - Update completion percentage
+  - Add implementation notes
+```
+
+**3. Completing a User Story:**
+```
+Agent: "Story 1.2 complete - all acceptance criteria met"
+Action: Invoke product-owner-scrum agent to:
+  - Mark story as 'COMPLETED' in epic document
+  - Check all acceptance criteria boxes
+  - Update epic completion percentage
+  - Add completion timestamp
+```
+
+**4. Encountering Blockers:**
+```
+Agent: "Blocked on Story 1.4 - Browser API not available"
+Action: Invoke product-owner-scrum agent to:
+  - Mark story as 'BLOCKED' with reason
+  - Document blocker in epic risks section
+  - Update epic status accordingly
+```
+
+### Product Owner Agent Invocation Example
+
+```
+Agent A: "Completed implementation of camera stream initialization"
+Agent A: "Invoking product-owner-scrum agent to update Story 1.2 status..."
+
+[Invokes product-owner-scrum agent with]:
+- Epic file: /docs/scrum/epics/ocr-scanner/epic-001-document-capture.md
+- Story: 1.2 - Camera Stream Initialization
+- Action: Mark as COMPLETED
+- Checkboxes to mark:
+  - [x] Camera preview displays within 2 seconds
+  - [x] Loading indicator shown during initialization
+  - [x] Error message if camera fails to start
+  - [x] Automatic selection of rear camera
+  - [x] Stream properly disposed when component unmounts
+
+Product Owner Agent: "Updated Story 1.2 to COMPLETED in epic document"
+```
+
+### Epic Document Updates by Product Owner
+
+The product-owner-scrum agent will:
+1. **Update Story Headers** with status badges:
+   - `[IN PROGRESS]` - Currently being worked on
+   - `[COMPLETED]` - All acceptance criteria met
+   - `[BLOCKED]` - Cannot proceed due to blocker
+   - `[PARTIAL]` - Some criteria completed
+
+2. **Check Acceptance Criteria Boxes**:
+   - Convert `- [ ]` to `- [x]` for completed items
+   - Add completion notes where applicable
+
+3. **Update Epic Metrics**:
+   - Overall completion percentage
+   - Stories completed vs total
+   - Update success metrics section
+
+4. **Maintain Traceability**:
+   - Add implementation references (file paths, commit IDs)
+   - Document deviations from original requirements
+   - Note any technical debt incurred
 
 ## Anti-Patterns to Avoid
 
