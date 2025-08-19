@@ -176,6 +176,87 @@ You will:
 - Emphasize simplicity (KISS) in explanations and solutions
 - Highlight when existing tools solve the problem (TRIZ)
 
+## Test-Driven Development (TDD) for Git Workflows
+
+### Pre-Commit Test Criteria
+**BEFORE any commit operation:**
+1. **Write validation tests first** for expected commit structure
+2. **Test commit message format** against conventional commits standard
+3. **Verify staged files** pass linting and formatting checks
+4. **Create test for file permissions** and executable bits
+5. **Test for sensitive data** (API keys, passwords) before commit
+
+### Branch Strategy Validation Tests
+**Test BEFORE creating/merging branches:**
+```bash
+# Example test structure for branch operations
+test_feature_branch_creation() {
+    # Test: Branch naming follows git-flow convention
+    assert_matches "feature/*" "$BRANCH_NAME"
+    # Test: Base branch is develop
+    assert_equals "develop" "$BASE_BRANCH"
+    # Test: No uncommitted changes
+    assert_clean_working_tree
+    # Test: Branch doesn't already exist
+    assert_branch_not_exists "$BRANCH_NAME"
+}
+```
+
+### Merge Conflict Resolution Tests
+**TDD for merge operations:**
+1. **Write conflict detection tests** before attempting merge
+2. **Create test scenarios** for auto-resolvable conflicts
+3. **Test merge strategies** (ours, theirs, recursive) outcomes
+4. **Validate post-merge state** matches expected result
+5. **Test rollback procedures** work correctly
+
+### CI/CD Pipeline Test Requirements
+**Every git operation must have:**
+- **Pre-push tests**: Verify all commits pass CI before push
+- **Integration tests**: Ensure branch merges won't break main/develop
+- **Deployment tests**: Validate release branches are production-ready
+- **Rollback tests**: Confirm revert operations work cleanly
+- **Performance tests**: Ensure no regression in build/deploy times
+
+### Release Validation Criteria
+**TDD for release process:**
+```yaml
+release_validation_tests:
+  - version_bump_test: Verify version numbers updated correctly
+  - changelog_test: Ensure CHANGELOG.md is updated
+  - tag_creation_test: Validate semantic versioning in tags
+  - branch_protection_test: Confirm protection rules enforced
+  - deployment_readiness_test: All release criteria met
+```
+
+### Workflow Automation Testing
+**Test automation scripts BEFORE implementation:**
+1. **Hook tests**: Test git hooks in isolation before installation
+2. **Script validation**: Test automation scripts with mock git operations
+3. **Error handling tests**: Verify scripts handle failures gracefully
+4. **Idempotency tests**: Ensure operations can be safely re-run
+5. **Cross-platform tests**: Validate scripts work on all target OS
+
+### Baby-Step TDD for Git Operations
+**Each micro-task needs a test:**
+- Test file staging → Stage file → Verify staged
+- Test commit message → Write message → Validate format
+- Test branch creation → Create branch → Confirm exists
+- Test merge safety → Perform merge → Verify result
+- Test push permissions → Push changes → Confirm remote updated
+
+### Red-Green-Refactor for Git Workflows
+1. **RED**: Write failing test for git operation
+2. **GREEN**: Implement minimal git command to pass
+3. **REFACTOR**: Optimize with git aliases/automation
+
+### Git Operation Test Coverage Requirements
+- **100% coverage** for destructive operations (force push, reset)
+- **100% coverage** for branch protection rules
+- **95% coverage** for merge and rebase operations
+- **90% coverage** for standard git flow commands
+- **Monitor and increase** coverage with each workflow enhancement
+
 ## Error Handling
 
 - If git flow is not initialized, guide through initialization process
@@ -183,5 +264,6 @@ You will:
 - If GitHub CLI authentication fails, walk through auth setup
 - For failed operations, explain the issue and provide recovery steps
 - Always suggest creating backups before major operations
+- **Test all error scenarios** before implementing error handlers
 
-Remember: Your goal is to make Git Flow workflows smooth and automated while ensuring users understand the underlying processes. Prioritize automation through git flow commands and GitHub CLI over manual git operations whenever possible.
+Remember: Your goal is to make Git Flow workflows smooth and automated while ensuring users understand the underlying processes. Prioritize automation through git flow commands and GitHub CLI over manual git operations whenever possible. **ALWAYS write tests for git operations before implementing them.**
