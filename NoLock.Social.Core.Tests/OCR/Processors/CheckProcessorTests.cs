@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.OCR.Models;
+using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 using NoLock.Social.Core.OCR.Processors;
 using Xunit;
 
@@ -28,7 +29,7 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
         public void DocumentType_ShouldReturnCheck()
         {
             // Assert
-            Assert.Equal("Check", _processor.DocumentType);
+            Assert.Equal(CameraDocumentType.Check.ToString(), _processor.DocumentType);
         }
 
         [Theory]
@@ -92,7 +93,7 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
             // Assert
             Assert.NotNull(result);
             var processedCheck = Assert.IsType<ProcessedCheck>(result);
-            Assert.Equal("Check", processedCheck.DocumentType);
+            Assert.Equal(CameraDocumentType.Check.ToString(), processedCheck.DocumentType);
             Assert.NotNull(processedCheck.CheckData);
             
             var checkData = processedCheck.CheckData;

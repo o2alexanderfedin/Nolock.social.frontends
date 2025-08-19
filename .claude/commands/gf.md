@@ -15,6 +15,13 @@ Launch the git-flow-automation agent to execute a complete automated git flow wo
 ## AGENT TASK:
 Use your git flow expertise to automate the entire workflow:
 
+### 0. PRE-FLOW SYNCHRONIZATION
+- Pull latest changes from both main and develop branches
+- Ensure develop is up-to-date with main before starting any flow
+- Check for potential conflicts between main and develop
+- If develop is behind main, merge main into develop first
+- Abort if there are uncommitted changes or merge conflicts
+
 ### 1. ANALYZE CHANGES
 - Run `git status` to see what changed
 - Run `git diff --stat` for summary
@@ -71,9 +78,38 @@ git push --tags
 ```
 
 ### 6. FINAL VERIFICATION
-- Confirm branches are synchronized
-- Display new version created
-- Show summary of operations
+```bash
+# Check branch synchronization
+git rev-list --left-right --count main...develop
+# Output: 0    0 means fully synchronized
+
+# Verify all merges were successful
+git log --oneline -n 5 main
+git log --oneline -n 5 develop
+
+# Check for any divergence
+DIVERGED=$(git rev-list --left-right --count main...develop | awk '{if ($1 != 0 || $2 != 0) print "DIVERGED"}')
+if [ "$DIVERGED" = "DIVERGED" ]; then
+    echo "⚠️ WARNING: Branches have diverged!"
+    git rev-list --left-right --count main...develop
+fi
+
+# Confirm no uncommitted changes remain
+git status --porcelain
+# Empty output means working tree is clean
+
+# Verify tags were created and pushed
+git tag --list --sort=-version:refname | head -3
+git ls-remote --tags origin | tail -3
+
+# Display new version created
+echo "New version: $(git describe --tags --abbrev=0)"
+
+# Show summary of operations
+echo "Main branch: $(git rev-parse --short main)"
+echo "Develop branch: $(git rev-parse --short develop)"
+echo "Latest tag: $(git describe --tags --abbrev=0)"
+```
 
 ## AGENT INSTRUCTIONS:
 - You are the git-flow-automation expert - use your knowledge
@@ -83,6 +119,73 @@ git push --tags
 - Pick correct version bump based on change type
 - Use `-F` flag for non-interactive mode
 - If user provided "$ARGUMENTS", incorporate into commit message
+
+## CONFLICT RECOVERY STRATEGY
+
+### If Merge Conflicts Occur:
+
+1. **IMMEDIATE ASSESSMENT**
+```bash
+# Check current state
+git status
+git branch --show-current
+# Identify which operation failed
+git flow config | grep "branch\."
+```
+
+2. **SAFE ABORT PROCEDURE**
+```bash
+# For feature/bugfix conflicts
+git flow feature abort <name> 2>/dev/null || git flow bugfix abort <name> 2>/dev/null
+
+# For release conflicts  
+git flow release abort <version> 2>/dev/null
+
+# For hotfix conflicts
+git flow hotfix abort <name> 2>/dev/null
+
+# Reset to clean state if needed
+git reset --hard HEAD
+git checkout develop
+```
+
+3. **MANUAL CONFLICT RESOLUTION**
+```bash
+# If conflicts must be resolved:
+# 1. Stay in conflict state
+git status --short | grep "^UU"  # List conflicted files
+
+# 2. Resolve each file
+# Edit files to resolve conflicts, then:
+git add <resolved-file>
+
+# 3. Continue the flow operation
+git flow <type> finish <name>  # Will retry the merge
+```
+
+4. **RECOVERY VERIFICATION**
+```bash
+# After recovery, ensure everything is merged:
+# Check no flow branches remain
+git branch | grep -E "^  (feature|bugfix|release|hotfix)/"
+
+# Verify develop has all changes
+git log develop --oneline -n 5
+
+# Ensure main and develop are synchronized
+git rev-list --left-right --count main...develop
+
+# If branches diverged during recovery:
+git checkout develop
+git merge main --no-ff -m "Sync: merge main into develop after recovery"
+git push origin develop
+```
+
+5. **PREVENTION TIPS**
+- Always sync branches before starting (Step 0)
+- Commit frequently to minimize conflict scope
+- If conflicts are complex, consider manual git flow
+- Keep backup branch: `git branch backup-$(date +%s)` before operations
 
 ## EXPECTED OUTPUT:
 ```

@@ -13,5 +13,11 @@ public enum DocumentType
     Form1099,
     Invoice,
     Contract,
+    SinglePage,
+    MultiPage,
+    Identity,
+    Financial,
+    Medical,
+    Legal,
     Other
 }

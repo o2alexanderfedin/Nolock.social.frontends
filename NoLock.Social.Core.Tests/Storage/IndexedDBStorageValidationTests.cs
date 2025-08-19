@@ -35,20 +35,19 @@ namespace NoLock.Social.Core.Tests.Storage
         #region Session Storage Operations
 
         [Theory]
-        [InlineData("simple-session", DocumentType.SinglePage, "basic single page session")]
-        [InlineData("multi-page-session", DocumentType.MultiPage, "multi-page document session")]
-        [InlineData("complex-session-123", DocumentType.MultiPage, "session with numeric ID")]
+        [InlineData("simple-session", "single-page", "basic single page session")]
+        [InlineData("multi-page-session", "multi-page", "multi-page document session")]
+        [InlineData("complex-session-123", "multi-page", "session with numeric ID")]
         public async Task SaveSession_WithValidData_ShouldStoreCorrectly(
-            string sessionId, DocumentType docType, string scenario)
+            string sessionId, string processorId, string scenario)
         {
             // Arrange
             var session = new DocumentSession
             {
                 SessionId = sessionId,
-                DocumentType = docType,
+                DocumentType = processorId,
                 CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow,
-                IsCompleted = false,
+                LastActivityAt = DateTime.UtcNow,
                 Pages = new List<CapturedImage>()
             };
 
@@ -89,9 +88,8 @@ namespace NoLock.Social.Core.Tests.Storage
             var expectedSession = new DocumentSession
             {
                 SessionId = "load-test-session",
-                DocumentType = DocumentType.MultiPage,
-                CreatedAt = DateTime.UtcNow,
-                IsCompleted = false
+                DocumentType = "multi-page",
+                CreatedAt = DateTime.UtcNow
             };
 
             _jsRuntimeMock.Setup(x => x.InvokeAsync<DocumentSession>("indexedDBStorage.loadSession", 
@@ -322,9 +320,9 @@ namespace NoLock.Social.Core.Tests.Storage
             // Arrange
             var expectedSessions = new List<DocumentSession>
             {
-                new() { SessionId = "session-1", DocumentType = DocumentType.SinglePage },
-                new() { SessionId = "session-2", DocumentType = DocumentType.MultiPage },
-                new() { SessionId = "session-3", DocumentType = DocumentType.MultiPage }
+                new() { SessionId = "session-1", DocumentType = "single-page" },
+                new() { SessionId = "session-2", DocumentType = "multi-page" },
+                new() { SessionId = "session-3", DocumentType = "multi-page" }
             };
 
             _jsRuntimeMock.Setup(x => x.InvokeAsync<List<DocumentSession>>("indexedDBStorage.getAllSessions", 
@@ -395,7 +393,7 @@ namespace NoLock.Social.Core.Tests.Storage
             var session = new DocumentSession
             {
                 SessionId = "concurrent-test",
-                DocumentType = DocumentType.MultiPage,
+                DocumentType = "multi-page",
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -452,7 +450,7 @@ namespace NoLock.Social.Core.Tests.Storage
                 .Select(i => new DocumentSession
                 {
                     SessionId = $"batch-session-{i}",
-                    DocumentType = DocumentType.MultiPage,
+                    DocumentType = "multi-page",
                     CreatedAt = DateTime.UtcNow
                 })
                 .ToList();
@@ -486,10 +484,9 @@ namespace NoLock.Social.Core.Tests.Storage
             var complexSession = new DocumentSession
             {
                 SessionId = "complex-session-test",
-                DocumentType = DocumentType.MultiPage,
+                DocumentType = "multi-page",
                 CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow.AddMinutes(5),
-                IsCompleted = true,
+                LastActivityAt = DateTime.UtcNow.AddMinutes(5),
                 Pages = new List<CapturedImage>
                 {
                     new()

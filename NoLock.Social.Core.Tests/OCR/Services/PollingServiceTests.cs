@@ -28,7 +28,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         /// <summary>
         /// Test result class for polling tests.
         /// </summary>
-        private class TestResult
+        public class TestResult
         {
             public bool IsComplete { get; set; }
             public int Value { get; set; }

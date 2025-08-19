@@ -40,7 +40,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 
@@ -77,7 +77,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 
@@ -111,7 +111,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 
@@ -160,7 +160,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 
@@ -239,7 +239,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 
@@ -276,7 +276,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var request = new OCRSubmissionRequest
             {
                 ImageData = imageData,
-                DocumentType = "Receipt",
+                DocumentType = DocumentType.Receipt,
                 ClientRequestId = "test-123"
             };
 

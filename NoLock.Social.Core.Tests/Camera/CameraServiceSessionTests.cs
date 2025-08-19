@@ -520,8 +520,11 @@ namespace NoLock.Social.Core.Tests.Camera
             // We can't directly test the internal state, but we can verify no exceptions are thrown
             
             // Arrange - Create service with sessions
-            using var jsRuntimeMock = new Mock<IJSRuntime>();
-            using var service = new CameraService(jsRuntimeMock.Object);
+            var jsRuntimeMock = new Mock<IJSRuntime>();
+            var offlineStorageMock = new Mock<IOfflineStorageService>();
+            var offlineQueueMock = new Mock<IOfflineQueueService>();
+            var connectivityMock = new Mock<IConnectivityService>();
+            using var service = new CameraService(jsRuntimeMock.Object, offlineStorageMock.Object, offlineQueueMock.Object, connectivityMock.Object);
             
             // Create multiple sessions
             var sessionTask1 = service.CreateDocumentSessionAsync();

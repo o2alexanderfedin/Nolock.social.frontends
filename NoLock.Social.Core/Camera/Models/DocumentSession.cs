@@ -35,6 +35,11 @@ public class DocumentSession
     public string? Title { get; set; }
 
     /// <summary>
+    /// Type of document that this session is capturing
+    /// </summary>
+    public string DocumentType { get; set; } = string.Empty;
+
+    /// <summary>
     /// Total number of pages in the session
     /// </summary>
     public int TotalPages => Pages.Count;

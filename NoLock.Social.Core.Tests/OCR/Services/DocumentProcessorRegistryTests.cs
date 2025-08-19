@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using Moq;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Services;
@@ -15,40 +15,38 @@ namespace NoLock.Social.Core.Tests.OCR.Services
     /// Unit tests for the DocumentProcessorRegistry class.
     /// Tests processor registration, discovery, and document processing.
     /// </summary>
-    [TestClass]
     public class DocumentProcessorRegistryTests
     {
         private Mock<ILogger<DocumentProcessorRegistry>> _loggerMock;
         private DocumentProcessorRegistry _registry;
         private Mock<IDocumentProcessor> _processorMock;
 
-        [TestInitialize]
-        public void Setup()
+        public DocumentProcessorRegistryTests()
         {
             _loggerMock = new Mock<ILogger<DocumentProcessorRegistry>>();
             _registry = new DocumentProcessorRegistry(_loggerMock.Object);
             _processorMock = new Mock<IDocumentProcessor>();
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_WithLogger_ShouldInitialize()
         {
             // Arrange & Act
             var registry = new DocumentProcessorRegistry(_loggerMock.Object);
 
             // Assert
-            Assert.IsNotNull(registry);
-            Assert.AreEqual(0, registry.ProcessorCount);
+            Assert.NotNull(registry);
+            Assert.Equal(0, registry.ProcessorCount);
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_WithNullLogger_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.ThrowsException<ArgumentNullException>(() => new DocumentProcessorRegistry(null));
+            Assert.Throws<ArgumentNullException>(() => new DocumentProcessorRegistry(null));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_WithProcessors_ShouldRegisterAll()
         {
             // Arrange
@@ -64,12 +62,12 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var registry = new DocumentProcessorRegistry(_loggerMock.Object, processors);
 
             // Assert
-            Assert.AreEqual(2, registry.ProcessorCount);
-            Assert.IsTrue(registry.IsProcessorRegistered("Type1"));
-            Assert.IsTrue(registry.IsProcessorRegistered("Type2"));
+            Assert.Equal(2, registry.ProcessorCount);
+            Assert.True(registry.IsProcessorRegistered("Type1"));
+            Assert.True(registry.IsProcessorRegistered("Type2"));
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithValidProcessor_ShouldRegister()
         {
             // Arrange
@@ -79,28 +77,28 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Assert
-            Assert.AreEqual(1, _registry.ProcessorCount);
-            Assert.IsTrue(_registry.IsProcessorRegistered("TestType"));
+            Assert.Equal(1, _registry.ProcessorCount);
+            Assert.True(_registry.IsProcessorRegistered("TestType"));
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithNullProcessor_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.ThrowsException<ArgumentNullException>(() => _registry.RegisterProcessor(null));
+            Assert.Throws<ArgumentNullException>(() => _registry.RegisterProcessor(null));
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithEmptyDocumentType_ShouldThrowArgumentException()
         {
             // Arrange
             _processorMock.Setup(p => p.DocumentType).Returns(string.Empty);
 
             // Act & Assert
-            Assert.ThrowsException<ArgumentException>(() => _registry.RegisterProcessor(_processorMock.Object));
+            Assert.Throws<ArgumentException>(() => _registry.RegisterProcessor(_processorMock.Object));
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithDuplicateType_ShouldUpdateExisting()
         {
             // Arrange
@@ -115,11 +113,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(processor2.Object);
 
             // Assert
-            Assert.AreEqual(1, _registry.ProcessorCount);
-            Assert.AreSame(processor2.Object, _registry.GetProcessor("TestType"));
+            Assert.Equal(1, _registry.ProcessorCount);
+            Assert.Same(processor2.Object, _registry.GetProcessor("TestType"));
         }
 
-        [TestMethod]
+        [Fact]
         public void UnregisterProcessor_WithExistingType_ShouldRemove()
         {
             // Arrange
@@ -130,35 +128,35 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.UnregisterProcessor("TestType");
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.AreEqual(0, _registry.ProcessorCount);
-            Assert.IsFalse(_registry.IsProcessorRegistered("TestType"));
+            Assert.True(result);
+            Assert.Equal(0, _registry.ProcessorCount);
+            Assert.False(_registry.IsProcessorRegistered("TestType"));
         }
 
-        [TestMethod]
+        [Fact]
         public void UnregisterProcessor_WithNonExistingType_ShouldReturnFalse()
         {
             // Act
             var result = _registry.UnregisterProcessor("NonExisting");
 
             // Assert
-            Assert.IsFalse(result);
+            Assert.False(result);
         }
 
-        [DataTestMethod]
-        [DataRow(null, false)]
-        [DataRow("", false)]
-        [DataRow(" ", false)]
-        public void UnregisterProcessor_WithInvalidType_ShouldReturnFalse(string documentType, bool expected)
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData("", false)]
+        [InlineData(" ", false)]
+        public void UnregisterProcessor_WithInvalidType_ShouldReturnFalse(string processorId, bool expected)
         {
             // Act
-            var result = _registry.UnregisterProcessor(documentType);
+            var result = _registry.UnregisterProcessor(processorId);
 
             // Assert
-            Assert.AreEqual(expected, result);
+            Assert.Equal(expected, result);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetProcessor_WithExistingType_ShouldReturnProcessor()
         {
             // Arrange
@@ -169,11 +167,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.GetProcessor("TestType");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreSame(_processorMock.Object, result);
+            Assert.NotNull(result);
+            Assert.Same(_processorMock.Object, result);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetProcessor_WithCaseInsensitiveType_ShouldReturnProcessor()
         {
             // Arrange
@@ -184,25 +182,25 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.GetProcessor("TESTTYPE");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreSame(_processorMock.Object, result);
+            Assert.NotNull(result);
+            Assert.Same(_processorMock.Object, result);
         }
 
-        [DataTestMethod]
-        [DataRow(null)]
-        [DataRow("")]
-        [DataRow(" ")]
-        [DataRow("NonExisting")]
-        public void GetProcessor_WithInvalidType_ShouldReturnNull(string documentType)
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData(" ")]
+        [InlineData("NonExisting")]
+        public void GetProcessor_WithInvalidType_ShouldReturnNull(string processorId)
         {
             // Act
-            var result = _registry.GetProcessor(documentType);
+            var result = _registry.GetProcessor(processorId);
 
             // Assert
-            Assert.IsNull(result);
+            Assert.Null(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void FindProcessorForData_WithMatchingProcessor_ShouldReturnProcessor()
         {
             // Arrange
@@ -214,11 +212,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.FindProcessorForData("test data");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreSame(_processorMock.Object, result);
+            Assert.NotNull(result);
+            Assert.Same(_processorMock.Object, result);
         }
 
-        [TestMethod]
+        [Fact]
         public void FindProcessorForData_WithNoMatchingProcessor_ShouldReturnNull()
         {
             // Arrange
@@ -230,23 +228,23 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.FindProcessorForData("test data");
 
             // Assert
-            Assert.IsNull(result);
+            Assert.Null(result);
         }
 
-        [DataTestMethod]
-        [DataRow(null)]
-        [DataRow("")]
-        [DataRow(" ")]
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData(" ")]
         public void FindProcessorForData_WithInvalidData_ShouldReturnNull(string rawData)
         {
             // Act
             var result = _registry.FindProcessorForData(rawData);
 
             // Assert
-            Assert.IsNull(result);
+            Assert.Null(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void FindProcessorForData_WhenProcessorThrows_ShouldContinueAndReturnNull()
         {
             // Arrange
@@ -258,10 +256,10 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = _registry.FindProcessorForData("test data");
 
             // Assert
-            Assert.IsNull(result);
+            Assert.Null(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetRegisteredTypes_ShouldReturnSortedTypes()
         {
             // Arrange
@@ -282,13 +280,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var types = _registry.GetRegisteredTypes().ToList();
 
             // Assert
-            Assert.AreEqual(3, types.Count);
-            Assert.AreEqual("TypeA", types[0]);
-            Assert.AreEqual("TypeB", types[1]);
-            Assert.AreEqual("TypeC", types[2]);
+            Assert.Equal(3, types.Count);
+            Assert.Equal("TypeA", types[0]);
+            Assert.Equal("TypeB", types[1]);
+            Assert.Equal("TypeC", types[2]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WithSpecificType_ShouldUseCorrectProcessor()
         {
             // Arrange
@@ -302,11 +300,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _registry.ProcessDocumentAsync("test data", "TestType");
 
             // Assert
-            Assert.AreEqual("Processed Result", result);
+            Assert.Equal("Processed Result", result);
             _processorMock.Verify(p => p.ProcessAsync("test data", It.IsAny<CancellationToken>()), Times.Once);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WithAutoDetection_ShouldFindAndUseProcessor()
         {
             // Arrange
@@ -320,26 +318,26 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _registry.ProcessDocumentAsync("test data");
 
             // Assert
-            Assert.AreEqual("Processed Result", result);
+            Assert.Equal("Processed Result", result);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WithNoSuitableProcessor_ShouldThrowInvalidOperationException()
         {
             // Act & Assert
-            await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            await Assert.ThrowsAsync<InvalidOperationException>(
                 () => _registry.ProcessDocumentAsync("test data"));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WithNullData_ShouldThrowArgumentException()
         {
             // Act & Assert
-            await Assert.ThrowsExceptionAsync<ArgumentException>(
+            await Assert.ThrowsAsync<ArgumentException>(
                 () => _registry.ProcessDocumentAsync(null));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WhenProcessorThrows_ShouldWrapInInvalidOperationException()
         {
             // Arrange
@@ -350,13 +348,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Act & Assert
-            var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => _registry.ProcessDocumentAsync("test data", "TestType"));
-            Assert.IsTrue(ex.Message.Contains("Error processing document"));
-            Assert.IsNotNull(ex.InnerException);
+            Assert.Contains("Error processing document", ex.Message);
+            Assert.NotNull(ex.InnerException);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ProcessDocumentAsync_WithCancellation_ShouldPassTokenToProcessor()
         {
             // Arrange
@@ -374,25 +372,25 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _processorMock.Verify(p => p.ProcessAsync("test data", cts.Token), Times.Once);
         }
 
-        [DataTestMethod]
-        [DataRow("TestType", true)]
-        [DataRow("NonExisting", false)]
-        [DataRow(null, false)]
-        [DataRow("", false)]
-        public void IsProcessorRegistered_ShouldReturnCorrectValue(string documentType, bool expected)
+        [Theory]
+        [InlineData("TestType", true)]
+        [InlineData("NonExisting", false)]
+        [InlineData(null, false)]
+        [InlineData("", false)]
+        public void IsProcessorRegistered_ShouldReturnCorrectValue(string processorId, bool expected)
         {
             // Arrange
             _processorMock.Setup(p => p.DocumentType).Returns("TestType");
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Act
-            var result = _registry.IsProcessorRegistered(documentType);
+            var result = _registry.IsProcessorRegistered(processorId);
 
             // Assert
-            Assert.AreEqual(expected, result);
+            Assert.Equal(expected, result);
         }
 
-        [TestMethod]
+        [Fact]
         public void ProcessorCount_ShouldReturnCorrectCount()
         {
             // Arrange
@@ -403,16 +401,16 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             processor2.Setup(p => p.DocumentType).Returns("Type2");
 
             // Act & Assert
-            Assert.AreEqual(0, _registry.ProcessorCount);
+            Assert.Equal(0, _registry.ProcessorCount);
             
             _registry.RegisterProcessor(processor1.Object);
-            Assert.AreEqual(1, _registry.ProcessorCount);
+            Assert.Equal(1, _registry.ProcessorCount);
             
             _registry.RegisterProcessor(processor2.Object);
-            Assert.AreEqual(2, _registry.ProcessorCount);
+            Assert.Equal(2, _registry.ProcessorCount);
             
             _registry.UnregisterProcessor("Type1");
-            Assert.AreEqual(1, _registry.ProcessorCount);
+            Assert.Equal(1, _registry.ProcessorCount);
         }
     }
 }
