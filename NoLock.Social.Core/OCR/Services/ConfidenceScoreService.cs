@@ -126,9 +126,6 @@ namespace NoLock.Social.Core.OCR.Services
                 case ProcessedCheck check:
                     ExtractCheckFieldConfidences(check, fieldConfidences);
                     break;
-                case ProcessedW4 w4:
-                    ExtractW4FieldConfidences(w4, fieldConfidences);
-                    break;
             }
 
             return fieldConfidences;
@@ -385,37 +382,6 @@ namespace NoLock.Social.Core.OCR.Services
             // Date
             if (check.CheckData.Date.HasValue)
                 fieldConfidences["Date"] = CalculateFieldConfidence(baseConfidence, 0.91);
-        }
-
-        /// <summary>
-        /// Extracts W4 field confidences.
-        /// </summary>
-        private void ExtractW4FieldConfidences(ProcessedW4 w4, Dictionary<string, double> fieldConfidences)
-        {
-            if (w4.W4Data == null)
-                return;
-
-            var baseConfidence = w4.ConfidenceScore;
-
-            // Employee information
-            if (!string.IsNullOrWhiteSpace(w4.W4Data.FullName))
-                fieldConfidences["EmployeeName"] = CalculateFieldConfidence(baseConfidence, 0.92);
-
-            if (!string.IsNullOrWhiteSpace(w4.W4Data.SSN))
-                fieldConfidences["SSN"] = CalculateFieldConfidence(baseConfidence, 0.85);
-
-            if (!string.IsNullOrWhiteSpace(w4.W4Data.StreetAddress))
-                fieldConfidences["Address"] = CalculateFieldConfidence(baseConfidence, 0.88);
-
-            // Filing status
-            if (!string.IsNullOrWhiteSpace(w4.W4Data.FilingStatus))
-                fieldConfidences["FilingStatus"] = CalculateFieldConfidence(baseConfidence, 0.94);
-
-            // Allowances (for pre-2020) or Dependents claim (for post-2020)
-            if (w4.W4Data.IsPreTwentyTwentyFormat && w4.W4Data.TotalAllowances.HasValue)
-                fieldConfidences["Allowances"] = CalculateFieldConfidence(baseConfidence, 0.90);
-            else if (w4.W4Data.DependentsClaimAmount > 0)
-                fieldConfidences["DependentsClaimAmount"] = CalculateFieldConfidence(baseConfidence, 0.90);
         }
 
         /// <summary>

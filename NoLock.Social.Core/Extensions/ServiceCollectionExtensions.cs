@@ -279,17 +279,6 @@ namespace NoLock.Social.Core.Extensions
                     supportedExtensions: new[] { ".jpg", ".jpeg", ".png", ".pdf" }
                 );
                 
-                var w4Processor = provider.GetRequiredService<W4Processor>();
-                registry.RegisterProcessor(
-                    w4Processor,
-                    "W-4 Tax Form Processor",
-                    "Processes W-4 tax forms to extract employee information, filing status, and withholding allowances",
-                    new Version(1, 0, 0),
-                    priority: 80,
-                    capabilities: new[] { "form-field-extraction", "ssn-detection", "filing-status-detection" },
-                    supportedExtensions: new[] { ".jpg", ".jpeg", ".png", ".pdf" }
-                );
-                
                 return registry;
             });
             
@@ -298,8 +287,6 @@ namespace NoLock.Social.Core.Extensions
             services.AddScoped<ReceiptProcessor>();
             services.AddScoped<IDocumentProcessor, CheckProcessor>();
             services.AddScoped<CheckProcessor>();
-            services.AddScoped<IDocumentProcessor, W4Processor>();
-            services.AddScoped<W4Processor>();
             
             // TODO: Configure named HttpClient for OCR service when HTTP client extensions are available
             // For now, register HttpClient directly
