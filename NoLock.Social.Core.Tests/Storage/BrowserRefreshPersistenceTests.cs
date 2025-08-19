@@ -6,6 +6,8 @@ using NoLock.Social.Core.Storage.Interfaces;
 using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -17,18 +19,138 @@ namespace NoLock.Social.Core.Tests.Storage
     /// </summary>
     public class BrowserRefreshPersistenceTests : IDisposable
     {
-        private readonly Mock<IJSRuntime> _jsRuntimeMock;
+        private readonly Mock<IJSRuntimeWrapper> _jsRuntimeWrapperMock;
         private readonly IndexedDbStorageService _storageService;
+        private readonly Dictionary<string, object> _mockIndexedDb = new();
 
         public BrowserRefreshPersistenceTests()
         {
-            _jsRuntimeMock = new Mock<IJSRuntime>();
-            _storageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            _jsRuntimeWrapperMock = new Mock<IJSRuntimeWrapper>();
+            SetupMockIndexedDb();
+            _storageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
         }
 
         public void Dispose()
         {
             _storageService?.Dispose();
+        }
+
+        private void SetupMockIndexedDb()
+        {
+            // Setup initialization
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
+                .Returns(ValueTask.CompletedTask);
+
+            // Setup save session
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.saveSession", It.IsAny<object?[]?>()))
+                .Callback<string, object?[]?>((method, args) =>
+                {
+                    if (args?.Length >= 2)
+                    {
+                        var sessionId = args[0]?.ToString();
+                        var sessionJson = args[1]?.ToString();
+                        if (!string.IsNullOrEmpty(sessionId) && !string.IsNullOrEmpty(sessionJson))
+                        {
+                            _mockIndexedDb[$"session_{sessionId}"] = sessionJson;
+                        }
+                    }
+                })
+                .Returns(ValueTask.CompletedTask);
+
+            // Setup load session
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadSession", It.IsAny<object?[]?>()))
+                .ReturnsAsync((string method, object?[]? args) =>
+                {
+                    if (args?.Length >= 1)
+                    {
+                        var sessionId = args[0]?.ToString();
+                        if (!string.IsNullOrEmpty(sessionId) && _mockIndexedDb.TryGetValue($"session_{sessionId}", out var session))
+                        {
+                            return session?.ToString() ?? string.Empty;
+                        }
+                    }
+                    return string.Empty;
+                });
+
+            // Setup save image
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.saveImage", It.IsAny<object?[]?>()))
+                .Callback<string, object?[]?>((method, args) =>
+                {
+                    if (args?.Length >= 2)
+                    {
+                        var imageId = args[0]?.ToString();
+                        var imageJson = args[1]?.ToString();
+                        if (!string.IsNullOrEmpty(imageId) && !string.IsNullOrEmpty(imageJson))
+                        {
+                            _mockIndexedDb[$"image_{imageId}"] = imageJson;
+                        }
+                    }
+                })
+                .Returns(ValueTask.CompletedTask);
+
+            // Setup load image
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadImage", It.IsAny<object?[]?>()))
+                .ReturnsAsync((string method, object?[]? args) =>
+                {
+                    if (args?.Length >= 1)
+                    {
+                        var imageId = args[0]?.ToString();
+                        if (!string.IsNullOrEmpty(imageId) && _mockIndexedDb.TryGetValue($"image_{imageId}", out var image))
+                        {
+                            return image?.ToString() ?? string.Empty;
+                        }
+                    }
+                    return string.Empty;
+                });
+
+            // Setup queue operation
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.queueOperation", It.IsAny<object?[]?>()))
+                .Callback<string, object?[]?>((method, args) =>
+                {
+                    if (args?.Length >= 2)
+                    {
+                        var operationId = args[0]?.ToString();
+                        var operationJson = args[1]?.ToString();
+                        if (!string.IsNullOrEmpty(operationId) && !string.IsNullOrEmpty(operationJson))
+                        {
+                            _mockIndexedDb[$"operation_{operationId}"] = operationJson;
+                        }
+                    }
+                })
+                .Returns(ValueTask.CompletedTask);
+
+            // Setup get pending operations
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string[]>("indexedDBStorage.getPendingOperations", It.IsAny<object?[]?>()))
+                .ReturnsAsync(() =>
+                {
+                    var operations = _mockIndexedDb
+                        .Where(kvp => kvp.Key.StartsWith("operation_"))
+                        .Select(kvp => kvp.Value?.ToString())
+                        .Where(op => !string.IsNullOrEmpty(op))
+                        .ToArray();
+                    return operations!;
+                });
+
+            // Setup get all sessions
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string[]>("indexedDBStorage.getAllSessions", It.IsAny<object?[]?>()))
+                .ReturnsAsync(() =>
+                {
+                    var sessions = _mockIndexedDb
+                        .Where(kvp => kvp.Key.StartsWith("session_"))
+                        .Select(kvp => kvp.Value?.ToString())
+                        .Where(s => !string.IsNullOrEmpty(s))
+                        .ToArray();
+                    return sessions!;
+                });
+
+            // Setup clear all data
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.clearAllData", It.IsAny<object?[]?>()))
+                .Callback(() => _mockIndexedDb.Clear())
+                .Returns(ValueTask.CompletedTask);
+
+            // Setup dispose
+            _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.dispose", It.IsAny<object?[]?>()))
+                .Returns(ValueTask.CompletedTask);
         }
 
         #region Browser Refresh Scenarios
@@ -59,7 +181,7 @@ namespace NoLock.Social.Core.Tests.Storage
             }
 
             // Act - Simulate browser refresh by creating new service instance
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             
             // Simulate restoration after refresh
             var restoredSession = await newStorageService.LoadSessionAsync(session.SessionId);
@@ -98,7 +220,7 @@ namespace NoLock.Social.Core.Tests.Storage
             }
 
             // Act - Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var restoredSessions = await newStorageService.GetAllSessionsAsync();
 
             // Assert - Verify all sessions persist
@@ -131,7 +253,7 @@ namespace NoLock.Social.Core.Tests.Storage
             }
 
             // Act - Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var restoredOperations = await newStorageService.GetPendingOperationsAsync();
 
             // Assert - Verify queue persists with correct ordering
@@ -161,7 +283,7 @@ namespace NoLock.Social.Core.Tests.Storage
             await _storageService.SaveImageAsync(largeImage);
 
             // Act - Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var restoredSession = await newStorageService.LoadSessionAsync(session.SessionId);
             var restoredImage = await newStorageService.LoadImageAsync(GetImageId(largeImage));
 
@@ -182,12 +304,20 @@ namespace NoLock.Social.Core.Tests.Storage
         public async Task BrowserRefresh_WithCorruptedData_ShouldHandleGracefully()
         {
             // Arrange - Setup JSRuntime to simulate corrupted data
-            _jsRuntimeMock.Setup(x => x.InvokeAsync<object>("indexedDBStorage.loadSession", It.IsAny<object[]>()))
+            // Need to override the default mock for this specific test
+            var corruptedMock = new Mock<IJSRuntimeWrapper>();
+            corruptedMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
+                .Returns(ValueTask.CompletedTask);
+            corruptedMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadSession", It.IsAny<object?[]?>()))
                 .ThrowsAsync(new JSException("IndexedDB corrupted"));
+            
+            using var testService = new IndexedDbStorageService(corruptedMock.Object);
 
-            // Act & Assert - Should handle corruption gracefully
-            await _storageService.Invoking(s => s.LoadSessionAsync("corrupted-session"))
-                .Should().NotThrowAsync("Should handle corrupted data gracefully");
+            // Act & Assert - Should throw OfflineStorageException wrapping the JSException
+            var exception = await testService.Invoking(s => s.LoadSessionAsync("corrupted-session"))
+                .Should().ThrowAsync<OfflineStorageException>("Should wrap JS errors in OfflineStorageException");
+            
+            exception.And.InnerException.Should().BeOfType<JSException>();
         }
 
         [Fact]
@@ -197,22 +327,36 @@ namespace NoLock.Social.Core.Tests.Storage
             var session = CreateTestDocumentSession("quota-test");
             var largeImage = CreateTestCapturedImage("huge-image.jpg", 10000000); // 10MB
             
-            _jsRuntimeMock.Setup(x => x.InvokeAsync<object>("indexedDBStorage.saveImage", It.IsAny<object[]>()))
-                .ThrowsAsync(new JSException("QuotaExceededError"));
+            // Create a special mock for this test
+            var quotaMock = new Mock<IJSRuntimeWrapper>();
+            quotaMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
+                .Returns(ValueTask.CompletedTask);
+            
+            int callCount = 0;
+            quotaMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.saveImage", It.IsAny<object?[]?>()))
+                .Returns(() =>
+                {
+                    callCount++;
+                    if (callCount == 1)
+                    {
+                        throw new JSException("QuotaExceededError");
+                    }
+                    return ValueTask.CompletedTask;
+                });
+            
+            using var testService = new IndexedDbStorageService(quotaMock.Object);
 
             // Act - Attempt to save large image
-            await _storageService.Invoking(s => s.SaveImageAsync(largeImage))
-                .Should().ThrowAsync<JSException>()
-                .WithMessage("*QuotaExceededError*");
+            var exception = await testService.Invoking(s => s.SaveImageAsync(largeImage))
+                .Should().ThrowAsync<OfflineStorageException>()
+                .WithMessage("*Failed to save image*");
+            
+            exception.And.InnerException.Should().BeOfType<JSException>();
 
             // Assert - Service should remain functional after quota error
             var smallImage = CreateTestCapturedImage("small-image.jpg", 1000);
-            
-            // Reset mock for smaller image
-            _jsRuntimeMock.Setup(x => x.InvokeAsync<object>("indexedDBStorage.saveImage", It.IsAny<object[]>()))
-                .Returns(ValueTask.FromResult<object>(true));
                 
-            await _storageService.Invoking(s => s.SaveImageAsync(smallImage))
+            await testService.Invoking(s => s.SaveImageAsync(smallImage))
                 .Should().NotThrowAsync("Should recover after quota error");
         }
 
@@ -237,7 +381,7 @@ namespace NoLock.Social.Core.Tests.Storage
             await Task.WhenAll(tasks);
 
             // Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var restoredSession = await newStorageService.LoadSessionAsync(session.SessionId);
 
             // Assert - Verify data consistency
@@ -274,7 +418,7 @@ namespace NoLock.Social.Core.Tests.Storage
 
             // Act - Simulate browser refresh and measure load time
             var startTime = DateTime.UtcNow;
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var allSessions = await newStorageService.GetAllSessionsAsync();
             var loadTime = DateTime.UtcNow - startTime;
 
@@ -303,7 +447,7 @@ namespace NoLock.Social.Core.Tests.Storage
             // For now, we'll test that partial data persists correctly
 
             // Act - Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeMock.Object);
+            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
             var remainingSessions = await newStorageService.GetAllSessionsAsync();
 
             // Assert - Verify remaining data is intact

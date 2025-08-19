@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
+using NoLock.Social.Core.ImageProcessing.Interfaces;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Services;
@@ -17,13 +18,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
     /// </summary>
     public class WakeLockServiceTests : IDisposable
     {
-        private readonly Mock<IJSRuntime> _mockJSRuntime;
+        private readonly Mock<IJSRuntimeWrapper> _mockJSRuntime;
         private readonly Mock<ILogger<WakeLockService>> _mockLogger;
         private readonly WakeLockService _wakeLockService;
 
         public WakeLockServiceTests()
         {
-            _mockJSRuntime = new Mock<IJSRuntime>();
+            _mockJSRuntime = new Mock<IJSRuntimeWrapper>();
             _mockLogger = new Mock<ILogger<WakeLockService>>();
             _wakeLockService = new WakeLockService(_mockJSRuntime.Object, _mockLogger.Object);
         }
@@ -250,14 +251,14 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task StartVisibilityMonitoringAsync_WhenNotActive_StartsSuccessfully()
         {
             // Arrange
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
 
             // Act
             await _wakeLockService.StartVisibilityMonitoringAsync();
 
             // Assert
-            _mockJSRuntime.Verify(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()), 
+            _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()), 
                 Times.Once);
         }
 
@@ -265,8 +266,8 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task StartVisibilityMonitoringAsync_WhenAlreadyActive_DoesNotCallJSAgain()
         {
             // Arrange
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
             
             await _wakeLockService.StartVisibilityMonitoringAsync(); // First call
 
@@ -274,7 +275,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             await _wakeLockService.StartVisibilityMonitoringAsync(); // Second call
 
             // Assert
-            _mockJSRuntime.Verify(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()), 
+            _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()), 
                 Times.Once);
         }
 
@@ -282,7 +283,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task StartVisibilityMonitoringAsync_WhenJSExceptionThrown_ThrowsInvalidOperationException()
         {
             // Arrange
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
                 .ThrowsAsync(new JSException("Monitoring error"));
 
             // Act & Assert
@@ -296,10 +297,10 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task StopVisibilityMonitoringAsync_WhenActive_StopsSuccessfully()
         {
             // Arrange
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
             
             await _wakeLockService.StartVisibilityMonitoringAsync();
 
@@ -307,7 +308,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             await _wakeLockService.StopVisibilityMonitoringAsync();
 
             // Assert
-            _mockJSRuntime.Verify(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
+            _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
                 Times.Once);
         }
 
@@ -318,7 +319,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             await _wakeLockService.StopVisibilityMonitoringAsync();
 
             // Assert
-            _mockJSRuntime.Verify(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
+            _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
                 Times.Never);
         }
 
@@ -440,10 +441,10 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task Dispose_WhenVisibilityMonitoringActive_StopsMonitoring()
         {
             // Arrange
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
-            _mockJSRuntime.Setup(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()))
-                .Returns(new ValueTask<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
+            _mockJSRuntime.Setup(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()))
+                .Returns(Task.CompletedTask);
             
             await _wakeLockService.StartVisibilityMonitoringAsync();
 
@@ -454,7 +455,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             await Task.Delay(100);
 
             // Assert
-            _mockJSRuntime.Verify(js => js.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
+            _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 
                 Times.Once);
         }
 

@@ -31,6 +31,18 @@ namespace NoLock.Social.Core.Tests.Camera
             _offlineQueueMock = new Mock<IOfflineQueueService>();
             _connectivityMock = new Mock<IConnectivityService>();
             
+            // Setup default mocks for basic operations
+            _connectivityMock.Setup(x => x.StartMonitoringAsync()).Returns(Task.CompletedTask);
+            _offlineStorageMock.Setup(x => x.GetAllSessionsAsync())
+                .ReturnsAsync(new List<DocumentSession>());
+            _offlineStorageMock.Setup(x => x.SaveImageAsync(It.IsAny<CapturedImage>()))
+                .Returns(Task.CompletedTask);
+            _offlineStorageMock.Setup(x => x.SaveSessionAsync(It.IsAny<DocumentSession>()))
+                .Returns(Task.CompletedTask);
+            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()))
+                .Returns(Task.CompletedTask);
+            _offlineQueueMock.Setup(x => x.ProcessQueueAsync()).Returns(Task.CompletedTask);
+            
             _cameraService = new CameraService(
                 _jsRuntimeMock.Object,
                 _offlineStorageMock.Object,
@@ -116,6 +128,9 @@ namespace NoLock.Social.Core.Tests.Camera
 
             _connectivityMock.Setup(x => x.IsOnlineAsync())
                 .ReturnsAsync(() => connectivityStates[stateIndex++]);
+            
+            // Initialize service to trigger StartMonitoringAsync
+            await _cameraService.InitializeAsync();
 
             // Act & Assert - Test state transitions
             foreach (var expectedOnline in connectivityStates)

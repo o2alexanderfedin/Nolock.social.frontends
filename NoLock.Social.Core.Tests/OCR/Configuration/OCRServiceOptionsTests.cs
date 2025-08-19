@@ -67,7 +67,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
 
             // Assert
             Assert.False(result.IsValid);
-            Assert.Contains("WakeLockReason cannot be empty when EnableWakeLock is true", result.Errors);
+            Assert.Contains(result.Errors, error => error.Contains("WakeLockReason cannot be empty when EnableWakeLock"));
         }
 
         [Fact]
@@ -83,7 +83,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
 
             // Assert
             Assert.False(result.IsValid);
-            Assert.Contains("WakeLockReason cannot be empty when EnableWakeLock is true", result.Errors);
+            Assert.Contains(result.Errors, error => error.Contains("WakeLockReason cannot be empty when EnableWakeLock"));
         }
 
         [Fact]
@@ -99,7 +99,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
 
             // Assert
             Assert.False(result.IsValid);
-            Assert.Contains("WakeLockReason cannot be empty when EnableWakeLock is true", result.Errors);
+            Assert.Contains(result.Errors, error => error.Contains("WakeLockReason cannot be empty when EnableWakeLock"));
         }
 
         [Fact]
@@ -115,7 +115,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
 
             // Assert
             Assert.True(result.IsValid);
-            Assert.Contains("WakeLockReason is quite long", result.Warnings);
+            Assert.Contains(result.Warnings, w => w.Contains("WakeLockReason is quite long"));
         }
 
         [Theory]
@@ -137,7 +137,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
             Assert.True(result.IsValid);
             if (shouldWarn)
             {
-                Assert.Contains("WakeLockReason is quite long", result.Warnings);
+                Assert.Contains(result.Warnings, w => w.Contains("WakeLockReason is quite long"));
             }
             else
             {
@@ -365,7 +365,7 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
 
             // Assert
             Assert.False(result.IsValid);
-            Assert.Contains("Polling configuration error", result.Errors);
+            Assert.Contains(result.Errors, error => error.Contains("Polling configuration error"));
         }
 
         #endregion
@@ -393,12 +393,12 @@ namespace NoLock.Social.Core.Tests.OCR.Configuration
             // Assert
             Assert.False(result.IsValid);
             Assert.True(result.Errors.Length >= 5); // Should have multiple errors
-            Assert.Contains("BaseUrl is required", result.Errors);
-            Assert.Contains("ApiKey is required", result.Errors);
-            Assert.Contains("TimeoutSeconds must be greater than 0", result.Errors);
-            Assert.Contains("MinimumConfidenceThreshold must be between 0.0 and 1.0", result.Errors);
-            Assert.Contains("WakeLockReason cannot be empty when EnableWakeLock is true", result.Errors);
-            Assert.Contains("CacheExpirationMinutes must be greater than 0", result.Errors);
+            Assert.Contains(result.Errors, error => error.Contains("BaseUrl is required"));
+            Assert.Contains(result.Errors, error => error.Contains("ApiKey is required"));
+            Assert.Contains(result.Errors, error => error.Contains("TimeoutSeconds must be greater than 0"));
+            Assert.Contains(result.Errors, error => error.Contains("MinimumConfidenceThreshold must be between 0.0 and 1.0"));
+            Assert.Contains(result.Errors, error => error.Contains("WakeLockReason cannot be empty when EnableWakeLock"));
+            Assert.Contains(result.Errors, error => error.Contains("CacheExpirationMinutes must be greater than 0"));
         }
 
         [Fact]

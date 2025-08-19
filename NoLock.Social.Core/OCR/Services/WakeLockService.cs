@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.ImageProcessing.Interfaces;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 
@@ -14,7 +15,7 @@ namespace NoLock.Social.Core.OCR.Services
     /// </summary>
     public class WakeLockService : IWakeLockService, IDisposable
     {
-        private readonly IJSRuntime _jsRuntime;
+        private readonly IJSRuntimeWrapper _jsRuntime;
         private readonly ILogger<WakeLockService> _logger;
         
         private bool _isWakeLockActive;
@@ -66,7 +67,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// </summary>
         /// <param name="jsRuntime">The JavaScript runtime for interop operations.</param>
         /// <param name="logger">The logger for diagnostic information.</param>
-        public WakeLockService(IJSRuntime jsRuntime, ILogger<WakeLockService> logger)
+        public WakeLockService(IJSRuntimeWrapper jsRuntime, ILogger<WakeLockService> logger)
         {
             _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

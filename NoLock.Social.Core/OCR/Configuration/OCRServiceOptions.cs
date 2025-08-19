@@ -146,7 +146,7 @@ namespace NoLock.Social.Core.OCR.Configuration
             {
                 validationResult.AddError("WakeLockReason cannot be empty when EnableWakeLock is true.");
             }
-            else if (EnableWakeLock && WakeLockReason.Length > 200)
+            else if (EnableWakeLock && !string.IsNullOrEmpty(WakeLockReason) && WakeLockReason.Length > 200)
             {
                 validationResult.AddWarning("WakeLockReason is quite long (>200 characters). Consider a shorter, clearer message.");
             }

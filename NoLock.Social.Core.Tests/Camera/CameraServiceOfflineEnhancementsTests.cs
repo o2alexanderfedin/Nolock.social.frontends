@@ -31,6 +31,17 @@ namespace NoLock.Social.Core.Tests.Camera
             _offlineQueueMock = new Mock<IOfflineQueueService>();
             _connectivityMock = new Mock<IConnectivityService>();
             
+            // Setup default mocks for basic operations
+            _connectivityMock.Setup(x => x.StartMonitoringAsync()).Returns(Task.CompletedTask);
+            _offlineStorageMock.Setup(x => x.GetAllSessionsAsync())
+                .ReturnsAsync(new List<DocumentSession>());
+            _offlineStorageMock.Setup(x => x.SaveImageAsync(It.IsAny<CapturedImage>()))
+                .Returns(Task.CompletedTask);
+            _offlineStorageMock.Setup(x => x.SaveSessionAsync(It.IsAny<DocumentSession>()))
+                .Returns(Task.CompletedTask);
+            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()))
+                .Returns(Task.CompletedTask);
+            
             _cameraService = new CameraService(
                 _jsRuntimeMock.Object,
                 _offlineStorageMock.Object,
@@ -50,6 +61,8 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
             var capturedImage = CreateTestCapturedImage("offline-capture.jpg");
 
@@ -205,6 +218,8 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
 
             // Act - Perform various operations that should be queued
@@ -230,6 +245,12 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
+            
+            // Setup queue operations
+            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()))
+                .Returns(Task.CompletedTask);
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
             
             var image = CreateTestCapturedImage("completion-test.jpg");
@@ -254,11 +275,14 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
-            _offlineStorageMock.Setup(x => x.SaveImageAsync(It.IsAny<CapturedImage>()))
-                .ThrowsAsync(new OfflineStorageException("Storage quota exceeded", "saveImage"));
-
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
             var image = CreateTestCapturedImage("storage-failure-test.jpg");
+            
+            // Setup storage failure for this specific test
+            _offlineStorageMock.Setup(x => x.SaveImageAsync(It.Is<CapturedImage>(img => img.ImageUrl == "storage-failure-test.jpg")))
+                .ThrowsAsync(new OfflineStorageException("Storage quota exceeded", "saveImage"));
 
             // Act & Assert - Should handle storage failure gracefully
             await _cameraService.Invoking(s => s.AddPageToSessionAsync(sessionId, image))
@@ -270,11 +294,15 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
-            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()))
-                .ThrowsAsync(new Exception("Queue service unavailable"));
-
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
             var image = CreateTestCapturedImage("queue-failure-test.jpg");
+            
+            // Setup queue failure for this specific operation
+            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
+                op => op.Payload.Contains("queue-failure-test.jpg"))))
+                .ThrowsAsync(new Exception("Queue service unavailable"));
 
             // Act - Should still capture image even if queueing fails
             await _cameraService.AddPageToSessionAsync(sessionId, image);
@@ -293,7 +321,8 @@ namespace NoLock.Social.Core.Tests.Camera
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync())
                 .ThrowsAsync(new Exception("Connectivity service unavailable"));
-
+            
+            await _cameraService.InitializeAsync();
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
             var image = CreateTestCapturedImage("connectivity-failure-test.jpg");
 
@@ -409,11 +438,20 @@ namespace NoLock.Social.Core.Tests.Camera
                     PendingOperations = queuedOperations.Count,
                     IsProcessing = false
                 });
+            
+            // Setup ProcessQueueAsync to be called
+            _offlineQueueMock.Setup(x => x.ProcessQueueAsync()).Returns(Task.CompletedTask);
+            
+            // Initialize service to set up event handlers
+            await _cameraService.InitializeAsync();
 
             // Act - Go online and trigger sync
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(true);
             _connectivityMock.Raise(x => x.OnOnline += null, 
                 new ConnectivityEventArgs { IsOnline = true, PreviousState = false });
+            
+            // Small delay to allow event processing
+            await Task.Delay(10);
 
             // Assert
             _offlineQueueMock.Verify(x => x.ProcessQueueAsync(), Times.AtLeastOnce,

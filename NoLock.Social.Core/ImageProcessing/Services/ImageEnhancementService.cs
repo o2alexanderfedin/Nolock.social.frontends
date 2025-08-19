@@ -12,7 +12,7 @@ namespace NoLock.Social.Core.ImageProcessing.Services
 {
     public class ImageEnhancementService : IImageEnhancementService, IDisposable
     {
-        private readonly IJSRuntime _jsRuntime;
+        private readonly IJSRuntimeWrapper _jsRuntime;
         private bool _disposed = false;
         private bool _initialized = false;
         private readonly Dictionary<string, (string enhancedData, DateTime timestamp)> _enhancementCache;
@@ -22,7 +22,13 @@ namespace NoLock.Social.Core.ImageProcessing.Services
 
         public ImageEnhancementService(IJSRuntime jsRuntime)
         {
-            _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
+            _jsRuntime = new JSRuntimeWrapper(jsRuntime) ?? throw new ArgumentNullException(nameof(jsRuntime));
+            _enhancementCache = new Dictionary<string, (string enhancedData, DateTime timestamp)>();
+        }
+
+        public ImageEnhancementService(IJSRuntimeWrapper jsRuntimeWrapper)
+        {
+            _jsRuntime = jsRuntimeWrapper ?? throw new ArgumentNullException(nameof(jsRuntimeWrapper));
             _enhancementCache = new Dictionary<string, (string enhancedData, DateTime timestamp)>();
         }
 
@@ -173,7 +179,7 @@ namespace NoLock.Social.Core.ImageProcessing.Services
             ThrowIfDisposed();
             await EnsureInitializedAsync();
             
-            if (string.IsNullOrEmpty(imageData))
+            if (string.IsNullOrWhiteSpace(imageData))
                 throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
             
             if (strength < 0.1 || strength > 2.0)
@@ -194,7 +200,7 @@ namespace NoLock.Social.Core.ImageProcessing.Services
             ThrowIfDisposed();
             await EnsureInitializedAsync();
             
-            if (string.IsNullOrEmpty(imageData))
+            if (string.IsNullOrWhiteSpace(imageData))
                 throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
             
             if (intensity < 0.1 || intensity > 1.0)
@@ -215,7 +221,7 @@ namespace NoLock.Social.Core.ImageProcessing.Services
             ThrowIfDisposed();
             await EnsureInitializedAsync();
             
-            if (string.IsNullOrEmpty(imageData))
+            if (string.IsNullOrWhiteSpace(imageData))
                 throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
 
             try
@@ -233,7 +239,7 @@ namespace NoLock.Social.Core.ImageProcessing.Services
             ThrowIfDisposed();
             await EnsureInitializedAsync();
             
-            if (string.IsNullOrEmpty(imageData))
+            if (string.IsNullOrWhiteSpace(imageData))
                 throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
 
             try
