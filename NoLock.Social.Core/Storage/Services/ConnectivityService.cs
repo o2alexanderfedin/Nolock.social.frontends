@@ -204,25 +204,42 @@ namespace NoLock.Social.Core.Storage.Services
         {
             if (!_disposed)
             {
+                _disposed = true;  // Mark as disposed immediately
                 _ = Task.Run(async () => await DisposeAsync());
             }
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (_disposed) return;
+            // Note: _disposed might already be set by Dispose() method
+            if (_disposed && _isMonitoring == false && _objectReference == null) return;
 
             try
             {
                 if (_isMonitoring)
                 {
-                    await StopMonitoringAsync();
+                    // Don't call StopMonitoringAsync as it checks ThrowIfDisposed
+                    // Instead, directly clean up monitoring resources
+                    try
+                    {
+                        if (_moduleTask.IsValueCreated)
+                        {
+                            var module = await _moduleTask.Value;
+                            await module.InvokeVoidAsync("stopMonitoring");
+                        }
+                    }
+                    catch { }
+                    _isMonitoring = false;
                 }
 
                 if (_moduleTask.IsValueCreated)
                 {
-                    var module = await _moduleTask.Value;
-                    await module.DisposeAsync();
+                    try
+                    {
+                        var module = await _moduleTask.Value;
+                        await module.DisposeAsync();
+                    }
+                    catch { }
                 }
 
                 _objectReference?.Dispose();

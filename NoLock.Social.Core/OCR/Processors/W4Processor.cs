@@ -192,8 +192,8 @@ namespace NoLock.Social.Core.OCR.Processors
             var keywordCount = w4Keywords.Count(keyword => 
                 rawOcrData.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
 
-            // Consider it a W-4 if we have the form title or W-4 text and at least 3 keywords
-            return (hasFormTitle || hasW4Text) && keywordCount >= 3;
+            // Consider it a W-4 if we have the form title, or if we have W-4 text with at least 2 keywords
+            return hasFormTitle || (hasW4Text && keywordCount >= 2);
         }
 
         /// <summary>

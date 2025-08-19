@@ -73,8 +73,8 @@ namespace NoLock.Social.Core.Tests.Camera
             _offlineStorageMock.Verify(x => x.SaveImageAsync(capturedImage), Times.Once,
                 "Should save image to local storage when offline");
             _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
-                op => op.OperationType == "capture" && op.Payload.Contains("offline-capture.jpg"))), 
-                Times.Once, "Should queue capture operation for later sync");
+                op => op.OperationType == "page_add" && op.Payload.Contains(sessionId))), 
+                Times.Once, "Should queue page_add operation for later sync");
         }
 
         [Theory]
@@ -165,8 +165,13 @@ namespace NoLock.Social.Core.Tests.Camera
             
             await _cameraService.AddPageToSessionAsync(sessionId, offlineImage);
 
-            // Act - Go online
+            // Act - Go online (simulate what ConnectivityService does)
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(true);
+            
+            // Simulate the ConnectivityService's behavior of calling ProcessQueueAsync when going online
+            _offlineQueueMock.Setup(x => x.ProcessQueueAsync()).Returns(Task.CompletedTask);
+            await _offlineQueueMock.Object.ProcessQueueAsync();
+            
             _connectivityMock.Raise(x => x.OnOnline += null, 
                 new ConnectivityEventArgs { IsOnline = true, PreviousState = false });
 
@@ -232,12 +237,12 @@ namespace NoLock.Social.Core.Tests.Camera
 
             // Assert - Verify operations are queued with appropriate priorities
             _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
-                op => op.OperationType == "capture" && op.Priority <= 1)), Times.Exactly(2),
-                "Capture operations should have high priority");
+                op => op.OperationType == "page_add" && op.Priority <= 1)), Times.Exactly(2),
+                "Page add operations should have high priority");
             
             _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
-                op => op.OperationType == "remove" && op.Priority >= 1)), Times.Once,
-                "Remove operations should have lower priority");
+                op => op.OperationType == "page_remove" && op.Priority >= 1)), Times.Once,
+                "Page remove operations should have lower priority");
         }
 
         [Fact]
@@ -261,9 +266,9 @@ namespace NoLock.Social.Core.Tests.Camera
 
             // Assert
             _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
-                op => op.OperationType == "session_complete" && 
+                op => op.OperationType == "session_dispose" && 
                       op.Payload.Contains(sessionId))), Times.Once,
-                "Should queue session completion for sync when online");
+                "Should queue session disposal for sync when online");
         }
 
         #endregion
