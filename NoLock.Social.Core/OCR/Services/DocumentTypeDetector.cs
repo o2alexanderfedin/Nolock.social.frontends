@@ -68,7 +68,7 @@ namespace NoLock.Social.Core.OCR.Services
                 {
                     "invoice", "bill to", "ship to", "invoice number", "due date",
                     "terms", "net 30", "purchase order", "quantity", "unit price",
-                    "line total", "balance due", "remit to"
+                    "line total", "balance due", "remit to", "amount due"
                 },
                 ["PayStub"] = new List<string>
                 {

@@ -10,13 +10,19 @@ namespace NoLock.Social.Core.Storage.Services
 {
     public class IndexedDbStorageService : IOfflineStorageService, IDisposable
     {
-        private readonly IJSRuntime _jsRuntime;
+        private readonly IJSRuntimeWrapper _jsRuntime;
         private bool _disposed = false;
         private bool _isInitialized = false;
 
         public IndexedDbStorageService(IJSRuntime jsRuntime)
         {
-            _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
+            _jsRuntime = new JSRuntimeWrapper(jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime)));
+        }
+
+        // Constructor for testing with wrapper
+        public IndexedDbStorageService(IJSRuntimeWrapper jsRuntimeWrapper)
+        {
+            _jsRuntime = jsRuntimeWrapper ?? throw new ArgumentNullException(nameof(jsRuntimeWrapper));
         }
 
         private async Task EnsureInitializedAsync()
@@ -25,7 +31,7 @@ namespace NoLock.Social.Core.Storage.Services
             {
                 try
                 {
-                    await _jsRuntime.InvokeVoidAsync("indexedDbStorage.initialize");
+                    await _jsRuntime.InvokeVoidAsync("indexedDBStorage.initialize");
                     _isInitialized = true;
                 }
                 catch (JSException ex)
@@ -47,7 +53,7 @@ namespace NoLock.Social.Core.Storage.Services
             try
             {
                 var sessionJson = JsonSerializer.Serialize(session);
-                await _jsRuntime.InvokeVoidAsync("indexedDbStorage.saveSession", session.SessionId, sessionJson);
+                await _jsRuntime.InvokeVoidAsync("indexedDBStorage.saveSession", session.SessionId, sessionJson);
             }
             catch (JSException ex)
             {
@@ -66,7 +72,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                var sessionJson = await _jsRuntime.InvokeAsync<string>("indexedDbStorage.loadSession", sessionId);
+                var sessionJson = await _jsRuntime.InvokeAsync<string>("indexedDBStorage.loadSession", sessionId);
                 
                 if (string.IsNullOrEmpty(sessionJson))
                     return null;
@@ -96,7 +102,7 @@ namespace NoLock.Social.Core.Storage.Services
             {
                 var imageJson = JsonSerializer.Serialize(image);
                 var imageId = image.Timestamp.ToString("yyyyMMddHHmmssfff");
-                await _jsRuntime.InvokeVoidAsync("indexedDbStorage.saveImage", imageId, imageJson);
+                await _jsRuntime.InvokeVoidAsync("indexedDBStorage.saveImage", imageId, imageJson);
             }
             catch (JSException ex)
             {
@@ -115,7 +121,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                var imageJson = await _jsRuntime.InvokeAsync<string>("indexedDbStorage.loadImage", imageId);
+                var imageJson = await _jsRuntime.InvokeAsync<string>("indexedDBStorage.loadImage", imageId);
                 
                 if (string.IsNullOrEmpty(imageJson))
                     return null;
@@ -144,7 +150,7 @@ namespace NoLock.Social.Core.Storage.Services
             try
             {
                 var operationJson = JsonSerializer.Serialize(operation);
-                await _jsRuntime.InvokeVoidAsync("indexedDbStorage.queueOperation", operation.OperationId, operationJson);
+                await _jsRuntime.InvokeVoidAsync("indexedDBStorage.queueOperation", operation.OperationId, operationJson);
             }
             catch (JSException ex)
             {
@@ -159,7 +165,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                var operationsJson = await _jsRuntime.InvokeAsync<string[]>("indexedDbStorage.getPendingOperations");
+                var operationsJson = await _jsRuntime.InvokeAsync<string[]>("indexedDBStorage.getPendingOperations");
                 var operations = new List<OfflineOperation>();
 
                 if (operationsJson != null)
@@ -200,7 +206,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                await _jsRuntime.InvokeVoidAsync("indexedDbStorage.removeOperation", operationId);
+                await _jsRuntime.InvokeVoidAsync("indexedDBStorage.removeOperation", operationId);
             }
             catch (JSException ex)
             {
@@ -215,7 +221,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                await _jsRuntime.InvokeVoidAsync("indexedDbStorage.clearAllData");
+                await _jsRuntime.InvokeVoidAsync("indexedDBStorage.clearAllData");
             }
             catch (JSException ex)
             {
@@ -230,7 +236,7 @@ namespace NoLock.Social.Core.Storage.Services
 
             try
             {
-                var sessionsJson = await _jsRuntime.InvokeAsync<string[]>("indexedDbStorage.getAllSessions");
+                var sessionsJson = await _jsRuntime.InvokeAsync<string[]>("indexedDBStorage.getAllSessions");
                 var sessions = new List<DocumentSession>();
 
                 if (sessionsJson != null)
@@ -279,7 +285,7 @@ namespace NoLock.Social.Core.Storage.Services
                         // Note: Cannot await in Dispose, but JS calls should be fire-and-forget for cleanup
                         if (_isInitialized)
                         {
-                            _jsRuntime.InvokeVoidAsync("indexedDbStorage.dispose");
+                            _jsRuntime.InvokeVoidAsync("indexedDBStorage.dispose");
                         }
                     }
                     catch

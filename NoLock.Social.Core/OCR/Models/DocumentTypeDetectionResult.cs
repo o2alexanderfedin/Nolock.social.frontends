@@ -67,7 +67,7 @@ namespace NoLock.Social.Core.OCR.Models
         {
             return new DocumentTypeDetectionResult
             {
-                DocumentType = "Unknown",
+                DocumentType = "Other",
                 ConfidenceScore = 0.0,
                 IsConfident = false,
                 RequiresManualConfirmation = true,

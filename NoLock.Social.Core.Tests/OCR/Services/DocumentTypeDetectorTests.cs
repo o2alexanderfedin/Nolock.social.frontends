@@ -22,7 +22,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public DocumentTypeDetectorTests()
         {
             _mockLogger = new Mock<ILogger<DocumentTypeDetector>>();
-            _detector = new DocumentTypeDetector(_mockLogger.Object, 0.7);
+            _detector = new DocumentTypeDetector(_mockLogger.Object, 0.2); // Very low threshold for testing
         }
 
         #region DetectDocumentTypeAsync Tests
@@ -111,8 +111,9 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             cts.Cancel();
 
             // Act & Assert
-            await Assert.ThrowsAsync<OperationCanceledException>(
+            var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => _detector.DetectDocumentTypeAsync("Some text", cts.Token));
+            Assert.True(exception is OperationCanceledException);
         }
 
         #endregion

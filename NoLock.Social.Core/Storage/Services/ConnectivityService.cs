@@ -12,7 +12,7 @@ namespace NoLock.Social.Core.Storage.Services
     /// </summary>
     public class ConnectivityService : IConnectivityService, IAsyncDisposable
     {
-        private readonly IJSRuntime _jsRuntime;
+        private readonly IJSRuntimeWrapper _jsRuntime;
         private readonly IOfflineQueueService _queueService;
         private readonly ILogger<ConnectivityService>? _logger;
         private readonly Lazy<Task<IJSObjectReference>> _moduleTask;
@@ -23,7 +23,7 @@ namespace NoLock.Social.Core.Storage.Services
         private DotNetObjectReference<ConnectivityService>? _objectReference;
 
         public ConnectivityService(
-            IJSRuntime jsRuntime, 
+            IJSRuntimeWrapper jsRuntime, 
             IOfflineQueueService queueService,
             ILogger<ConnectivityService>? logger = null)
         {
@@ -31,9 +31,17 @@ namespace NoLock.Social.Core.Storage.Services
             _queueService = queueService ?? throw new ArgumentNullException(nameof(queueService));
             _logger = logger;
 
-            _moduleTask = new Lazy<Task<IJSObjectReference>>(() => 
-                _jsRuntime.InvokeAsync<IJSObjectReference>(
-                    "import", "./js/connectivity.js").AsTask());
+            _moduleTask = new Lazy<Task<IJSObjectReference>>(async () => 
+                await _jsRuntime.InvokeAsync<IJSObjectReference>(
+                    "import", "./js/connectivity.js"));
+        }
+
+        public ConnectivityService(
+            IJSRuntime jsRuntime, 
+            IOfflineQueueService queueService,
+            ILogger<ConnectivityService>? logger = null)
+            : this(new JSRuntimeWrapper(jsRuntime), queueService, logger)
+        {
         }
 
         // Events

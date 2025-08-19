@@ -5,6 +5,7 @@ using Moq;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.ImageProcessing.Models;
 using NoLock.Social.Core.ImageProcessing.Services;
+using NoLock.Social.Core.ImageProcessing.Interfaces;
 using Xunit;
 
 namespace NoLock.Social.Core.Tests.ImageProcessing
@@ -15,13 +16,13 @@ namespace NoLock.Social.Core.Tests.ImageProcessing
     /// </summary>
     public class ImageEnhancementAlgorithmTests
     {
-        private readonly Mock<IJSRuntime> _mockJSRuntime;
+        private readonly Mock<IJSRuntimeWrapper> _mockJSRuntime;
         private readonly ImageEnhancementService _service;
         private const string TestImageData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAAAAD";
 
         public ImageEnhancementAlgorithmTests()
         {
-            _mockJSRuntime = new Mock<IJSRuntime>();
+            _mockJSRuntime = new Mock<IJSRuntimeWrapper>();
             _service = new ImageEnhancementService(_mockJSRuntime.Object);
         }
 
