@@ -67,7 +67,7 @@ namespace NoLock.Social.Core.Tests.Camera
             // Verify storage interactions based on connectivity
             if (isOnline)
             {
-                _offlineQueueMock.Verify(x => x.EnqueueAsync(It.IsAny<OfflineOperation>()), Times.Never,
+                _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()), Times.Never,
                     "Should not queue operations when online");
             }
             else
@@ -141,8 +141,8 @@ namespace NoLock.Social.Core.Tests.Camera
                 new() { OperationType = "sync", Payload = "session2-data" }
             };
             
-            _offlineQueueMock.Setup(x => x.GetPendingAsync())
-                .ReturnsAsync(queuedOperations);
+            _offlineQueueMock.Setup(x => x.GetQueueStatusAsync())
+                .ReturnsAsync(new OfflineQueueStatus { PendingOperations = queuedOperations.Count });
 
             // Act - Simulate going online and trigger queue processing
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(true);
@@ -229,7 +229,7 @@ namespace NoLock.Social.Core.Tests.Camera
             await _cameraService.AddPageToSessionAsync(sessionId, largeImage);
 
             // Assert - Should queue large image for later upload
-            _offlineQueueMock.Verify(x => x.EnqueueAsync(
+            _offlineQueueMock.Verify(x => x.QueueOperationAsync(
                 It.Is<OfflineOperation>(op => op.OperationType == "upload" && 
                                              op.Payload.Contains("large-document.jpg"))), 
                 Times.Once, "Large images should be queued for upload when offline");

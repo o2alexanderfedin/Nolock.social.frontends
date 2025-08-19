@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.OCR.Models;
+using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 using NoLock.Social.Core.OCR.Services;
 using Xunit;
 
@@ -27,36 +28,36 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         #region DetectDocumentTypeAsync Tests
 
         [Theory]
-        [InlineData("", "Unknown", 0.0, "Empty OCR data")]
-        [InlineData(null, "Unknown", 0.0, "Null OCR data")]
-        [InlineData("   ", "Unknown", 0.0, "Whitespace OCR data")]
+        [InlineData("", CameraDocumentType.Other, 0.0, "Empty OCR data")]
+        [InlineData(null, CameraDocumentType.Other, 0.0, "Null OCR data")]
+        [InlineData("   ", CameraDocumentType.Other, 0.0, "Whitespace OCR data")]
         public async Task DetectDocumentTypeAsync_InvalidInput_ReturnsUnknown(
-            string input, string expectedType, double expectedScore, string scenario)
+            string input, CameraDocumentType expectedType, double expectedScore, string scenario)
         {
             // Act
             var result = await _detector.DetectDocumentTypeAsync(input);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedType, result.DocumentType);
+            Assert.Equal(expectedType.ToString(), result.DocumentType);
             Assert.Equal(expectedScore, result.ConfidenceScore);
             Assert.False(result.IsConfident, $"Failed for: {scenario}");
         }
 
         [Theory]
-        [InlineData("RECEIPT\nTotal: $45.99\nSubtotal: $42.00\nTax: $3.99\nThank you for your purchase", "Receipt", true, "Standard receipt")]
-        [InlineData("invoice #12345\nBill To: John Doe\nAmount Due: $500\nPayment Terms: Net 30", "Invoice", true, "Standard invoice")]
-        [InlineData("PAY TO THE ORDER OF: John Smith\n$500.00\nFive Hundred Dollars\nMemo: Rent\nRouting Number: 123456789", "Check", true, "Bank check")]
+        [InlineData("RECEIPT\nTotal: $45.99\nSubtotal: $42.00\nTax: $3.99\nThank you for your purchase", CameraDocumentType.Receipt, true, "Standard receipt")]
+        [InlineData("invoice #12345\nBill To: John Doe\nAmount Due: $500\nPayment Terms: Net 30", CameraDocumentType.Invoice, true, "Standard invoice")]
+        [InlineData("PAY TO THE ORDER OF: John Smith\n$500.00\nFive Hundred Dollars\nMemo: Rent\nRouting Number: 123456789", CameraDocumentType.Check, true, "Bank check")]
         public async Task DetectDocumentTypeAsync_CommonDocuments_DetectsCorrectly(
-            string ocrText, string expectedType, bool shouldBeConfident, string scenario)
+            string ocrText, CameraDocumentType expectedType, bool shouldBeConfident, string scenario)
         {
             // Act
             var result = await _detector.DetectDocumentTypeAsync(ocrText);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedType, result.DocumentType);
-            Assert.Equal(shouldBeConfident, result.IsConfident, $"Failed confidence check for: {scenario}");
+            Assert.Equal(expectedType.ToString(), result.DocumentType);
+            Assert.Equal(shouldBeConfident, result.IsConfident);
             Assert.True(result.ConfidenceScore > 0, $"No confidence score for: {scenario}");
             Assert.NotEmpty(result.MatchedKeywords);
         }
@@ -78,7 +79,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal("W4", result.DocumentType);
+            Assert.Equal(CameraDocumentType.W4.ToString(), result.DocumentType);
             Assert.True(result.ConfidenceScore > 0.8, "W4 should have high confidence");
             Assert.True(result.IsConfident);
             Assert.Contains("w-4", result.MatchedKeywords);
@@ -210,7 +211,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _detector.DetectDocumentTypeAsync(checkText);
 
             // Assert
-            Assert.Equal("Check", result.DocumentType);
+            Assert.Equal(CameraDocumentType.Check.ToString(), result.DocumentType);
             Assert.True(result.ConfidenceScore > 0.7, "High keyword match should produce high confidence");
             Assert.True(result.KeywordMatchCount >= 5, "Should match multiple check keywords");
         }
@@ -225,7 +226,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _detector.DetectDocumentTypeAsync(vagueText);
 
             // Assert
-            Assert.True(result.ConfidenceScore < 0.5 || result.DocumentType == "Unknown",
+            Assert.True(result.ConfidenceScore < 0.5 || result.DocumentType == CameraDocumentType.Other.ToString(),
                 "Low keyword match should produce low confidence or unknown");
         }
 
@@ -244,7 +245,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await lowConfidenceDetector.DetectDocumentTypeAsync(text);
 
             // Assert
-            if (result.DocumentType != "Unknown")
+            if (result.DocumentType != CameraDocumentType.Other.ToString())
             {
                 Assert.True(result.RequiresManualConfirmation, 
                     "Low confidence detection should require manual confirmation");
@@ -290,7 +291,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _detector.DetectDocumentTypeAsync(mixedCaseText);
 
             // Assert
-            Assert.Equal("Receipt", result.DocumentType);
+            Assert.Equal(CameraDocumentType.Receipt.ToString(), result.DocumentType);
             Assert.True(result.ConfidenceScore > 0, "Should detect despite mixed case");
         }
 
@@ -305,7 +306,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal("Receipt", result.DocumentType);
+            Assert.Equal(CameraDocumentType.Receipt.ToString(), result.DocumentType);
         }
 
         #endregion

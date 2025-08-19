@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using Moq;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
@@ -16,7 +16,6 @@ namespace NoLock.Social.Core.Tests.OCR.Services
     /// Unit tests for the enhanced plugin registry management features of DocumentProcessorRegistry.
     /// Tests metadata management, priority-based selection, and dynamic enable/disable functionality.
     /// </summary>
-    [TestClass]
     public class DocumentProcessorRegistryPluginTests
     {
         private Mock<ILogger<DocumentProcessorRegistry>> _loggerMock;
@@ -25,8 +24,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         private Mock<IDocumentProcessor> _checkProcessorMock;
         private Mock<IDocumentProcessor> _w4ProcessorMock;
 
-        [TestInitialize]
-        public void Setup()
+        public DocumentProcessorRegistryPluginTests()
         {
             _loggerMock = new Mock<ILogger<DocumentProcessorRegistry>>();
             _registry = new DocumentProcessorRegistry(_loggerMock.Object);
@@ -47,7 +45,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         #region Metadata Registration Tests
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithMetadata_ShouldStoreMetadata()
         {
             // Arrange
@@ -66,17 +64,17 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.IsNotNull(info);
-            Assert.AreEqual("Test Processor", info.DisplayName);
-            Assert.AreEqual("Test Description", info.Description);
-            Assert.AreEqual(new Version(1, 2, 3), info.Version);
-            Assert.AreEqual(100, info.Priority);
-            Assert.IsTrue(info.IsEnabled);
-            CollectionAssert.AreEquivalent(new[] { "capability1", "capability2" }, info.Capabilities.ToArray());
-            CollectionAssert.AreEquivalent(new[] { ".pdf", ".jpg" }, info.SupportedExtensions.ToArray());
+            Assert.NotNull(info);
+            Assert.Equal("Test Processor", info.DisplayName);
+            Assert.Equal("Test Description", info.Description);
+            Assert.Equal(new Version(1, 2, 3), info.Version);
+            Assert.Equal(100, info.Priority);
+            Assert.True(info.IsEnabled);
+            Assert.Equal(new[] { "capability1", "capability2" }, info.Capabilities.ToArray());
+            Assert.Equal(new[] { ".pdf", ".jpg" }, info.SupportedExtensions.ToArray());
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithDetailedMetadata_ShouldStoreAllDetails()
         {
             // Act
@@ -93,16 +91,16 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.IsNotNull(info);
-            Assert.AreEqual("Receipt Scanner", info.DisplayName);
-            Assert.AreEqual("Scans and processes receipts", info.Description);
-            Assert.AreEqual(new Version(2, 0, 0), info.Version);
-            Assert.AreEqual(150, info.Priority);
-            Assert.AreEqual(2, info.Capabilities.Count);
-            Assert.AreEqual(2, info.SupportedExtensions.Count);
+            Assert.NotNull(info);
+            Assert.Equal("Receipt Scanner", info.DisplayName);
+            Assert.Equal("Scans and processes receipts", info.Description);
+            Assert.Equal(new Version(2, 0, 0), info.Version);
+            Assert.Equal(150, info.Priority);
+            Assert.Equal(2, info.Capabilities.Count);
+            Assert.Equal(2, info.SupportedExtensions.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public void RegisterProcessor_WithoutMetadata_ShouldUseDefaults()
         {
             // Act
@@ -110,19 +108,19 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.IsNotNull(info);
-            Assert.AreEqual("Receipt", info.DisplayName);
-            Assert.IsTrue(info.Description.Contains("Receipt"));
-            Assert.AreEqual(new Version(1, 0, 0), info.Version);
-            Assert.AreEqual(0, info.Priority);
-            Assert.IsTrue(info.IsEnabled);
+            Assert.NotNull(info);
+            Assert.Equal("Receipt", info.DisplayName);
+            Assert.True(info.Description.Contains("Receipt"));
+            Assert.Equal(new Version(1, 0, 0), info.Version);
+            Assert.Equal(0, info.Priority);
+            Assert.True(info.IsEnabled);
         }
 
         #endregion
 
         #region Enable/Disable Tests
 
-        [TestMethod]
+        [Fact]
         public void SetProcessorEnabled_DisableProcessor_ShouldDisable()
         {
             // Arrange
@@ -133,11 +131,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var processor = _registry.GetProcessor("Receipt");
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.IsNull(processor); // Disabled processors return null
+            Assert.True(result);
+            Assert.Null(processor); // Disabled processors return null
         }
 
-        [TestMethod]
+        [Fact]
         public void SetProcessorEnabled_EnableProcessor_ShouldEnable()
         {
             // Arrange
@@ -149,21 +147,21 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var processor = _registry.GetProcessor("Receipt");
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.IsNotNull(processor);
+            Assert.True(result);
+            Assert.NotNull(processor);
         }
 
-        [TestMethod]
+        [Fact]
         public void SetProcessorEnabled_NonExistentProcessor_ShouldReturnFalse()
         {
             // Act
             var result = _registry.SetProcessorEnabled("NonExistent", true);
 
             // Assert
-            Assert.IsFalse(result);
+            Assert.False(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetEnabledProcessors_ShouldReturnOnlyEnabled()
         {
             // Arrange
@@ -177,13 +175,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var enabled = _registry.GetEnabledProcessors().ToList();
 
             // Assert
-            Assert.AreEqual(2, enabled.Count);
-            Assert.IsTrue(enabled.Any(p => p.Processor.DocumentType == "Receipt"));
-            Assert.IsTrue(enabled.Any(p => p.Processor.DocumentType == "W4"));
-            Assert.IsFalse(enabled.Any(p => p.Processor.DocumentType == "Check"));
+            Assert.Equal(2, enabled.Count);
+            Assert.True(enabled.Any(p => p.Processor.DocumentType == "Receipt"));
+            Assert.True(enabled.Any(p => p.Processor.DocumentType == "W4"));
+            Assert.False(enabled.Any(p => p.Processor.DocumentType == "Check"));
         }
 
-        [TestMethod]
+        [Fact]
         public void GetDisabledProcessors_ShouldReturnOnlyDisabled()
         {
             // Arrange
@@ -196,15 +194,15 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var disabled = _registry.GetDisabledProcessors().ToList();
 
             // Assert
-            Assert.AreEqual(1, disabled.Count);
-            Assert.AreEqual("Check", disabled[0].Processor.DocumentType);
+            Assert.Equal(1, disabled.Count);
+            Assert.Equal("Check", disabled[0].Processor.DocumentType);
         }
 
         #endregion
 
         #region Priority-Based Selection Tests
 
-        [TestMethod]
+        [Fact]
         public void GetHighestPriorityProcessor_ShouldReturnHighestPriority()
         {
             // Arrange
@@ -222,11 +220,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var processor = _registry.GetHighestPriorityProcessor(ocrData);
 
             // Assert
-            Assert.IsNotNull(processor);
-            Assert.AreEqual("Check", processor.DocumentType);
+            Assert.NotNull(processor);
+            Assert.Equal("Check", processor.DocumentType);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetHighestPriorityProcessor_WithDisabledHighPriority_ShouldSkipDisabled()
         {
             // Arrange
@@ -244,11 +242,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var processor = _registry.GetHighestPriorityProcessor(ocrData);
 
             // Assert
-            Assert.IsNotNull(processor);
-            Assert.AreEqual("Receipt", processor.DocumentType);
+            Assert.NotNull(processor);
+            Assert.Equal("Receipt", processor.DocumentType);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetCompatibleProcessors_ShouldReturnOrderedByPriority()
         {
             // Arrange
@@ -266,14 +264,14 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var compatible = _registry.GetCompatibleProcessors(ocrData).ToList();
 
             // Assert
-            Assert.AreEqual(2, compatible.Count);
-            Assert.AreEqual("Check", compatible[0].Processor.DocumentType);
-            Assert.AreEqual(100, compatible[0].Priority);
-            Assert.AreEqual("Receipt", compatible[1].Processor.DocumentType);
-            Assert.AreEqual(50, compatible[1].Priority);
+            Assert.Equal(2, compatible.Count);
+            Assert.Equal("Check", compatible[0].Processor.DocumentType);
+            Assert.Equal(100, compatible[0].Priority);
+            Assert.Equal("Receipt", compatible[1].Processor.DocumentType);
+            Assert.Equal(50, compatible[1].Priority);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetCompatibleProcessors_WithNoCompatible_ShouldReturnEmpty()
         {
             // Arrange
@@ -286,14 +284,14 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var compatible = _registry.GetCompatibleProcessors(ocrData);
 
             // Assert
-            Assert.AreEqual(0, compatible.Count());
+            Assert.Equal(0, compatible.Count());
         }
 
         #endregion
 
         #region Priority Update Tests
 
-        [TestMethod]
+        [Fact]
         public void UpdateProcessorPriority_ShouldUpdatePriority()
         {
             // Arrange
@@ -304,11 +302,11 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.AreEqual(200, info.Priority);
+            Assert.True(result);
+            Assert.Equal(200, info.Priority);
         }
 
-        [TestMethod]
+        [Fact]
         public void UpdateProcessorPriority_ShouldPreserveOtherMetadata()
         {
             // Arrange
@@ -327,29 +325,29 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.AreEqual("Receipt Scanner", info.DisplayName);
-            Assert.AreEqual("Scans receipts", info.Description);
-            Assert.AreEqual(new Version(1, 2, 3), info.Version);
-            Assert.AreEqual(200, info.Priority);
-            Assert.IsFalse(info.IsEnabled);
-            Assert.AreEqual(1, info.Capabilities.Count);
+            Assert.Equal("Receipt Scanner", info.DisplayName);
+            Assert.Equal("Scans receipts", info.Description);
+            Assert.Equal(new Version(1, 2, 3), info.Version);
+            Assert.Equal(200, info.Priority);
+            Assert.False(info.IsEnabled);
+            Assert.Equal(1, info.Capabilities.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public void UpdateProcessorPriority_NonExistent_ShouldReturnFalse()
         {
             // Act
             var result = _registry.UpdateProcessorPriority("NonExistent", 100);
 
             // Assert
-            Assert.IsFalse(result);
+            Assert.False(result);
         }
 
         #endregion
 
         #region GetProcessorInfo Tests
 
-        [TestMethod]
+        [Fact]
         public void GetProcessorInfo_AllProcessors_ShouldReturnAllOrdered()
         {
             // Arrange
@@ -361,13 +359,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var allInfo = _registry.GetProcessorInfo().ToList();
 
             // Assert
-            Assert.AreEqual(3, allInfo.Count);
-            Assert.AreEqual("Check", allInfo[0].Processor.DocumentType);
-            Assert.AreEqual("W4", allInfo[1].Processor.DocumentType);
-            Assert.AreEqual("Receipt", allInfo[2].Processor.DocumentType);
+            Assert.Equal(3, allInfo.Count);
+            Assert.Equal("Check", allInfo[0].Processor.DocumentType);
+            Assert.Equal("W4", allInfo[1].Processor.DocumentType);
+            Assert.Equal("Receipt", allInfo[2].Processor.DocumentType);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetProcessorInfo_SpecificProcessor_ShouldReturnInfo()
         {
             // Arrange
@@ -383,55 +381,55 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var info = _registry.GetProcessorInfo("Receipt");
 
             // Assert
-            Assert.IsNotNull(info);
-            Assert.AreEqual("Receipt Scanner", info.DisplayName);
-            Assert.AreEqual(new Version(2, 1, 0), info.Version);
-            Assert.AreEqual(100, info.Priority);
+            Assert.NotNull(info);
+            Assert.Equal("Receipt Scanner", info.DisplayName);
+            Assert.Equal(new Version(2, 1, 0), info.Version);
+            Assert.Equal(100, info.Priority);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetProcessorInfo_NonExistent_ShouldReturnNull()
         {
             // Act
             var info = _registry.GetProcessorInfo("NonExistent");
 
             // Assert
-            Assert.IsNull(info);
+            Assert.Null(info);
         }
 
         #endregion
 
         #region Data-Driven Tests
 
-        [TestMethod]
-        [DataRow("Receipt", 100, true, true)]
-        [DataRow("Check", 50, false, false)]
-        [DataRow("W4", 200, true, true)]
-        public void RegisterAndToggleProcessor_DataDriven(string documentType, int priority, bool initialEnabled, bool expectedEnabled)
+        [Theory]
+        [InlineData("Receipt", 100, true, true)]
+        [InlineData("Check", 50, false, false)]
+        [InlineData("W4", 200, true, true)]
+        public void RegisterAndToggleProcessor_DataDriven(string processorId, int priority, bool initialEnabled, bool expectedEnabled)
         {
             // Arrange
             var processor = new Mock<IDocumentProcessor>();
-            processor.Setup(p => p.DocumentType).Returns(documentType);
+            processor.Setup(p => p.DocumentType).Returns(processorId);
             
             // Act
-            _registry.RegisterProcessor(processor.Object, documentType, $"{documentType} processor", priority: priority);
+            _registry.RegisterProcessor(processor.Object, processorId, $"{processorId} processor", priority: priority);
             if (!initialEnabled)
             {
-                _registry.SetProcessorEnabled(documentType, false);
+                _registry.SetProcessorEnabled(processorId, false);
             }
             
-            var info = _registry.GetProcessorInfo(documentType);
+            var info = _registry.GetProcessorInfo(processorId);
             
             // Assert
-            Assert.IsNotNull(info);
-            Assert.AreEqual(priority, info.Priority);
-            Assert.AreEqual(expectedEnabled, info.IsEnabled);
+            Assert.NotNull(info);
+            Assert.Equal(priority, info.Priority);
+            Assert.Equal(expectedEnabled, info.IsEnabled);
         }
 
-        [TestMethod]
-        [DataRow(100, 50, 75, "Type1")]  // Highest priority wins
-        [DataRow(50, 100, 75, "Type2")]  // Highest priority wins
-        [DataRow(75, 75, 100, "Type3")]  // Highest priority wins
+        [Theory]
+        [InlineData(100, 50, 75, "Type1")]  // Highest priority wins
+        [InlineData(50, 100, 75, "Type2")]  // Highest priority wins
+        [InlineData(75, 75, 100, "Type3")]  // Highest priority wins
         public void PrioritySelection_DataDriven(int priority1, int priority2, int priority3, string expectedType)
         {
             // Arrange
@@ -448,18 +446,18 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var selected = _registry.GetHighestPriorityProcessor(ocrData);
             
             // Assert
-            Assert.IsNotNull(selected);
-            Assert.AreEqual(expectedType, selected.DocumentType);
+            Assert.NotNull(selected);
+            Assert.Equal(expectedType, selected.DocumentType);
         }
 
         #endregion
 
         #region Helper Methods
 
-        private IDocumentProcessor CreateMockProcessor(string documentType, bool canProcess)
+        private IDocumentProcessor CreateMockProcessor(string processorId, bool canProcess)
         {
             var mock = new Mock<IDocumentProcessor>();
-            mock.Setup(p => p.DocumentType).Returns(documentType);
+            mock.Setup(p => p.DocumentType).Returns(processorId);
             mock.Setup(p => p.CanProcess(It.IsAny<string>())).Returns(canProcess);
             return mock.Object;
         }

@@ -75,7 +75,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _cache.StoreResultAsync(null!, result));
+                async () => await _cache.StoreResultAsync(null!, result));
         }
 
         [Fact]
@@ -86,7 +86,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _cache.StoreResultAsync(documentContent, null!));
+                async () => await _cache.StoreResultAsync(documentContent, null!));
         }
 
         [Theory]
@@ -307,7 +307,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             if (documentType != null)
             {
-                response.ResultData.ExtractedFields = new[]
+                response.ResultData.ExtractedFields = new List<ExtractedField>
                 {
                     new ExtractedField
                     {

@@ -319,10 +319,9 @@ namespace NoLock.Social.Core.Tests.Storage
             return new DocumentSession
             {
                 SessionId = sessionId,
-                DocumentType = DocumentType.MultiPage,
+                DocumentType = "multi-page",
                 CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow,
-                IsCompleted = false,
+                LastActivityAt = DateTime.UtcNow,
                 Pages = new List<CapturedImage>()
             };
         }

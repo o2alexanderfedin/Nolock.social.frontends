@@ -204,7 +204,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             {
                 ClientRequestId = "client-123",
                 ImageData = "base64data",
-                DocumentType = "receipt"
+                DocumentType = DocumentType.Receipt
             };
 
             _mockFailedRequestStore.Setup(s => s.StoreFailedRequestAsync(It.IsAny<FailedOCRRequest>(), It.IsAny<CancellationToken>()))
@@ -361,7 +361,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                 {
                     ClientRequestId = $"client-{id}",
                     ImageData = "base64data",
-                    DocumentType = "receipt"
+                    DocumentType = DocumentType.Receipt
                 },
                 FailedAt = DateTime.UtcNow.AddMinutes(-5),
                 RetryCount = 1,

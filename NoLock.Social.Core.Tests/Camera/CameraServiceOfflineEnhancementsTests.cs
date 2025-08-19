@@ -59,7 +59,7 @@ namespace NoLock.Social.Core.Tests.Camera
             // Assert
             _offlineStorageMock.Verify(x => x.SaveImageAsync(capturedImage), Times.Once,
                 "Should save image to local storage when offline");
-            _offlineQueueMock.Verify(x => x.EnqueueAsync(It.Is<OfflineOperation>(
+            _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
                 op => op.OperationType == "capture" && op.Payload.Contains("offline-capture.jpg"))), 
                 Times.Once, "Should queue capture operation for later sync");
         }
@@ -216,11 +216,11 @@ namespace NoLock.Social.Core.Tests.Camera
             await _cameraService.AddPageToSessionAsync(sessionId, image2);
 
             // Assert - Verify operations are queued with appropriate priorities
-            _offlineQueueMock.Verify(x => x.EnqueueAsync(It.Is<OfflineOperation>(
+            _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
                 op => op.OperationType == "capture" && op.Priority <= 1)), Times.Exactly(2),
                 "Capture operations should have high priority");
             
-            _offlineQueueMock.Verify(x => x.EnqueueAsync(It.Is<OfflineOperation>(
+            _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
                 op => op.OperationType == "remove" && op.Priority >= 1)), Times.Once,
                 "Remove operations should have lower priority");
         }
@@ -239,7 +239,7 @@ namespace NoLock.Social.Core.Tests.Camera
             await _cameraService.DisposeDocumentSessionAsync(sessionId);
 
             // Assert
-            _offlineQueueMock.Verify(x => x.EnqueueAsync(It.Is<OfflineOperation>(
+            _offlineQueueMock.Verify(x => x.QueueOperationAsync(It.Is<OfflineOperation>(
                 op => op.OperationType == "session_complete" && 
                       op.Payload.Contains(sessionId))), Times.Once,
                 "Should queue session completion for sync when online");
@@ -270,7 +270,7 @@ namespace NoLock.Social.Core.Tests.Camera
         {
             // Arrange
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
-            _offlineQueueMock.Setup(x => x.EnqueueAsync(It.IsAny<OfflineOperation>()))
+            _offlineQueueMock.Setup(x => x.QueueOperationAsync(It.IsAny<OfflineOperation>()))
                 .ThrowsAsync(new Exception("Queue service unavailable"));
 
             var sessionId = await _cameraService.CreateDocumentSessionAsync();
@@ -367,7 +367,6 @@ namespace NoLock.Social.Core.Tests.Camera
                 new()
                 {
                     SessionId = "existing-session-1",
-                    DocumentType = DocumentType.MultiPage,
                     CreatedAt = DateTime.UtcNow.AddHours(-1),
                     Pages = new List<CapturedImage>
                     {
@@ -404,8 +403,12 @@ namespace NoLock.Social.Core.Tests.Camera
                 new() { OperationType = "session_complete", Payload = "session1", Priority = 2 }
             };
 
-            _offlineQueueMock.Setup(x => x.GetPendingAsync())
-                .ReturnsAsync(queuedOperations);
+            _offlineQueueMock.Setup(x => x.GetQueueStatusAsync())
+                .ReturnsAsync(new OfflineQueueStatus 
+                { 
+                    PendingOperations = queuedOperations.Count,
+                    IsProcessing = false
+                });
 
             // Act - Go online and trigger sync
             _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(true);

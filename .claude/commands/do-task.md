@@ -446,9 +446,339 @@ If agents get stuck in large steps:
 Task is complete when:
 - All baby steps executed
 - Both agents agree no more steps needed
-- Work is tested/validated
+- Work is verified through:
+  - **Build passes**: `npm run build` or equivalent completes without errors
+  - **Tests pass**: All unit/integration tests succeed (`npm test` or equivalent)
+  - **No linting errors**: Code passes style checks (`npm run lint` or equivalent)
+  - **Type checking passes**: For TypeScript projects, `tsc --noEmit` succeeds
+  - **Manual verification**: Feature/fix works as intended when tested locally
+  - **No regression**: Existing functionality remains intact
 - Documentation updated
 - Clean handoff to user
+
+## Mandatory Build & Test Verification
+
+**⚠️ THIS IS MANDATORY - NOT OPTIONAL**
+
+### When to Verify
+Every agent MUST run verification at task completion before marking as done.
+
+### How to Verify Each Requirement
+
+1. **Build Verification**
+   ```bash
+   npm run build  # or yarn build, pnpm build
+   ```
+   - MUST complete with exit code 0
+   - Any errors = task NOT complete
+
+2. **Test Verification**
+   ```bash
+   npm test  # or yarn test, pnpm test
+   ```
+   - ALL tests MUST pass
+   - Skipped tests are acceptable
+   - Failed tests = task NOT complete
+
+3. **Lint Verification**
+   ```bash
+   npm run lint  # or yarn lint, pnpm lint
+   ```
+   - MUST return no errors
+   - Warnings are acceptable but should be noted
+   - Errors = task NOT complete
+
+4. **Type Check Verification** (TypeScript projects)
+   ```bash
+   npx tsc --noEmit
+   ```
+   - MUST complete without type errors
+   - Type errors = task NOT complete
+
+5. **Manual Testing**
+   - Run the application locally
+   - Test the specific feature/fix implemented
+   - Verify it works as intended
+   - Check for obvious regressions
+
+### Failure Protocol
+
+If ANY verification fails:
+1. **DO NOT mark task as complete**
+2. **FIX the issue immediately**
+3. **Re-run ALL verifications**
+4. **Only mark complete when ALL pass**
+
+### No Exceptions Policy
+- "Works on my machine" is NOT acceptable
+- "Tests were already failing" requires investigation
+- "Build was already broken" must be fixed or escalated
+- Ignoring failures will result in task rejection
+
+## Build & Test Failure Recovery
+
+**⚠️ FIXING PROBLEMS IS MANDATORY - SUPPRESSING THEM IS NOT ACCEPTABLE**
+
+### Common Failure Scenarios & Baby-Steps Recovery
+
+#### 1. Compilation/Build Errors
+**Baby-Steps to Fix:**
+1. Read the FULL error message (1 min) → SWITCH
+2. Identify the specific file and line (1 min) → SWITCH
+3. Fix ONE error at a time (2-3 min) → SWITCH
+4. Re-run build to verify fix (1 min) → SWITCH
+5. Move to next error if any (repeat cycle)
+
+**NEVER:**
+- Comment out code to make it compile
+- Use @ts-ignore or // eslint-disable
+- Skip files from build process
+- Downgrade TypeScript strictness
+
+#### 2. Test Failures
+**Baby-Steps to Fix:**
+1. Run failing test in isolation (1 min) → SWITCH
+2. Read assertion failure message (1 min) → SWITCH
+3. Debug with console.log if needed (2 min) → SWITCH
+4. Fix the CODE, not the test (3 min) → SWITCH
+5. Verify test passes (1 min) → SWITCH
+6. Run full test suite (2 min) → SWITCH
+
+**NEVER:**
+- Skip or disable failing tests
+- Change assertions to match broken behavior
+- Mark tests as "todo" or "pending"
+- Reduce test coverage
+
+#### 3. Lint/Style Issues
+**Baby-Steps to Fix:**
+1. Run lint with --fix flag first (1 min) → SWITCH
+2. Review remaining issues (1 min) → SWITCH
+3. Fix ONE file at a time (2-3 min) → SWITCH
+4. Verify lint passes for that file (1 min) → SWITCH
+5. Move to next file (repeat cycle)
+
+**NEVER:**
+- Disable lint rules
+- Add ignore comments
+- Exclude files from linting
+- Lower lint standards
+
+#### 4. Type Errors (TypeScript)
+**Baby-Steps to Fix:**
+1. Read the type error carefully (1 min) → SWITCH
+2. Understand what type is expected (2 min) → SWITCH
+3. Fix the type definition or usage (3 min) → SWITCH
+4. Run tsc --noEmit to verify (1 min) → SWITCH
+5. Check for cascading type fixes needed (2 min) → SWITCH
+
+**NEVER:**
+- Use 'any' type to bypass errors
+- Add @ts-ignore comments
+- Disable strict mode
+- Cast without understanding
+
+### When to Switch Agents During Recovery
+
+**Switch to QA Engineer when:**
+- Multiple test failures need investigation
+- Test coverage is dropping
+- Need to write additional tests for edge cases
+
+**Switch to Principal Engineer when:**
+- Architectural changes needed to fix issues
+- Performance problems discovered
+- Complex refactoring required
+
+**Switch to System Architect when:**
+- Design flaws preventing clean fixes
+- Need to restructure components
+- Circular dependencies found
+
+### Recovery Principles
+
+1. **Root Cause First**: Fix the actual problem, not symptoms
+2. **No Shortcuts**: Proper fixes only, no hacks
+3. **Maintain Standards**: Quality doesn't drop during fixes
+4. **Document Issues**: Note why problems occurred
+5. **Learn & Prevent**: Add tests to prevent regression
+
+### Escalation Protocol
+
+If unable to fix after 3 attempts:
+1. Document the exact issue
+2. Note what was tried
+3. Escalate to user with:
+   - Full error messages
+   - Steps to reproduce
+   - Attempted solutions
+   - Recommended next steps
+
+**Remember: A working build with hidden problems is worse than a broken build that's honest about its issues.**
+
+## Example: Complete Verification Workflow
+
+### Real-World Example: Adding Type Validation Feature
+
+**Initial Task:** "Add input validation to the user registration form"
+
+#### Step 1: Task Completion
+```bash
+Agent A: "Completed adding validation logic to RegistrationForm.tsx"
+Agent A: "Running verification suite before marking complete..."
+```
+
+#### Step 2: Build Verification
+```bash
+$ npm run build
+
+> nolock-social@1.9.0 build
+> next build
+
+info  - Compiled successfully
+info  - Collecting page data...
+[====================] 15/15 100%
+info  - Generating static pages (0/15)
+✓ Build completed successfully
+```
+
+Agent A: "Build passes ✅ Moving to test verification..."
+
+#### Step 3: Test Verification (Failure Found)
+```bash
+$ npm test
+
+FAIL src/components/RegistrationForm.test.tsx
+  ● RegistrationForm › should validate email format
+
+    expect(received).toBe(expected)
+    
+    Expected: "Invalid email format"
+    Received: undefined
+    
+      42 |   fireEvent.blur(emailInput);
+      43 |   
+    > 44 |   expect(getByText('Invalid email format')).toBe('Invalid email format');
+         |                                              ^
+
+Test Suites: 1 failed, 14 passed, 15 total
+Tests:       1 failed, 87 passed, 88 total
+```
+
+Agent A: "Test failure detected! NOT marking as complete. Initiating fix..."
+
+#### Step 4: Baby-Steps Recovery Process
+
+**Round 1** (Agent A):
+```
+Agent A: "Reading test failure - expects 'Invalid email format' message"
+Handoff: "Test expects validation message. Switching for investigation."
+```
+
+**Round 2** (Agent B):
+```bash
+$ npm test -- --watch RegistrationForm.test.tsx
+
+Agent B: "Running test in watch mode. Found issue: validation message not rendered"
+Handoff: "Need to add error message display. Switching for implementation."
+```
+
+**Round 3** (Agent A):
+```typescript
+// Adding to RegistrationForm.tsx
+{errors.email && (
+  <span className="error-message">{errors.email}</span>
+)}
+```
+Agent A: "Added error message rendering. Switching for test re-run."
+
+**Round 4** (Agent B):
+```bash
+$ npm test -- RegistrationForm.test.tsx
+
+PASS src/components/RegistrationForm.test.tsx
+  RegistrationForm
+    ✓ should validate email format (45ms)
+    ✓ should validate required fields (32ms)
+    ✓ should submit valid form (67ms)
+```
+Agent B: "Single test now passes! Running full suite to check for regressions..."
+
+#### Step 5: Full Verification Suite
+```bash
+$ npm test
+
+Test Suites: 15 passed, 15 total
+Tests:       88 passed, 88 total
+Snapshots:   3 passed, 3 total
+Time:        12.43s
+
+$ npm run lint
+
+> nolock-social@1.9.0 lint
+> next lint
+
+✔ No ESLint warnings or errors
+
+$ npx tsc --noEmit
+✔ No TypeScript errors found
+```
+
+Agent B: "All verifications pass! ✅ Task is now truly complete."
+
+#### Step 6: Final Handoff
+```
+Agent B: "Task 'Add input validation to registration form' completed successfully:
+- ✅ Build passes
+- ✅ All 88 tests pass
+- ✅ No lint errors
+- ✅ No type errors
+- ✅ Manual testing confirmed validation works
+
+Handoff to user: Feature ready for review. All quality gates passed."
+```
+
+### Key Lessons from Example
+
+1. **Never Skip Verification**: Agent A could have marked complete after build passed, but testing caught a real issue
+
+2. **Fix, Don't Suppress**: Instead of skipping the test or changing the assertion, agents fixed the actual code
+
+3. **Baby-Steps During Recovery**: Even fixing the test failure used baby-steps methodology with proper handoffs
+
+4. **Verify Everything**: After fixing one test, full suite was run to ensure no regressions
+
+5. **Clear Communication**: Each step clearly communicated what was found and what needs to happen next
+
+### Common Anti-Pattern (What NOT to Do)
+
+```bash
+# WRONG APPROACH
+Agent A: "Test failing, but it's probably fine. Adding test.skip()..."
+Agent A: "Build passes now! Task complete! ✅"
+
+# This would result in:
+- Broken functionality in production
+- Technical debt
+- Failed code review
+- Loss of trust
+```
+
+### Correct Pattern (What We Did)
+
+```bash
+# RIGHT APPROACH
+Agent A: "Test failing. Investigating root cause..."
+Agent B: "Found issue. Implementing proper fix..."
+Agent A: "Fix verified. Running full suite..."
+Agent B: "All tests pass. Task genuinely complete! ✅"
+
+# This results in:
+- Working feature
+- Maintained quality
+- Passing CI/CD
+- Maintainable code
+```
 
 ## Tips for Effective Baby-Steps
 
@@ -495,3 +825,39 @@ Baby-steps pair programming is proven to:
 - Prevent tunnel vision
 
 Always remember: **Smaller steps, frequent switches, better results!**
+
+## ⚠️ CRITICAL REMINDER: BUILD & TEST VERIFICATION IS MANDATORY
+
+**THIS IS THE MOST IMPORTANT SECTION OF THIS DOCUMENT**
+
+### Absolute Requirements Before Task Completion
+
+**NO TASK CAN BE MARKED COMPLETE UNLESS:**
+1. ✅ `npm run build` (or equivalent) exits with code 0
+2. ✅ `npm test` (or equivalent) passes ALL tests
+3. ✅ `npm run lint` (or equivalent) returns NO errors
+4. ✅ `tsc --noEmit` (TypeScript) finds NO type errors
+5. ✅ Manual testing confirms feature works as intended
+
+### Zero Tolerance Policy
+
+**The following actions will result in IMMEDIATE TASK REJECTION:**
+- 🚫 Commenting out failing code to pass builds
+- 🚫 Skipping or disabling failing tests
+- 🚫 Using @ts-ignore or eslint-disable comments
+- 🚫 Marking task complete with known failures
+- 🚫 Claiming "it works on my machine" without verification
+- 🚫 Saying "tests were already broken" without investigation
+- 🚫 Ignoring build warnings that indicate real problems
+
+### The Golden Rule
+
+> **"If it doesn't build, test, and lint successfully, it's NOT done - PERIOD."**
+
+There are NO exceptions, NO shortcuts, and NO compromises on this requirement.
+
+### Remember Your Professional Responsibility
+
+As professional engineers, we deliver working, tested, maintainable code. Anything less is unacceptable. The build and test verification steps are not suggestions - they are MANDATORY professional standards that ensure code quality and prevent production issues.
+
+**Every single task completion MUST include successful verification results, or it will be rejected and require rework.**
