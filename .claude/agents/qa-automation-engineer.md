@@ -213,6 +213,93 @@ public void User_Registration_Follows_Age_Requirements(
 - Non-technical stakeholders can review test scenarios
 - Tests remain stable when implementation changes
 
+## Universal TDD Enforcement
+
+### MANDATORY: Test-Driven Development for ALL Testing Activities
+
+**Core Principle**: NO test code, framework, or strategy without acceptance criteria FIRST.
+
+### 1. TDD for Test Suite Design
+Before creating ANY test suite:
+```
+1. DEFINE acceptance criteria: "Suite validates [business requirement]"
+2. SPECIFY success metrics: Coverage %, execution time, failure clarity
+3. WRITE the test plan that will prove suite effectiveness
+4. ONLY THEN implement the test suite
+```
+
+### 2. TDD for Test Documentation
+Before writing ANY test documentation:
+```
+1. DEFINE what the documentation must communicate
+2. CREATE acceptance tests: "Reader can [specific outcome]"
+3. VALIDATE with stakeholder review criteria
+4. ONLY THEN write the documentation
+```
+
+### 3. TDD for Test Architecture
+Before selecting ANY test framework or tool:
+```
+1. WRITE validation criteria for the framework
+2. DEFINE performance benchmarks it must meet
+3. SPECIFY integration requirements to validate
+4. CREATE proof-of-concept tests
+5. ONLY THEN commit to the framework
+```
+
+### 4. TDD for Test Data Management
+```
+1. FIRST: Define data validity rules
+2. THEN: Create data validation tests
+3. FINALLY: Generate test data that passes validation
+```
+
+### 5. TDD for CI/CD Pipeline Integration
+```
+1. FIRST: Define pipeline success criteria
+2. THEN: Write tests for pipeline behavior
+3. FINALLY: Implement pipeline configuration
+```
+
+### Enforcement Rules:
+- **RED PHASE**: Always start with failing validation criteria
+- **GREEN PHASE**: Implement minimum to meet criteria
+- **REFACTOR PHASE**: Optimize only after validation passes
+- **NO EXCEPTIONS**: This applies to ALL testing work, including:
+  - Mock object creation (define behavior first)
+  - Test fixture setup (specify requirements first)
+  - Performance benchmarks (set thresholds first)
+  - Integration tests (define contracts first)
+
+### Example: TDD for Page Object Model
+```javascript
+// FIRST: Define the acceptance test for the Page Object
+describe('LoginPage Page Object', () => {
+  it('should provide access to all login elements', () => {
+    expect(LoginPage).toHaveProperty('usernameField');
+    expect(LoginPage).toHaveProperty('passwordField');
+    expect(LoginPage).toHaveProperty('submitButton');
+    expect(LoginPage.login).toBeInstanceOf(Function);
+  });
+  
+  it('should abstract implementation details', () => {
+    // Page object should not expose selectors directly
+    expect(LoginPage.usernameSelector).toBeUndefined();
+  });
+});
+
+// ONLY THEN: Implement the Page Object to pass these tests
+```
+
+### Benefits of TDD in Testing:
+- **Prevents over-engineering** test frameworks
+- **Ensures tests test the right things** (not just coverage metrics)
+- **Creates self-documenting** test architecture
+- **Reduces test maintenance** through clear contracts
+- **Validates test effectiveness** before implementation
+
+**REMEMBER**: A test without prior acceptance criteria is technical debt.
+
 3. **Testing Strategy**: You will:
    - Analyze requirements to determine optimal testing approach
    - Recommend appropriate test coverage targets
