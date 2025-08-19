@@ -26,7 +26,7 @@ namespace NoLock.Social.Core.OCR.Processors
         private static class Patterns
         {
             public static readonly Regex Total = new Regex(
-                @"(?:TOTAL|AMOUNT\s+DUE|GRAND\s+TOTAL)[:\s]*\$?(\d+\.?\d*)",
+                @"(?<!SUB)(?:TOTAL|AMOUNT\s+DUE|GRAND\s+TOTAL)[:\s]*\$?(\d+\.?\d*)",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
             public static readonly Regex Subtotal = new Regex(
@@ -38,7 +38,7 @@ namespace NoLock.Social.Core.OCR.Processors
                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
             public static readonly Regex Date = new Regex(
-                @"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+                @"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})",
                 RegexOptions.Compiled);
 
             public static readonly Regex Time = new Regex(
@@ -198,7 +198,21 @@ namespace NoLock.Social.Core.OCR.Processors
             var dateMatch = Patterns.Date.Match(rawText);
             if (dateMatch.Success)
             {
-                if (DateTime.TryParse(dateMatch.Groups[1].Value, out var date))
+                var dateString = dateMatch.Groups[1].Value;
+                DateTime date;
+                
+                // Try multiple date formats
+                var formats = new[] 
+                {
+                    "MM/dd/yyyy", "MM-dd-yyyy", "M/d/yyyy", "M-d-yyyy",  // US formats
+                    "dd/MM/yyyy", "dd-MM-yyyy", "d/M/yyyy", "d-M-yyyy",  // European formats
+                    "yyyy-MM-dd", "yyyy/MM/dd", "yyyy-M-d", "yyyy/M/d",  // ISO formats
+                    "MM/dd/yy", "MM-dd-yy", "M/d/yy", "M-d-yy"          // Short year formats
+                };
+                
+                if (DateTime.TryParseExact(dateString, formats, 
+                    System.Globalization.CultureInfo.InvariantCulture, 
+                    System.Globalization.DateTimeStyles.None, out date))
                 {
                     receiptData.TransactionDate = date;
 

@@ -200,7 +200,15 @@ namespace NoLock.Social.Core.Camera.Services
             };
             
             // Save image to offline storage (new functionality)
-            await _offlineStorage.SaveImageAsync(capturedImage);
+            try
+            {
+                await _offlineStorage.SaveImageAsync(capturedImage);
+            }
+            catch (OfflineStorageException ex)
+            {
+                // Log the error but continue - image is still captured
+                Console.WriteLine($"Warning: Failed to save captured image to offline storage: {ex.Message}");
+            }
             
             return capturedImage;
         }
@@ -625,18 +633,46 @@ namespace NoLock.Social.Core.Camera.Services
             _activeSessions[sessionId] = session;
             
             // Save to offline storage (new functionality)
-            await _offlineStorage.SaveSessionAsync(session);
+            try
+            {
+                await _offlineStorage.SaveSessionAsync(session);
+            }
+            catch (OfflineStorageException ex)
+            {
+                // Log the error but continue - session is still in memory
+                Console.WriteLine($"Warning: Failed to save session to offline storage: {ex.Message}");
+            }
             
             // Queue operation if offline (new functionality)
-            if (!await _connectivity.IsOnlineAsync())
+            bool isOffline = false;
+            try
             {
-                var operation = new OfflineOperation
+                isOffline = !await _connectivity.IsOnlineAsync();
+            }
+            catch (Exception ex)
+            {
+                // If connectivity check fails, assume offline mode
+                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
+                isOffline = true;
+            }
+            
+            if (isOffline)
+            {
+                try
                 {
-                    OperationType = "session_create",
-                    Payload = JsonSerializer.Serialize(new { SessionId = sessionId, CreatedAt = session.CreatedAt }),
-                    Priority = 1 // Normal priority for session creation
-                };
-                await _offlineQueue.QueueOperationAsync(operation);
+                    var operation = new OfflineOperation
+                    {
+                        OperationType = "session_create",
+                        Payload = JsonSerializer.Serialize(new { SessionId = sessionId, CreatedAt = session.CreatedAt }),
+                        Priority = 1 // Normal priority for session creation
+                    };
+                    await _offlineQueue.QueueOperationAsync(operation);
+                }
+                catch (Exception ex)
+                {
+                    // Log the error but continue - session is still valid
+                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
+                }
             }
             
             return sessionId;
@@ -661,25 +697,61 @@ namespace NoLock.Social.Core.Camera.Services
             session.UpdateActivity(); // Track activity for timeout management
             
             // Save image to offline storage (new functionality)
-            await _offlineStorage.SaveImageAsync(capturedImage);
+            try
+            {
+                await _offlineStorage.SaveImageAsync(capturedImage);
+            }
+            catch (OfflineStorageException ex)
+            {
+                // Log the error but continue - image is still in memory
+                Console.WriteLine($"Warning: Failed to save image to offline storage: {ex.Message}");
+            }
             
             // Update session in offline storage (new functionality)
-            await _offlineStorage.SaveSessionAsync(session);
+            try
+            {
+                await _offlineStorage.SaveSessionAsync(session);
+            }
+            catch (OfflineStorageException ex)
+            {
+                // Log the error but continue - session is still in memory
+                Console.WriteLine($"Warning: Failed to save session to offline storage: {ex.Message}");
+            }
             
             // Queue operation if offline (new functionality)
-            if (!await _connectivity.IsOnlineAsync())
+            bool isOffline = false;
+            try
             {
-                var operation = new OfflineOperation
+                isOffline = !await _connectivity.IsOnlineAsync();
+            }
+            catch (Exception ex)
+            {
+                // If connectivity check fails, assume offline mode
+                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
+                isOffline = true;
+            }
+            
+            if (isOffline)
+            {
+                try
                 {
-                    OperationType = "page_add",
-                    Payload = JsonSerializer.Serialize(new { 
-                        SessionId = sessionId, 
-                        ImageId = capturedImage.Timestamp.ToString("yyyyMMddHHmmssfff"),
-                        PageIndex = session.CurrentPageIndex 
-                    }),
-                    Priority = 0 // High priority for captured images
-                };
-                await _offlineQueue.QueueOperationAsync(operation);
+                    var operation = new OfflineOperation
+                    {
+                        OperationType = "page_add",
+                        Payload = JsonSerializer.Serialize(new { 
+                            SessionId = sessionId, 
+                            ImageId = capturedImage.Timestamp.ToString("yyyyMMddHHmmssfff"),
+                            PageIndex = session.CurrentPageIndex 
+                        }),
+                        Priority = 0 // High priority for captured images
+                    };
+                    await _offlineQueue.QueueOperationAsync(operation);
+                }
+                catch (Exception ex)
+                {
+                    // Log the error but continue - page is still added to session
+                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
+                }
             }
         }
 
@@ -737,6 +809,41 @@ namespace NoLock.Social.Core.Camera.Services
             }
             
             session.UpdateActivity(); // Track activity for timeout management
+            
+            // Queue operation if offline (new functionality)
+            bool isOffline = false;
+            try
+            {
+                isOffline = !await _connectivity.IsOnlineAsync();
+            }
+            catch (Exception ex)
+            {
+                // If connectivity check fails, assume offline mode
+                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
+                isOffline = true;
+            }
+            
+            if (isOffline)
+            {
+                try
+                {
+                    var operation = new OfflineOperation
+                    {
+                        OperationType = "page_remove",
+                        Payload = JsonSerializer.Serialize(new { 
+                            SessionId = sessionId, 
+                            PageIndex = pageIndex 
+                        }),
+                        Priority = 2 // Lower priority for remove operations
+                    };
+                    await _offlineQueue.QueueOperationAsync(operation);
+                }
+                catch (Exception ex)
+                {
+                    // Log the error but continue - page is still removed from session
+                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
+                }
+            }
         }
 
         public async Task ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex)
@@ -803,15 +910,35 @@ namespace NoLock.Social.Core.Camera.Services
             if (_activeSessions.TryGetValue(sessionId, out var session))
             {
                 // Queue disposal operation if offline (new functionality)
-                if (!await _connectivity.IsOnlineAsync())
+                bool isOffline = false;
+                try
                 {
-                    var operation = new OfflineOperation
+                    isOffline = !await _connectivity.IsOnlineAsync();
+                }
+                catch (Exception ex)
+                {
+                    // If connectivity check fails, assume offline mode
+                    Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
+                    isOffline = true;
+                }
+                
+                if (isOffline)
+                {
+                    try
                     {
-                        OperationType = "session_dispose",
-                        Payload = JsonSerializer.Serialize(new { SessionId = sessionId, DisposedAt = DateTime.UtcNow }),
-                        Priority = 2 // Low priority for disposal operations
-                    };
-                    await _offlineQueue.QueueOperationAsync(operation);
+                        var operation = new OfflineOperation
+                        {
+                            OperationType = "session_dispose",
+                            Payload = JsonSerializer.Serialize(new { SessionId = sessionId, DisposedAt = DateTime.UtcNow }),
+                            Priority = 2 // Low priority for disposal operations
+                        };
+                        await _offlineQueue.QueueOperationAsync(operation);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log the error but continue - session disposal should proceed
+                        Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
+                    }
                 }
                 
                 // Clear all pages to release memory
