@@ -4,6 +4,12 @@ allowed-tools: Task, Bash, Read, Grep, Glob, LS
 argument-hint: [optional: commit message or feature name]
 ---
 
+## Intent: Deliver Your Completed Work
+
+This command helps you properly version and release your completed work following git flow best practices. It automates the entire process from analyzing changes to creating releases, ensuring your work is properly tracked and versioned.
+
+---
+
 Launch the git-flow-automation agent to execute a complete automated git flow workflow for solo development (no PRs).
 
 ## AGENT TASK:

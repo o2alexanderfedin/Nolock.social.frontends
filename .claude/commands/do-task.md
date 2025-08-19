@@ -6,6 +6,10 @@ disablePreview: true
 
 # Do Task - Baby-Steps Pair Programming Collaboration
 
+## Intent: Accomplish Complex Tasks Through Expert Collaboration
+
+This command enables you to tackle complex tasks by orchestrating specialized agents who work together using pair programming methodology. Each agent contributes their expertise in small, verified steps, ensuring high quality and continuous progress toward your goal.
+
 ## 🚼 BABY-STEPS METHODOLOGY
 **Every action must be a small, atomic, testable step:**
 - ✅ Each step takes 2-5 minutes maximum
