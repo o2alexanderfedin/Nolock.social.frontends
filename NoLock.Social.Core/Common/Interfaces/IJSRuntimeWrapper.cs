@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace NoLock.Social.Core.ImageProcessing.Interfaces
+namespace NoLock.Social.Core.Common.Interfaces
 {
     /// <summary>
     /// Wrapper interface for IJSRuntime to enable mocking of extension methods

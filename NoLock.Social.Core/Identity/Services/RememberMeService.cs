@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Storage;
 using NoLock.Social.Core.Identity.Configuration;
@@ -45,7 +47,7 @@ namespace NoLock.Social.Core.Identity.Services
 
             _logger.LogDebug("Remembering username for user: {Username}", username);
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var data = new RememberedUserData
                 {
@@ -63,11 +65,12 @@ namespace NoLock.Social.Core.Identity.Services
                 _cachedUsername = username;
                 
                 _logger.LogInformation("Username remembered successfully");
-            }
-            catch (Exception ex)
+            },
+            "Failed to remember username");
+
+            if (!result.IsSuccess)
             {
-                _logger.LogError(ex, "Failed to remember username");
-                throw new InvalidOperationException("Failed to save username to local storage", ex);
+                throw new InvalidOperationException("Failed to save username to local storage", result.Exception);
             }
         }
 
@@ -81,7 +84,7 @@ namespace NoLock.Social.Core.Identity.Services
                 return _cachedUsername;
             }
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var json = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", STORAGE_KEY);
                 
@@ -89,16 +92,27 @@ namespace NoLock.Social.Core.Identity.Services
                 {
                     _logger.LogDebug("No remembered username found");
                     _isUsernameRemembered = false;
-                    return null;
+                    return (string?)null;
                 }
 
-                var data = JsonSerializer.Deserialize<RememberedUserData>(json, LoginConfiguration.JsonOptions);
+                RememberedUserData? data = null;
+                try
+                {
+                    data = JsonSerializer.Deserialize<RememberedUserData>(json, LoginConfiguration.JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize remembered user data - data may be corrupted");
+                    // Clear corrupted data
+                    await ClearRememberedDataAsync();
+                    return (string?)null;
+                }
 
                 if (data == null || string.IsNullOrWhiteSpace(data.Username))
                 {
                     _logger.LogWarning("Invalid or corrupted remembered user data");
                     _isUsernameRemembered = false;
-                    return null;
+                    return (string?)null;
                 }
 
                 // Check if the remembered data is too old (configurable expiry)
@@ -107,7 +121,7 @@ namespace NoLock.Social.Core.Identity.Services
                 {
                     _logger.LogInformation("Remembered username expired (last used {Days} days ago)", daysSinceLastUse);
                     await ClearRememberedDataAsync();
-                    return null;
+                    return (string?)null;
                 }
 
                 _logger.LogDebug("Retrieved remembered username: {Username}", data.Username);
@@ -117,19 +131,10 @@ namespace NoLock.Social.Core.Identity.Services
                 _cachedUsername = data.Username;
                 
                 return data.Username;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(ex, "Failed to deserialize remembered user data - data may be corrupted");
-                // Clear corrupted data
-                await ClearRememberedDataAsync();
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to retrieve remembered username");
-                return null;
-            }
+            },
+            "Failed to retrieve remembered username");
+
+            return result.IsSuccess ? result.Value : null;
         }
 
         /// <inheritdoc />
@@ -137,7 +142,7 @@ namespace NoLock.Social.Core.Identity.Services
         {
             _logger.LogDebug("Clearing remembered user data");
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", STORAGE_KEY);
                 
@@ -146,12 +151,10 @@ namespace NoLock.Social.Core.Identity.Services
                 _cachedUsername = null;
                 
                 _logger.LogInformation("Remembered user data cleared");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clear remembered user data");
-                // Don't throw - clearing is best effort
-            }
+            },
+            "Failed to clear remembered user data");
+            
+            // Don't throw - clearing is best effort, result is intentionally ignored
         }
 
         /// <summary>
@@ -165,7 +168,7 @@ namespace NoLock.Social.Core.Identity.Services
                 return;
             }
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var data = new RememberedUserData
                 {
@@ -178,12 +181,10 @@ namespace NoLock.Social.Core.Identity.Services
 
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", STORAGE_KEY, json);
                 _logger.LogDebug("Updated last used timestamp for remembered username");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to update last used timestamp");
-                // Don't throw - this is a non-critical operation
-            }
+            },
+            "Failed to update last used timestamp");
+            
+            // Don't throw - this is a non-critical operation, result is intentionally ignored
         }
     }
 }

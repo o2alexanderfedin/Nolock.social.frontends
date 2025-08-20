@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
@@ -84,29 +85,7 @@ namespace NoLock.Social.Core.OCR.Services
                 trackingId);
 
             // Acquire wake lock to prevent device sleep during processing
-            bool wakeLockAcquired = false;
-            if (_wakeLockService != null)
-            {
-                try
-                {
-                    var wakeLockResult = await _wakeLockService.AcquireWakeLockAsync("OCR Polling with Progress");
-                    wakeLockAcquired = wakeLockResult.IsSuccess;
-                    
-                    if (wakeLockAcquired)
-                    {
-                        _logger.LogDebug("Wake lock acquired for OCR polling: {TrackingId}", trackingId);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Failed to acquire wake lock for OCR polling: {TrackingId}, Error: {Error}", 
-                            trackingId, wakeLockResult.ErrorMessage);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Wake lock acquisition failed for OCR polling: {TrackingId}", trackingId);
-                }
-            }
+            bool wakeLockAcquired = await TryAcquireWakeLockAsync("OCR Polling with Progress", trackingId);
 
             try
             {
@@ -174,25 +153,9 @@ namespace NoLock.Social.Core.OCR.Services
             finally
             {
                 // Always release wake lock when polling completes, regardless of success/failure
-                if (wakeLockAcquired && _wakeLockService != null)
+                if (wakeLockAcquired)
                 {
-                    try
-                    {
-                        var releaseResult = await _wakeLockService.ReleaseWakeLockAsync();
-                        if (releaseResult.IsSuccess)
-                        {
-                            _logger.LogDebug("Wake lock released after OCR polling: {TrackingId}", trackingId);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Failed to release wake lock after OCR polling: {TrackingId}, Error: {Error}", 
-                                trackingId, releaseResult.ErrorMessage);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Wake lock release failed after OCR polling: {TrackingId}", trackingId);
-                    }
+                    await TryReleaseWakeLockAsync(trackingId);
                 }
             }
         }
@@ -219,29 +182,7 @@ namespace NoLock.Social.Core.OCR.Services
                 trackingId);
 
             // Acquire wake lock to prevent device sleep during processing
-            bool wakeLockAcquired = false;
-            if (_wakeLockService != null)
-            {
-                try
-                {
-                    var wakeLockResult = await _wakeLockService.AcquireWakeLockAsync("OCR Polling with Configuration");
-                    wakeLockAcquired = wakeLockResult.IsSuccess;
-                    
-                    if (wakeLockAcquired)
-                    {
-                        _logger.LogDebug("Wake lock acquired for OCR polling: {TrackingId}", trackingId);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Failed to acquire wake lock for OCR polling: {TrackingId}, Error: {Error}", 
-                            trackingId, wakeLockResult.ErrorMessage);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Wake lock acquisition failed for OCR polling: {TrackingId}", trackingId);
-                }
-            }
+            bool wakeLockAcquired = await TryAcquireWakeLockAsync("OCR Polling with Configuration", trackingId);
 
             try
             {
@@ -296,25 +237,9 @@ namespace NoLock.Social.Core.OCR.Services
             finally
             {
                 // Always release wake lock when polling completes, regardless of success/failure
-                if (wakeLockAcquired && _wakeLockService != null)
+                if (wakeLockAcquired)
                 {
-                    try
-                    {
-                        var releaseResult = await _wakeLockService.ReleaseWakeLockAsync();
-                        if (releaseResult.IsSuccess)
-                        {
-                            _logger.LogDebug("Wake lock released after OCR polling: {TrackingId}", trackingId);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Failed to release wake lock after OCR polling: {TrackingId}, Error: {Error}", 
-                                trackingId, releaseResult.ErrorMessage);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Wake lock release failed after OCR polling: {TrackingId}", trackingId);
-                    }
+                    await TryReleaseWakeLockAsync(trackingId);
                 }
             }
         }
@@ -400,6 +325,73 @@ namespace NoLock.Social.Core.OCR.Services
             }
 
             return PollingConfiguration.OCRDefault;
+        }
+
+        /// <summary>
+        /// Attempts to acquire a wake lock, logging any failures without throwing.
+        /// </summary>
+        /// <param name="reason">The reason for acquiring the wake lock.</param>
+        /// <param name="trackingId">The tracking ID for logging context.</param>
+        /// <returns>True if wake lock was successfully acquired, false otherwise.</returns>
+        private async Task<bool> TryAcquireWakeLockAsync(string reason, string trackingId)
+        {
+            if (_wakeLockService == null)
+                return false;
+
+            var result = await _logger.ExecuteWithLogging(
+                async () => await _wakeLockService.AcquireWakeLockAsync(reason),
+                $"Wake lock acquisition for OCR polling: {trackingId}");
+
+            if (result.IsSuccess)
+            {
+                if (result.Value.IsSuccess)
+                {
+                    _logger.LogDebug("Wake lock acquired for OCR polling: {TrackingId}", trackingId);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to acquire wake lock for OCR polling: {TrackingId}, Error: {Error}",
+                        trackingId, result.Value.ErrorMessage);
+                    return false;
+                }
+            }
+            else
+            {
+                _logger.LogWarning(result.Exception, "Wake lock acquisition failed for OCR polling: {TrackingId}", trackingId);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to release a wake lock, logging any failures without throwing.
+        /// </summary>
+        /// <param name="trackingId">The tracking ID for logging context.</param>
+        private async Task TryReleaseWakeLockAsync(string trackingId)
+        {
+            if (_wakeLockService == null)
+                return;
+
+            var result = await _logger.ExecuteWithLogging(
+                async () => await _wakeLockService.ReleaseWakeLockAsync(),
+                $"Wake lock release after OCR polling: {trackingId}");
+
+            if (result.IsSuccess)
+            {
+                if (result.Value.IsSuccess)
+                {
+                    _logger.LogDebug("Wake lock released after OCR polling: {TrackingId}", trackingId);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to release wake lock after OCR polling: {TrackingId}, Error: {Error}",
+                        trackingId, result.Value.ErrorMessage);
+                }
+            }
+            else
+            {
+                _logger.LogWarning(result.Exception, "Wake lock release failed after OCR polling: {TrackingId}", trackingId);
+            }
         }
     }
 }

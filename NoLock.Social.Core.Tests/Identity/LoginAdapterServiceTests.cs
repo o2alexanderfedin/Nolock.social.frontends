@@ -218,7 +218,7 @@ namespace NoLock.Social.Core.Tests.Identity
                 x => x.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Login failed")),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Login for user")),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
@@ -295,7 +295,7 @@ namespace NoLock.Social.Core.Tests.Identity
                 x => x.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error during logout")),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Logout failed")),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);

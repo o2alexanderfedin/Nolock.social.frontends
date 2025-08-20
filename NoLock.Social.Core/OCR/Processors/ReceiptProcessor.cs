@@ -4,8 +4,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Extensions;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Processors
 {
@@ -94,20 +97,18 @@ namespace NoLock.Social.Core.OCR.Processors
                 }
 
                 // Backend returns ReceiptData as JSON in StructuredData field
-                ReceiptData receiptData = null;
+                ReceiptData receiptData;
                 if (!string.IsNullOrWhiteSpace(statusResponse.ResultData?.StructuredData))
                 {
-                    try
-                    {
-                        receiptData = JsonSerializer.Deserialize<ReceiptData>(
+                    var deserializationResult = _logger.ExecuteWithLogging(
+                        () => JsonSerializer.Deserialize<ReceiptData>(
                             statusResponse.ResultData.StructuredData,
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogError(ex, "Failed to deserialize ReceiptData from backend response");
-                        receiptData = new ReceiptData();
-                    }
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }),
+                        "Failed to deserialize ReceiptData from backend response");
+                    
+                    receiptData = deserializationResult.IsSuccess 
+                        ? deserializationResult.Value 
+                        : new ReceiptData();
                 }
                 else
                 {

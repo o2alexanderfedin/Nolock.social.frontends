@@ -23,8 +23,7 @@
 
     <!-- Camera Preview -->
     <CameraPreview 
-        OnImageAccepted="OnImageCaptured"
-        OnImageEnhanced="HandleImageEnhanced" />
+        OnImageAccepted="OnImageCaptured" />
 
     <!-- Action Buttons -->
     @if (HasCapturedPages)
@@ -70,7 +69,6 @@
     [Parameter] public EventCallback<CapturedImage[]> OnDocumentCompleted { get; set; }
     [Parameter] public EventCallback<string> OnSessionCreated { get; set; }
     [Parameter] public string? InitialSessionId { get; set; }
-    [Parameter] public EventCallback<CapturedImage> OnImageEnhanced { get; set; }
     
     private string? _sessionId;
     private CapturedImage[] _capturedPages = Array.Empty<CapturedImage>();
@@ -174,15 +172,6 @@
         {
             IsLoading = false;
             StateHasChanged();
-        }
-    }
-    
-    private async Task HandleImageEnhanced(CapturedImage enhancedImage)
-    {
-        // Forward the enhanced image event to parent component
-        if (OnImageEnhanced.HasDelegate)
-        {
-            await OnImageEnhanced.InvokeAsync(enhancedImage);
         }
     }
     

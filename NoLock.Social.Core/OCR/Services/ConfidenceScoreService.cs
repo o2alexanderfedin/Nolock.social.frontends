@@ -53,6 +53,16 @@ namespace NoLock.Social.Core.OCR.Services
     {
         private double _highConfidenceThreshold = 0.80;
         private double _mediumConfidenceThreshold = 0.60;
+        private readonly Random _random;
+
+        /// <summary>
+        /// Initializes a new instance of the ConfidenceScoreService.
+        /// </summary>
+        /// <param name="random">Optional Random instance for testing. If null, uses Random.Shared.</param>
+        public ConfidenceScoreService(Random? random = null)
+        {
+            _random = random ?? Random.Shared;
+        }
 
         /// <summary>
         /// Gets or sets the threshold for high confidence.
@@ -390,7 +400,7 @@ namespace NoLock.Social.Core.OCR.Services
         private double CalculateFieldConfidence(double baseConfidence, double fieldFactor)
         {
             // Apply some variance to simulate real field-level confidence
-            var variance = (Random.Shared.NextDouble() - 0.5) * 0.1; // ±5% variance
+            var variance = (_random.NextDouble() - 0.5) * 0.1; // ±5% variance
             var confidence = baseConfidence * fieldFactor + variance;
             return Math.Max(0, Math.Min(1, confidence));
         }

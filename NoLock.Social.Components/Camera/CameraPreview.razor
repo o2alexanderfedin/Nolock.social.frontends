@@ -3,14 +3,12 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Components.Camera
 @using NoLock.Social.Core.Accessibility.Interfaces
-@using NoLock.Social.Core.ImageProcessing.Interfaces
 @using Microsoft.AspNetCore.Components
 @implements IAsyncDisposable
 
 @inject ICameraService CameraService
 @inject IVoiceCommandService VoiceCommandService
 @inject IAnnouncementService AnnouncementService
-@inject IImageEnhancementService ImageEnhancementService
 
 <style>
     @keyframes flash {
@@ -118,23 +116,6 @@
                             Retake
                         </button>
                         <button type="button" 
-                                class="btn btn-info btn-lg px-4"
-                                aria-label="Enhance image - improve quality and readability"
-                                @onclick="EnhanceImage"
-                                disabled="@_isEnhancing">
-                            @if (_isEnhancing)
-                            {
-                                <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true">
-                                    <span class="visually-hidden">Enhancing image</span>
-                                </div>
-                            }
-                            else
-                            {
-                                <i class="bi bi-magic me-2" aria-hidden="true"></i>
-                            }
-                            Enhance
-                        </button>
-                        <button type="button" 
                                 class="btn btn-success btn-lg px-4"
                                 aria-label="Accept image - confirm and proceed with this capture"
                                 @onclick="AcceptImage">
@@ -200,7 +181,6 @@
     [Parameter] public string? SessionId { get; set; }
     [Parameter] public EventCallback<CapturedImage> OnPageAdded { get; set; }
     [Parameter] public bool EnableVoiceCommands { get; set; } = true;
-    [Parameter] public EventCallback<CapturedImage> OnImageEnhanced { get; set; }
     
     private bool IsLoading = true;
     private string? ErrorMessage;
@@ -211,7 +191,6 @@
     private int AutoCaptureCountdown = 0;
     private System.Threading.Timer? AutoCaptureTimer;
     private ImageQualityResult? ImageQualityResult;
-    private bool _isEnhancing = false;
     
     private bool IsCameraReady => !IsLoading && string.IsNullOrEmpty(ErrorMessage) && CurrentStream != null;
     private bool HasCapturedImage => CapturedImage != null;
@@ -357,62 +336,6 @@
         {
             ErrorMessage = $"Failed to add page to session: {ex.Message}";
             await AnnounceToScreenReader($"Failed to add page to session: {ex.Message}");
-            StateHasChanged();
-        }
-    }
-    
-    private async Task EnhanceImage()
-    {
-        if (CapturedImage == null || _isEnhancing)
-            return;
-            
-        try
-        {
-            _isEnhancing = true;
-            StateHasChanged();
-            
-            await AnnounceToScreenReader("Starting image enhancement. Please wait...");
-            
-            // Apply enhancement to the captured image
-            var enhancementResult = await ImageEnhancementService.EnhanceImageAsync(CapturedImage);
-            
-            if (enhancementResult != null && enhancementResult.Success)
-            {
-                // Replace the current image with the enhanced version
-                CapturedImage = enhancementResult.EnhancedImage;
-                
-                // Re-analyze quality after enhancement
-                try
-                {
-                    ImageQualityResult = await CameraService.ValidateImageQualityAsync(CapturedImage);
-                }
-                catch (Exception qualityEx)
-                {
-                    Console.Error.WriteLine($"Image quality analysis failed after enhancement: {qualityEx.Message}");
-                    ImageQualityResult = null;
-                }
-                
-                // Notify that image was enhanced
-                if (OnImageEnhanced.HasDelegate)
-                {
-                    await OnImageEnhanced.InvokeAsync(CapturedImage);
-                }
-                
-                await AnnounceToScreenReader("Image enhanced successfully. Review the improved image quality.");
-            }
-            else
-            {
-                await AnnounceToScreenReader("Image enhancement failed. Original image preserved.");
-            }
-        }
-        catch (Exception ex)
-        {
-            await AnnounceToScreenReader($"Image enhancement failed: {ex.Message}");
-            Console.Error.WriteLine($"Enhancement error: {ex.Message}");
-        }
-        finally
-        {
-            _isEnhancing = false;
             StateHasChanged();
         }
     }
@@ -564,14 +487,6 @@
                 ["accept"] = async () => {
                     if (HasCapturedImage)
                         await AcceptImage();
-                },
-                ["enhance"] = async () => {
-                    if (HasCapturedImage && !_isEnhancing)
-                        await EnhanceImage();
-                },
-                ["improve image"] = async () => {
-                    if (HasCapturedImage && !_isEnhancing)
-                        await EnhanceImage();
                 }
             };
             

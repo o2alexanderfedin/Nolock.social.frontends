@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
 using Xunit;
+using FluentAssertions;
 
 namespace NoLock.Social.Core.Tests.Performance;
 
@@ -34,11 +35,12 @@ public class PerformanceMonitoringServiceTests
         
         // Assert
         var stats = _service.GetStatistics(operationName);
-        Assert.NotNull(stats);
-        Assert.Equal(operationName, stats.OperationName);
-        Assert.Equal(1, stats.TotalExecutions);
-        Assert.Equal(1, stats.SuccessfulExecutions);
-        Assert.True(stats.AverageDuration.TotalMilliseconds > 0);
+        
+        stats.Should().NotBeNull();
+        stats.OperationName.Should().Be(operationName);
+        stats.TotalExecutions.Should().Be(1);
+        stats.SuccessfulExecutions.Should().Be(1);
+        stats.AverageDuration.TotalMilliseconds.Should().BeGreaterThan(0);
     }
     
     [Fact]
@@ -55,11 +57,12 @@ public class PerformanceMonitoringServiceTests
         
         // Assert
         var stats = _service.GetStatistics(operationName);
-        Assert.NotNull(stats);
-        Assert.Equal(1, stats.TotalExecutions);
-        Assert.Equal(0, stats.SuccessfulExecutions);
-        Assert.Equal(1, stats.FailedExecutions);
-        Assert.Equal(0, stats.SuccessRate);
+        
+        stats.Should().NotBeNull();
+        stats.TotalExecutions.Should().Be(1);
+        stats.SuccessfulExecutions.Should().Be(0);
+        stats.FailedExecutions.Should().Be(1);
+        stats.SuccessRate.Should().Be(0);
     }
     
     [Fact]
@@ -80,11 +83,31 @@ public class PerformanceMonitoringServiceTests
         
         // Assert
         var stats = _service.GetStatistics(operationName);
-        Assert.NotNull(stats);
-        Assert.Equal(5, stats.TotalExecutions);
-        Assert.Equal(5, stats.SuccessfulExecutions);
-        Assert.True(stats.MinDuration.TotalMilliseconds >= 10);
-        Assert.True(stats.MaxDuration.TotalMilliseconds >= 50);
+        
+        stats.Should().NotBeNull("statistics should be available after operations");
+        stats.TotalExecutions.Should().Be(5, "we executed 5 operations");
+        stats.SuccessfulExecutions.Should().Be(5, "all operations completed successfully");
+        stats.FailedExecutions.Should().Be(0, "no operations failed");
+        stats.MinDuration.TotalMilliseconds.Should().BeGreaterThanOrEqualTo(9, "minimum delay was ~10ms (allowing for timing variance)");
+        stats.MaxDuration.TotalMilliseconds.Should().BeGreaterThanOrEqualTo(50, "maximum delay was 50ms");
+        stats.SuccessRate.Should().Be(100.0, "all operations succeeded (100%)");
+        
+        // Additional FluentAssertions capabilities
+        stats.AverageDuration.Should().BePositive("average duration should be calculated");
+        stats.AverageDuration.TotalMilliseconds.Should().BeInRange(10, 50, "average should be between min and max");
+        stats.Should().BeEquivalentTo(new 
+        {
+            OperationName = operationName,
+            TotalExecutions = 5,
+            SuccessfulExecutions = 5,
+            FailedExecutions = 0,
+            SuccessRate = 100.0
+        }, options => options
+            .Including(s => s.OperationName)
+            .Including(s => s.TotalExecutions)
+            .Including(s => s.SuccessfulExecutions)
+            .Including(s => s.FailedExecutions)
+            .Including(s => s.SuccessRate));
     }
     
     [Fact]
@@ -107,8 +130,9 @@ public class PerformanceMonitoringServiceTests
         
         // Assert
         var alerts = _service.GetRecentAlerts();
-        Assert.NotEmpty(alerts);
-        Assert.Contains(alerts, a => a.OperationName == operationName);
+        
+        alerts.Should().NotBeEmpty();
+        alerts.Should().Contain(a => a.OperationName == operationName);
     }
     
     [Fact]
@@ -122,10 +146,10 @@ public class PerformanceMonitoringServiceTests
         var allStats = _service.GetAllStatistics();
         
         // Assert
-        Assert.Equal(3, allStats.Count);
-        Assert.Contains("Op1", allStats.Keys);
-        Assert.Contains("Op2", allStats.Keys);
-        Assert.Contains("Op3", allStats.Keys);
+        allStats.Should().HaveCount(3);
+        allStats.Keys.Should().Contain("Op1");
+        allStats.Keys.Should().Contain("Op2");
+        allStats.Keys.Should().Contain("Op3");
     }
     
     [Fact]
@@ -133,15 +157,15 @@ public class PerformanceMonitoringServiceTests
     {
         // Arrange
         using (_service.StartOperation("ToClear")) { }
-        Assert.NotNull(_service.GetStatistics("ToClear"));
+        _service.GetStatistics("ToClear").Should().NotBeNull();
         
         // Act
         _service.ClearMetrics();
         
         // Assert
-        Assert.Null(_service.GetStatistics("ToClear"));
-        Assert.Empty(_service.GetAllStatistics());
-        Assert.Empty(_service.GetRecentAlerts());
+        _service.GetStatistics("ToClear").Should().BeNull();
+        _service.GetAllStatistics().Should().BeEmpty();
+        _service.GetRecentAlerts().Should().BeEmpty();
     }
     
     [Fact]
@@ -154,10 +178,10 @@ public class PerformanceMonitoringServiceTests
         var json = await _service.ExportMetricsAsync();
         
         // Assert
-        Assert.NotNull(json);
-        Assert.Contains("ExportTime", json);
-        Assert.Contains("Statistics", json);
-        Assert.Contains("ExportOp", json);
+        json.Should().NotBeNull();
+        json.Should().Contain("ExportTime");
+        json.Should().Contain("Statistics");
+        json.Should().Contain("ExportOp");
     }
     
     [Fact]
@@ -172,8 +196,9 @@ public class PerformanceMonitoringServiceTests
         
         // Assert - metrics are recorded (we can't directly access them, but operation completes successfully)
         var stats = _service.GetStatistics("CustomMetricOp");
-        Assert.NotNull(stats);
-        Assert.Equal(1, stats.TotalExecutions);
+        
+        stats.Should().NotBeNull();
+        stats.TotalExecutions.Should().Be(1);
     }
     
     [Fact]
@@ -193,14 +218,14 @@ public class PerformanceMonitoringServiceTests
         };
         
         // Act & Assert
-        Assert.True(threshold.IsViolated(metrics)); // Duration exceeds
+        threshold.IsViolated(metrics).Should().BeTrue("duration exceeds threshold");
         
         metrics.Duration = TimeSpan.FromMilliseconds(50);
         metrics.MemoryUsedBytes = 2 * 1024 * 1024;
-        Assert.True(threshold.IsViolated(metrics)); // Memory exceeds
+        threshold.IsViolated(metrics).Should().BeTrue("memory exceeds threshold");
         
         metrics.MemoryUsedBytes = 512 * 1024;
-        Assert.False(threshold.IsViolated(metrics)); // Both within limits
+        threshold.IsViolated(metrics).Should().BeFalse("both metrics are within limits");
     }
     
     [Fact]
@@ -225,10 +250,11 @@ public class PerformanceMonitoringServiceTests
         
         // Assert
         var stats = _service.GetStatistics(operationName);
-        Assert.NotNull(stats);
-        Assert.Equal(5, stats.TotalExecutions);
-        Assert.Equal(3, stats.SuccessfulExecutions);
-        Assert.Equal(2, stats.FailedExecutions);
-        Assert.Equal(60, stats.SuccessRate); // 3/5 * 100 = 60%
+        
+        stats.Should().NotBeNull();
+        stats.TotalExecutions.Should().Be(5);
+        stats.SuccessfulExecutions.Should().Be(3);
+        stats.FailedExecutions.Should().Be(2);
+        stats.SuccessRate.Should().Be(60, "3 out of 5 operations succeeded (60%)");
     }
 }

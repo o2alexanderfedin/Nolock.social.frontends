@@ -16,7 +16,9 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         public ConfidenceScoreServiceTests()
         {
-            _service = new ConfidenceScoreService();
+            // Use a seeded Random for deterministic test behavior
+            var seededRandom = new Random(42);
+            _service = new ConfidenceScoreService(seededRandom);
         }
 
         #region ConfidenceLevel Tests

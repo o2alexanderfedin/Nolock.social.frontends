@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.JSInterop;
-using NoLock.Social.Core.ImageProcessing.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
 
-namespace NoLock.Social.Core.ImageProcessing.Services
+namespace NoLock.Social.Core.Common.Services
 {
     /// <summary>
     /// Concrete implementation of IJSRuntimeWrapper that delegates to IJSRuntime

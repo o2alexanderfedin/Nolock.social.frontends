@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
 using NoLock.Social.Core.Storage.Interfaces;
@@ -56,34 +58,19 @@ namespace NoLock.Social.Core.Identity.Services
             DateTime? firstSeen = null;
             DateTime? lastSeen = null;
 
-            try
-            {
-                await foreach (var metadata in _storageAdapter.ListAllContentAsync())
-                {
-                    // Check if this content was signed by the given public key
-                    if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
-                    {
-                        contentCount++;
+            var queryResult = await _logger.ExecuteWithLogging(
+                async () => await QueryUserContentAsync(publicKeyBase64),
+                "querying storage for user content");
 
-                        // Track first seen timestamp
-                        if (!firstSeen.HasValue || metadata.Timestamp < firstSeen)
-                        {
-                            firstSeen = metadata.Timestamp;
-                        }
-
-                        // Track last seen timestamp
-                        if (!lastSeen.HasValue || metadata.Timestamp > lastSeen)
-                        {
-                            lastSeen = metadata.Timestamp;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
+            // On failure, continue with what we have (graceful degradation)
+            if (queryResult.IsSuccess)
             {
-                _logger.LogError(ex, "Error querying storage for user content");
-                // Continue with what we have, don't fail the whole operation
+                var (count, first, last) = queryResult.Value;
+                contentCount = count;
+                firstSeen = first;
+                lastSeen = last;
             }
+            // If query failed, contentCount remains 0, timestamps remain null
 
             var info = new UserTrackingInfo
             {
@@ -154,44 +141,82 @@ namespace NoLock.Social.Core.Identity.Services
 
             var contentList = new List<(string address, DateTime timestamp, long size)>();
 
-            try
-            {
-                await foreach (var metadata in _storageAdapter.ListAllContentAsync())
+            var processResult = await _logger.ExecuteWithLogging(
+                async () =>
                 {
-                    if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
+                    await foreach (var metadata in _storageAdapter.ListAllContentAsync())
                     {
-                        summary.TotalContent++;
-                        summary.TotalStorageBytes += metadata.Size;
-                        
-                        // Track for recent content
-                        contentList.Add((metadata.ContentAddress, metadata.Timestamp, metadata.Size));
-
-                        // Update last activity
-                        if (!summary.LastActivity.HasValue || metadata.Timestamp > summary.LastActivity)
+                        if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
                         {
-                            summary.LastActivity = metadata.Timestamp;
+                            summary.TotalContent++;
+                            summary.TotalStorageBytes += metadata.Size;
+                            
+                            // Track for recent content
+                            contentList.Add((metadata.ContentAddress, metadata.Timestamp, metadata.Size));
+
+                            // Update last activity
+                            if (!summary.LastActivity.HasValue || metadata.Timestamp > summary.LastActivity)
+                            {
+                                summary.LastActivity = metadata.Timestamp;
+                            }
                         }
                     }
-                }
 
-                // Get the 10 most recent content addresses
-                summary.RecentContentAddresses = contentList
-                    .OrderByDescending(c => c.timestamp)
-                    .Take(10)
-                    .Select(c => c.address)
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting user activity summary");
-                // Return partial results rather than failing completely
-            }
+                    // Get the 10 most recent content addresses
+                    summary.RecentContentAddresses = contentList
+                        .OrderByDescending(c => c.timestamp)
+                        .Take(10)
+                        .Select(c => c.address)
+                        .ToList();
+                    
+                    return summary;
+                },
+                "getting user activity summary");
+
+            // Return partial results on failure (graceful degradation)
+            // The summary object has been modified even if an exception occurred
+            // during iteration, so we return whatever data was collected
 
             _logger.LogInformation(
                 "User activity summary: TotalContent={Content}, TotalStorage={Storage} bytes, LastActivity={LastActivity}",
                 summary.TotalContent, summary.TotalStorageBytes, summary.LastActivity);
 
             return summary;
+        }
+
+        /// <summary>
+        /// Queries storage for content signed by the specified public key
+        /// </summary>
+        /// <param name="publicKeyBase64">The public key to search for</param>
+        /// <returns>A tuple containing content count, first seen timestamp, and last seen timestamp</returns>
+        private async Task<(int contentCount, DateTime? firstSeen, DateTime? lastSeen)> QueryUserContentAsync(string publicKeyBase64)
+        {
+            var contentCount = 0;
+            DateTime? firstSeen = null;
+            DateTime? lastSeen = null;
+
+            await foreach (var metadata in _storageAdapter.ListAllContentAsync())
+            {
+                // Check if this content was signed by the given public key
+                if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
+                {
+                    contentCount++;
+
+                    // Track first seen timestamp
+                    if (!firstSeen.HasValue || metadata.Timestamp < firstSeen)
+                    {
+                        firstSeen = metadata.Timestamp;
+                    }
+
+                    // Track last seen timestamp
+                    if (!lastSeen.HasValue || metadata.Timestamp > lastSeen)
+                    {
+                        lastSeen = metadata.Timestamp;
+                    }
+                }
+            }
+
+            return (contentCount, firstSeen, lastSeen);
         }
 
         /// <summary>

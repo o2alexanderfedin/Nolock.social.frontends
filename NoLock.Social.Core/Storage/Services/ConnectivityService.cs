@@ -3,6 +3,10 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
+using NoLock.Social.Core.Common.Services;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Storage.Services
 {
@@ -52,18 +56,33 @@ namespace NoLock.Social.Core.Storage.Services
         {
             ThrowIfDisposed();
 
-            try
+            if (_logger != null)
             {
-                var module = await _moduleTask.Value;
-                var isOnline = await module.InvokeAsync<bool>("isOnline");
-                _logger?.LogDebug("Current connectivity status: {IsOnline}", isOnline);
-                return isOnline;
+                var result = await _logger.ExecuteWithLogging(async () =>
+                {
+                    var module = await _moduleTask.Value;
+                    var isOnline = await module.InvokeAsync<bool>("isOnline");
+                    _logger?.LogDebug("Current connectivity status: {IsOnline}", isOnline);
+                    return isOnline;
+                }, "CheckConnectivityStatus");
+
+                // Default to online if we can't determine the status (graceful fallback)
+                return result.IsSuccess ? result.Value : true;
             }
-            catch (Exception ex)
+            else
             {
-                _logger?.LogError(ex, "Failed to check connectivity status");
-                // Default to online if we can't determine the status
-                return true;
+                // Execute without logging when logger is null
+                try
+                {
+                    var module = await _moduleTask.Value;
+                    var isOnline = await module.InvokeAsync<bool>("isOnline");
+                    return isOnline;
+                }
+                catch
+                {
+                    // Default to online if we can't determine the status (graceful fallback)
+                    return true;
+                }
             }
         }
 
@@ -77,26 +96,35 @@ namespace NoLock.Social.Core.Storage.Services
                 return;
             }
 
-            try
+            if (_logger != null)
             {
-                _logger?.LogInformation("Starting connectivity monitoring");
-                
-                var module = await _moduleTask.Value;
+                var result = await _logger.ExecuteWithLogging(async () =>
+                {
+                    _logger?.LogInformation("Starting connectivity monitoring");
+                    
+                    var module = await _moduleTask.Value;
+                    _objectReference = DotNetObjectReference.Create(this);
+                    
+                    // Get initial state
+                    _lastKnownState = await IsOnlineAsync();
+                    
+                    // Start monitoring
+                    await module.InvokeVoidAsync("startMonitoring", _objectReference);
+                    _isMonitoring = true;
+                    
+                    _logger?.LogInformation("Connectivity monitoring started, initial state: {IsOnline}", _lastKnownState);
+                }, "Failed to start connectivity monitoring");
+
+                result.ThrowIfFailure();
+            }
+            else
+            {
+                // Execute without logging when logger is null
                 _objectReference = DotNetObjectReference.Create(this);
-                
-                // Get initial state
+                var module = await _moduleTask.Value;
                 _lastKnownState = await IsOnlineAsync();
-                
-                // Start monitoring
                 await module.InvokeVoidAsync("startMonitoring", _objectReference);
                 _isMonitoring = true;
-                
-                _logger?.LogInformation("Connectivity monitoring started, initial state: {IsOnline}", _lastKnownState);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to start connectivity monitoring");
-                throw;
             }
         }
 
@@ -110,23 +138,32 @@ namespace NoLock.Social.Core.Storage.Services
                 return;
             }
 
-            try
+            if (_logger != null)
             {
-                _logger?.LogInformation("Stopping connectivity monitoring");
-                
+                var result = await _logger.ExecuteWithLogging(async () =>
+                {
+                    _logger?.LogInformation("Stopping connectivity monitoring");
+                    
+                    var module = await _moduleTask.Value;
+                    await module.InvokeVoidAsync("stopMonitoring");
+                    
+                    _objectReference?.Dispose();
+                    _objectReference = null;
+                    _isMonitoring = false;
+                    
+                    _logger?.LogInformation("Connectivity monitoring stopped");
+                }, "Failed to stop connectivity monitoring");
+
+                result.ThrowIfFailure();
+            }
+            else
+            {
+                // Execute without logging when logger is null
                 var module = await _moduleTask.Value;
                 await module.InvokeVoidAsync("stopMonitoring");
-                
                 _objectReference?.Dispose();
                 _objectReference = null;
                 _isMonitoring = false;
-                
-                _logger?.LogInformation("Connectivity monitoring stopped");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to stop connectivity monitoring");
-                throw;
             }
         }
 

@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.Storage.Services
 {
@@ -41,19 +44,24 @@ namespace NoLock.Social.Core.Storage.Services
             if (operation == null)
                 throw new ArgumentNullException(nameof(operation));
 
-            try
+            if (_logger != null)
             {
-                _logger?.LogInformation("Queueing operation {OperationId} of type {OperationType}", 
-                    operation.OperationId, operation.OperationType);
+                var result = await _logger.ExecuteWithLogging(async () =>
+                {
+                    _logger?.LogInformation("Queueing operation {OperationId} of type {OperationType}", 
+                        operation.OperationId, operation.OperationType);
 
-                await _storageService.QueueOfflineOperationAsync(operation);
+                    await _storageService.QueueOfflineOperationAsync(operation);
 
-                _logger?.LogDebug("Successfully queued operation {OperationId}", operation.OperationId);
+                    _logger?.LogDebug("Successfully queued operation {OperationId}", operation.OperationId);
+                }, $"Failed to queue operation {operation.OperationId}");
+
+                result.ThrowIfFailure();
             }
-            catch (Exception ex)
+            else
             {
-                _logger?.LogError(ex, "Failed to queue operation {OperationId}", operation.OperationId);
-                throw;
+                // Execute without logging when logger is null
+                await _storageService.QueueOfflineOperationAsync(operation);
             }
         }
 
@@ -187,57 +195,68 @@ namespace NoLock.Social.Core.Storage.Services
         {
             ThrowIfDisposed();
 
-            try
-            {
-                var pendingOperations = await _storageService.GetPendingOperationsAsync();
-                
-                var status = new OfflineQueueStatus
+            var result = await (_logger ?? NullLogger<OfflineQueueService>.Instance)
+                .ExecuteWithLogging(async () =>
                 {
-                    PendingOperations = pendingOperations.Count,
-                    HighPriorityOperations = pendingOperations.Count(op => op.Priority <= 1),
-                    FailedOperations = pendingOperations.Count(op => op.RetryCount > 0),
-                    OldestOperationTime = pendingOperations.Any() ? pendingOperations.Min(op => op.CreatedAt) : null,
-                    IsProcessing = _isProcessing
-                };
+                    var pendingOperations = await _storageService.GetPendingOperationsAsync();
+                    
+                    var status = new OfflineQueueStatus
+                    {
+                        PendingOperations = pendingOperations.Count,
+                        HighPriorityOperations = pendingOperations.Count(op => op.Priority <= 1),
+                        FailedOperations = pendingOperations.Count(op => op.RetryCount > 0),
+                        OldestOperationTime = pendingOperations.Any() ? pendingOperations.Min(op => op.CreatedAt) : null,
+                        IsProcessing = _isProcessing
+                    };
 
-                return status;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to get queue status");
-                throw;
-            }
+                    return status;
+                }, "Failed to get queue status");
+
+            return result.ThrowIfFailure();
         }
 
         public async Task ClearProcessedOperationsAsync()
         {
             ThrowIfDisposed();
 
-            try
+            if (_logger != null)
             {
+                var result = await _logger.ExecuteWithLogging(async () =>
+                {
+                    var pendingOperations = await _storageService.GetPendingOperationsAsync();
+                    
+                    // Only keep operations that have failed and are below max retry count
+                    var operationsToKeep = pendingOperations
+                        .Where(op => op.RetryCount > 0 && op.RetryCount < op.MaxRetries)
+                        .ToList();
+
+                    // Clear all data and re-add operations that should be kept
+                    await _storageService.ClearAllDataAsync();
+
+                    foreach (var operation in operationsToKeep)
+                    {
+                        await _storageService.QueueOfflineOperationAsync(operation);
+                    }
+
+                    var clearedCount = pendingOperations.Count - operationsToKeep.Count;
+                    _logger?.LogInformation("Cleared {ClearedCount} processed operations, kept {KeptCount} failed operations", 
+                        clearedCount, operationsToKeep.Count);
+                }, "Failed to clear processed operations");
+
+                result.ThrowIfFailure();
+            }
+            else
+            {
+                // Execute without logging when logger is null
                 var pendingOperations = await _storageService.GetPendingOperationsAsync();
-                
-                // Only keep operations that have failed and are below max retry count
                 var operationsToKeep = pendingOperations
                     .Where(op => op.RetryCount > 0 && op.RetryCount < op.MaxRetries)
                     .ToList();
-
-                // Clear all data and re-add operations that should be kept
                 await _storageService.ClearAllDataAsync();
-
                 foreach (var operation in operationsToKeep)
                 {
                     await _storageService.QueueOfflineOperationAsync(operation);
                 }
-
-                var clearedCount = pendingOperations.Count - operationsToKeep.Count;
-                _logger?.LogInformation("Cleared {ClearedCount} processed operations, kept {KeptCount} failed operations", 
-                    clearedCount, operationsToKeep.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to clear processed operations");
-                throw;
             }
         }
 

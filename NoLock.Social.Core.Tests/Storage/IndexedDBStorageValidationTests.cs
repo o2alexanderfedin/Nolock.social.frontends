@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
 using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Collections.Generic;
@@ -30,7 +31,7 @@ namespace NoLock.Social.Core.Tests.Storage
             _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync(
                 It.IsAny<string>(), 
                 It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
             
             _storageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
         }
