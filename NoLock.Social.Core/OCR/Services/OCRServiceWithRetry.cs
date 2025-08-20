@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Common.Constants;
 using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
@@ -271,13 +272,13 @@ namespace NoLock.Social.Core.OCR.Services
         /// Initial delay between retries in milliseconds.
         /// Default: 1000ms
         /// </summary>
-        public int InitialDelayMs { get; set; } = 1000;
+        public int InitialDelayMs { get; set; } = TimeoutConstants.Polling.FastIntervalMs;
 
         /// <summary>
         /// Maximum delay between retries in milliseconds.
         /// Default: 30000ms (30 seconds)
         /// </summary>
-        public int MaxDelayMs { get; set; } = 30000;
+        public int MaxDelayMs { get; set; } = TimeoutConstants.Network.StandardRequestTimeoutMs;
 
         /// <summary>
         /// Backoff multiplier for exponential backoff.

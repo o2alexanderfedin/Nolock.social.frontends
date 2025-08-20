@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Common.Constants;
 using NoLock.Social.Core.OCR.Interfaces;
 
 namespace NoLock.Social.Core.OCR.Services
@@ -45,17 +46,17 @@ namespace NoLock.Social.Core.OCR.Services
         /// </summary>
         /// <param name="logger">Logger for retry operations.</param>
         /// <param name="failureClassifier">Classifier for determining failure types.</param>
-        /// <param name="maxAttempts">Maximum number of retry attempts (default: 3).</param>
-        /// <param name="initialDelayMs">Initial delay in milliseconds (default: 1000).</param>
-        /// <param name="maxDelayMs">Maximum delay in milliseconds (default: 30000).</param>
-        /// <param name="backoffMultiplier">Backoff multiplier (default: 2.0).</param>
+        /// <param name="maxAttempts">Maximum number of retry attempts (default: RetryPolicyConstants.DefaultMaxRetryAttempts).</param>
+        /// <param name="initialDelayMs">Initial delay in milliseconds (default: RetryPolicyConstants.DefaultInitialDelayMs).</param>
+        /// <param name="maxDelayMs">Maximum delay in milliseconds (default: RetryPolicyConstants.DefaultMaxDelayMs).</param>
+        /// <param name="backoffMultiplier">Backoff multiplier (default: RetryPolicyConstants.DefaultBackoffMultiplier).</param>
         public ExponentialBackoffRetryPolicy(
             ILogger<ExponentialBackoffRetryPolicy> logger,
             IFailureClassifier failureClassifier,
-            int maxAttempts = 3,
-            int initialDelayMs = 1000,
-            int maxDelayMs = 30000,
-            double backoffMultiplier = 2.0)
+            int maxAttempts = RetryPolicyConstants.DefaultMaxRetryAttempts,
+            int initialDelayMs = RetryPolicyConstants.DefaultInitialDelayMs,
+            int maxDelayMs = RetryPolicyConstants.DefaultMaxDelayMs,
+            double backoffMultiplier = RetryPolicyConstants.DefaultBackoffMultiplier)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _failureClassifier = failureClassifier ?? throw new ArgumentNullException(nameof(failureClassifier));
@@ -111,10 +112,10 @@ namespace NoLock.Social.Core.OCR.Services
             var cappedDelay = Math.Min(exponentialDelay, MaxDelayMs);
             
             // Add jitter (±20% randomization to avoid thundering herd)
-            var jitterRange = cappedDelay * 0.2;
-            var jitter = (_jitter.NextDouble() - 0.5) * 2 * jitterRange;
+            var jitterRange = cappedDelay * RetryPolicyConstants.JitterPercentage;
+            var jitter = (_jitter.NextDouble() - RetryPolicyConstants.JitterCenterValue) * RetryPolicyConstants.JitterRangeMultiplier * jitterRange;
             
-            return Math.Max(1, (int)(cappedDelay + jitter));
+            return Math.Max(RetryPolicyConstants.MinimumDelayMs, (int)(cappedDelay + jitter));
         }
 
         /// <summary>
@@ -233,12 +234,12 @@ namespace NoLock.Social.Core.OCR.Services
         /// </summary>
         private static readonly HashSet<HttpStatusCode> TransientHttpStatusCodes = new HashSet<HttpStatusCode>
         {
-            HttpStatusCode.RequestTimeout,       // 408
-            HttpStatusCode.TooManyRequests,      // 429
-            HttpStatusCode.InternalServerError,   // 500
-            HttpStatusCode.BadGateway,           // 502
-            HttpStatusCode.ServiceUnavailable,    // 503
-            HttpStatusCode.GatewayTimeout        // 504
+            (HttpStatusCode)HttpStatusConstants.ClientError.RequestTimeout,       // 408
+            (HttpStatusCode)HttpStatusConstants.ClientError.TooManyRequests,      // 429
+            (HttpStatusCode)HttpStatusConstants.ServerError.InternalServerError,  // 500
+            (HttpStatusCode)HttpStatusConstants.ServerError.BadGateway,           // 502
+            (HttpStatusCode)HttpStatusConstants.ServerError.ServiceUnavailable,   // 503
+            (HttpStatusCode)HttpStatusConstants.ServerError.GatewayTimeout        // 504
         };
 
         /// <summary>
@@ -246,16 +247,16 @@ namespace NoLock.Social.Core.OCR.Services
         /// </summary>
         private static readonly HashSet<HttpStatusCode> PermanentHttpStatusCodes = new HashSet<HttpStatusCode>
         {
-            HttpStatusCode.BadRequest,           // 400
-            HttpStatusCode.Unauthorized,         // 401
-            HttpStatusCode.Forbidden,            // 403
-            HttpStatusCode.NotFound,             // 404
-            HttpStatusCode.MethodNotAllowed,     // 405
-            HttpStatusCode.NotAcceptable,        // 406
-            HttpStatusCode.Conflict,             // 409
-            HttpStatusCode.Gone,                 // 410
-            HttpStatusCode.UnprocessableEntity,  // 422
-            HttpStatusCode.NotImplemented        // 501
+            (HttpStatusCode)HttpStatusConstants.ClientError.BadRequest,           // 400
+            (HttpStatusCode)HttpStatusConstants.ClientError.Unauthorized,         // 401
+            (HttpStatusCode)HttpStatusConstants.ClientError.Forbidden,            // 403
+            (HttpStatusCode)HttpStatusConstants.ClientError.NotFound,             // 404
+            (HttpStatusCode)HttpStatusConstants.ClientError.MethodNotAllowed,     // 405
+            (HttpStatusCode)HttpStatusConstants.ClientError.NotAcceptable,        // 406
+            (HttpStatusCode)HttpStatusConstants.ClientError.Conflict,             // 409
+            (HttpStatusCode)HttpStatusConstants.ClientError.Gone,                 // 410
+            (HttpStatusCode)HttpStatusConstants.ClientError.UnprocessableEntity,  // 422
+            (HttpStatusCode)HttpStatusConstants.ServerError.NotImplemented        // 501
         };
 
         /// <summary>
@@ -332,39 +333,39 @@ namespace NoLock.Social.Core.OCR.Services
             var message = exception.Message;
             
             // Common patterns in HTTP exception messages
-            if (message.Contains("429") || message.Contains("Too Many Requests"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.TooManyRequests) || message.Contains("Too Many Requests"))
             {
-                _logger.LogDebug("HTTP 429 classified as transient");
+                _logger.LogDebug("HTTP {StatusCode} classified as transient", HttpStatusConstants.ClientError.TooManyRequests);
                 return FailureType.Transient;
             }
             
-            if (message.Contains("503") || message.Contains("Service Unavailable"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.ServiceUnavailable) || message.Contains("Service Unavailable"))
             {
-                _logger.LogDebug("HTTP 503 classified as transient");
+                _logger.LogDebug("HTTP {StatusCode} classified as transient", HttpStatusConstants.ServerError.ServiceUnavailable);
                 return FailureType.Transient;
             }
             
-            if (message.Contains("504") || message.Contains("Gateway Timeout"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.GatewayTimeout) || message.Contains("Gateway Timeout"))
             {
-                _logger.LogDebug("HTTP 504 classified as transient");
+                _logger.LogDebug("HTTP {StatusCode} classified as transient", HttpStatusConstants.ServerError.GatewayTimeout);
                 return FailureType.Transient;
             }
             
-            if (message.Contains("400") || message.Contains("Bad Request"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.BadRequest) || message.Contains("Bad Request"))
             {
-                _logger.LogDebug("HTTP 400 classified as permanent");
+                _logger.LogDebug("HTTP {StatusCode} classified as permanent", HttpStatusConstants.ClientError.BadRequest);
                 return FailureType.Permanent;
             }
             
-            if (message.Contains("401") || message.Contains("Unauthorized"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.Unauthorized) || message.Contains("Unauthorized"))
             {
-                _logger.LogDebug("HTTP 401 classified as permanent");
+                _logger.LogDebug("HTTP {StatusCode} classified as permanent", HttpStatusConstants.ClientError.Unauthorized);
                 return FailureType.Permanent;
             }
             
-            if (message.Contains("404") || message.Contains("Not Found"))
+            if (message.Contains(HttpStatusConstants.StatusStrings.NotFound) || message.Contains("Not Found"))
             {
-                _logger.LogDebug("HTTP 404 classified as permanent");
+                _logger.LogDebug("HTTP {StatusCode} classified as permanent", HttpStatusConstants.ClientError.NotFound);
                 return FailureType.Permanent;
             }
 

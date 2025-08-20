@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NoLock.Social.Core.Common.Constants;
 using NoLock.Social.Core.Storage.Interfaces;
 using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Common.Extensions;
@@ -23,7 +24,7 @@ namespace NoLock.Social.Core.Storage.Services
 
         // Retry configuration
         private static readonly TimeSpan BaseRetryDelay = TimeSpan.FromSeconds(1);
-        private static readonly int MaxRetryDelaySeconds = 60;
+        private static readonly int MaxRetryDelaySeconds = TimeoutConstants.Delays.MaxRetryDelaySeconds;
 
         public OfflineQueueService(IOfflineStorageService storageService, ILogger<OfflineQueueService>? logger = null)
         {
@@ -273,7 +274,7 @@ namespace NoLock.Social.Core.Storage.Services
                 operation.OperationId, operation.OperationType);
             
             // Simulate some async work
-            await Task.Delay(100);
+            await Task.Delay(TimeoutConstants.Delays.ShortDelay);
             
             // TODO: Implement actual operation processing based on operation type
             // This could involve calling external APIs, uploading files, etc.

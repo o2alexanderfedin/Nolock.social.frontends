@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NoLock.Social.Core.Common.Constants;
 using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Interfaces;
@@ -284,7 +285,7 @@ namespace NoLock.Social.Core.OCR.Services
                     trackingId);
 
                 // Simulate cancellation delay
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(TimeoutConstants.Delays.ShortDelay, cancellationToken);
 
                 return true;
             }
