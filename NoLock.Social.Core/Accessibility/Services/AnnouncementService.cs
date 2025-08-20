@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Accessibility.Interfaces;
+using NoLock.Social.Core.Common.Constants;
 
 namespace NoLock.Social.Core.Accessibility.Services
 {
@@ -52,7 +53,7 @@ namespace NoLock.Social.Core.Accessibility.Services
                 
                 // Clear announcement after a brief delay to allow screen readers to process
                 // This enables the same message to be announced again if needed
-                await Task.Delay(150);
+                await Task.Delay(TimeoutConstants.UI.AnimationDelayMs / 2); // Half animation delay for quick clear
                 _currentPoliteAnnouncement = string.Empty;
                 
                 // Fire event again to clear the live region
@@ -99,7 +100,7 @@ namespace NoLock.Social.Core.Accessibility.Services
                 
                 // For assertive announcements, keep them visible longer
                 // as they typically contain important error/warning information
-                await Task.Delay(300);
+                await Task.Delay(TimeoutConstants.UI.DebounceDelayMs); // Use debounce delay for assertive messages
                 _currentAssertiveAnnouncement = string.Empty;
                 
                 // Fire event again to clear the live region

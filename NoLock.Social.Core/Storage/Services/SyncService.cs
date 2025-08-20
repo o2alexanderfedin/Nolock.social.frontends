@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Camera.Models;
+using NoLock.Social.Core.Common.Constants;
 using NoLock.Social.Core.Storage.Interfaces;
 
 namespace NoLock.Social.Core.Storage.Services
@@ -243,7 +244,7 @@ namespace NoLock.Social.Core.Storage.Services
             _logger.LogInformation("Creating session {SessionId} on server", session.SessionId);
             
             // Simulate API call delay
-            await Task.Delay(100);
+            await Task.Delay(TimeoutConstants.Testing.MockDelayMs);
             
             // Mock implementation - in real scenario, this would call the API service
             // await _apiService.CreateSessionAsync(session);
@@ -263,8 +264,8 @@ namespace NoLock.Social.Core.Storage.Services
             // TODO: Replace with actual API call when API service is available
             _logger.LogInformation("Uploading page {ImageId} for session {SessionId}", image.Id, sessionId);
             
-            // Simulate API call delay
-            await Task.Delay(200);
+            // Simulate API call delay  
+            await Task.Delay(TimeoutConstants.UI.AnimationDelayMs);
             
             // Mock implementation - in real scenario, this would upload the image and link to session
             // await _apiService.UploadPageAsync(sessionId, image);
@@ -285,7 +286,7 @@ namespace NoLock.Social.Core.Storage.Services
             _logger.LogInformation("Finalizing session {SessionId} on server", session.SessionId);
             
             // Simulate API call delay
-            await Task.Delay(100);
+            await Task.Delay(TimeoutConstants.Testing.MockDelayMs);
             
             // Mock implementation - in real scenario, this would finalize the session
             // await _apiService.FinalizeSessionAsync(session.SessionId);
