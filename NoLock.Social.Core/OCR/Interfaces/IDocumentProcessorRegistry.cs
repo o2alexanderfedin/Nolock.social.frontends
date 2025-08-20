@@ -63,7 +63,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// </summary>
         /// <param name="rawOcrData">The raw OCR data to analyze.</param>
         /// <returns>The appropriate document processor if found; otherwise, null.</returns>
-        IDocumentProcessor? FindProcessorForData(string rawOcrData);
+        Task<IDocumentProcessor?> FindProcessorForDataAsync(string rawOcrData);
 
         /// <summary>
         /// Gets all registered document types.
