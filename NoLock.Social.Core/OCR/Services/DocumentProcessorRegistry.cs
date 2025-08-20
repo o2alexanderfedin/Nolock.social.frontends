@@ -231,7 +231,7 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public IDocumentProcessor? FindProcessorForData(string rawOcrData)
+        public async Task<IDocumentProcessor?> FindProcessorForDataAsync(string rawOcrData)
         {
             if (string.IsNullOrWhiteSpace(rawOcrData))
             {
@@ -241,8 +241,8 @@ namespace NoLock.Social.Core.OCR.Services
             // First, try using the document type detector if available
             if (_documentTypeDetector != null)
             {
-                var detectionResult = _logger.ExecuteWithLogging(
-                    () => _documentTypeDetector.DetectDocumentTypeAsync(rawOcrData).GetAwaiter().GetResult(),
+                var detectionResult = await _logger.ExecuteWithLogging(
+                    async () => await _documentTypeDetector.DetectDocumentTypeAsync(rawOcrData),
                     "Document type detection");
                 
                 if (detectionResult.IsSuccess && detectionResult.Value != null && 
@@ -324,7 +324,7 @@ namespace NoLock.Social.Core.OCR.Services
             // If no processor found yet, try auto-detection
             if (processor == null)
             {
-                processor = FindProcessorForData(rawOcrData);
+                processor = await FindProcessorForDataAsync(rawOcrData);
             }
 
             if (processor == null)

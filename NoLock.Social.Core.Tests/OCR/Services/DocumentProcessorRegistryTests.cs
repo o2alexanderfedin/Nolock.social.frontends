@@ -201,7 +201,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         }
 
         [Fact]
-        public void FindProcessorForData_WithMatchingProcessor_ShouldReturnProcessor()
+        public async Task FindProcessorForData_WithMatchingProcessor_ShouldReturnProcessor()
         {
             // Arrange
             _processorMock.Setup(p => p.DocumentType).Returns("TestType");
@@ -209,7 +209,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Act
-            var result = _registry.FindProcessorForData("test data");
+            var result = await _registry.FindProcessorForDataAsync("test data");
 
             // Assert
             Assert.NotNull(result);
@@ -217,7 +217,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         }
 
         [Fact]
-        public void FindProcessorForData_WithNoMatchingProcessor_ShouldReturnNull()
+        public async Task FindProcessorForData_WithNoMatchingProcessor_ShouldReturnNull()
         {
             // Arrange
             _processorMock.Setup(p => p.DocumentType).Returns("TestType");
@@ -225,7 +225,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Act
-            var result = _registry.FindProcessorForData("test data");
+            var result = await _registry.FindProcessorForDataAsync("test data");
 
             // Assert
             Assert.Null(result);
@@ -235,17 +235,17 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [InlineData(null)]
         [InlineData("")]
         [InlineData(" ")]
-        public void FindProcessorForData_WithInvalidData_ShouldReturnNull(string rawData)
+        public async Task FindProcessorForData_WithInvalidData_ShouldReturnNull(string rawData)
         {
             // Act
-            var result = _registry.FindProcessorForData(rawData);
+            var result = await _registry.FindProcessorForDataAsync(rawData);
 
             // Assert
             Assert.Null(result);
         }
 
         [Fact]
-        public void FindProcessorForData_WhenProcessorThrows_ShouldContinueAndReturnNull()
+        public async Task FindProcessorForData_WhenProcessorThrows_ShouldContinueAndReturnNull()
         {
             // Arrange
             _processorMock.Setup(p => p.DocumentType).Returns("TestType");
@@ -253,7 +253,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _registry.RegisterProcessor(_processorMock.Object);
 
             // Act
-            var result = _registry.FindProcessorForData("test data");
+            var result = await _registry.FindProcessorForDataAsync("test data");
 
             // Assert
             Assert.Null(result);

@@ -9,7 +9,7 @@ namespace NoLock.Social.Core.Cryptography.Services
     /// <summary>
     /// Service for managing cryptographic identity session state
     /// </summary>
-    public class SessionStateService : ISessionStateService
+    public class SessionStateService : ISessionStateService, IAsyncDisposable
     {
         private readonly ISecureMemoryManager _secureMemoryManager;
         private readonly IWebCryptoService _cryptoInterop;
@@ -451,15 +451,33 @@ namespace NoLock.Social.Core.Cryptography.Services
             await Task.CompletedTask;
         }
 
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+                return;
+
+            await EndSessionAsync();
+            StopTimeoutTimer();
+            _lock?.Dispose();
+            _disposed = true;
+            GC.SuppressFinalize(this);
+        }
+
         public void Dispose()
         {
             if (_disposed)
                 return;
 
-            EndSessionAsync().Wait();
+            // For synchronous disposal, we can't safely wait on async operations
+            // Just clean up what we can synchronously
+            
+            // Clear the private key buffer if it exists
+            _currentSession?.PrivateKeyBuffer?.Clear();
+            
             StopTimeoutTimer();
             _lock?.Dispose();
             _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }
