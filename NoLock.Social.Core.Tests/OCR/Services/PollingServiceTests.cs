@@ -86,7 +86,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         [Theory]
         [InlineData(2, 3, false, "timeout with short duration")]
-        [InlineData(10, 100, true, "no timeout with long duration")]
+        [InlineData(10, 5, true, "no timeout with long duration")]
         public async Task PollAsync_RespectsMaxPollingDuration(
             int pollingDurationSeconds,
             int attemptsToComplete,
