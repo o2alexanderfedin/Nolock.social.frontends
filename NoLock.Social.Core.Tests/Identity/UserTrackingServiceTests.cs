@@ -156,7 +156,7 @@ namespace NoLock.Social.Core.Tests.Identity
                 x => x.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error querying storage")),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("querying storage for user content failed")),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
@@ -352,7 +352,7 @@ namespace NoLock.Social.Core.Tests.Identity
                 x => x.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error getting user activity")),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("getting user activity summary failed")),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);

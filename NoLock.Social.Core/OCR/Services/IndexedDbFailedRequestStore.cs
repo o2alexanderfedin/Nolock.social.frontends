@@ -6,6 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Extensions;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 
@@ -66,7 +69,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// </summary>
         private async Task InitializeDbAsync()
         {
-            try
+            await _logger.ExecuteWithLogging(async () =>
             {
                 var script = @"
                     (function() {
@@ -95,12 +98,8 @@ namespace NoLock.Social.Core.OCR.Services
 
                 await _jsRuntime.InvokeAsync<bool>("eval", script);
                 _logger.LogInformation("IndexedDB database initialized successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize IndexedDB database");
-                throw;
-            }
+            },
+            "Failed to initialize IndexedDB database");
         }
 
         /// <summary>
@@ -115,7 +114,7 @@ namespace NoLock.Social.Core.OCR.Services
 
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var json = JsonSerializer.Serialize(request);
                 var script = @"
@@ -151,14 +150,10 @@ namespace NoLock.Social.Core.OCR.Services
                     request.RequestId, request.RetryCount);
                 
                 return request.RequestId;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, 
-                    "Failed to store OCR request. RequestId: {RequestId}",
-                    request.RequestId);
-                throw;
-            }
+            },
+            $"Failed to store OCR request. RequestId: {request.RequestId}");
+            
+            return result.IsSuccess ? result.Value : throw new InvalidOperationException($"Failed to store OCR request. RequestId: {request.RequestId}", result.Exception);
         }
 
         /// <summary>
@@ -170,7 +165,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var script = @"
                     (function() {
@@ -219,27 +214,25 @@ namespace NoLock.Social.Core.OCR.Services
                     eligibleRequests.Count, requests.Count);
 
                 return eligibleRequests;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to retrieve retryable requests");
-                return new List<FailedOCRRequest>();
-            }
+            },
+            "Failed to retrieve retryable requests");
+
+            return result.IsSuccess ? result.Value : new List<FailedOCRRequest>();
         }
 
         /// <summary>
         /// Retrieves a specific failed request by ID.
         /// </summary>
-        public async Task<FailedOCRRequest?> GetRequestAsync(
+        public async Task<Result<FailedOCRRequest?>> GetRequestAsync(
             string requestId,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(requestId))
-                return null;
+                return Result<FailedOCRRequest?>.Success(null);
 
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var script = @"
                     (function() {
@@ -269,17 +262,13 @@ namespace NoLock.Social.Core.OCR.Services
 
                 var json = await _jsRuntime.InvokeAsync<string?>("eval", script);
                 if (string.IsNullOrWhiteSpace(json) || json == "null")
-                    return null;
+                    return (FailedOCRRequest?)null;
 
                 return JsonSerializer.Deserialize<FailedOCRRequest>(json);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, 
-                    "Failed to retrieve request. RequestId: {RequestId}",
-                    requestId);
-                return null;
-            }
+            },
+            $"Failed to retrieve request. RequestId: {requestId}");
+            
+            return result;
         }
 
         /// <summary>
@@ -296,9 +285,13 @@ namespace NoLock.Social.Core.OCR.Services
 
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
-                var request = await GetRequestAsync(requestId, cancellationToken);
+                var requestResult = await GetRequestAsync(requestId, cancellationToken);
+                if (!requestResult.IsSuccess)
+                    return false;
+                    
+                var request = requestResult.Value;
                 if (request == null)
                     return false;
 
@@ -316,14 +309,10 @@ namespace NoLock.Social.Core.OCR.Services
                     requestId, request.RetryCount);
                 
                 return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, 
-                    "Failed to update retry status. RequestId: {RequestId}",
-                    requestId);
-                return false;
-            }
+            },
+            $"Failed to update retry status. RequestId: {requestId}");
+
+            return result.IsSuccess ? result.Value : false;
         }
 
         /// <summary>
@@ -338,7 +327,7 @@ namespace NoLock.Social.Core.OCR.Services
 
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var script = @"
                     (function() {
@@ -373,14 +362,10 @@ namespace NoLock.Social.Core.OCR.Services
                     requestId);
                 
                 return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, 
-                    "Failed to remove request. RequestId: {RequestId}",
-                    requestId);
-                return false;
-            }
+            },
+            $"Failed to remove request. RequestId: {requestId}");
+
+            return result.IsSuccess ? result.Value : false;
         }
 
         /// <summary>
@@ -392,7 +377,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var allRequests = await GetRetryableRequestsAsync(int.MaxValue, cancellationToken);
                 var exhaustedRequests = allRequests
@@ -411,12 +396,10 @@ namespace NoLock.Social.Core.OCR.Services
                     removedCount);
 
                 return removedCount;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to remove exhausted requests");
-                return 0;
-            }
+            },
+            "Failed to remove exhausted requests");
+
+            return result.IsSuccess ? result.Value : 0;
         }
 
         /// <summary>
@@ -427,7 +410,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var script = @"
                     (function() {
@@ -456,12 +439,10 @@ namespace NoLock.Social.Core.OCR.Services
                     })()";
 
                 return await _jsRuntime.InvokeAsync<int>("eval", script);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get pending count");
-                return 0;
-            }
+            },
+            "Failed to get pending count");
+
+            return result.IsSuccess ? result.Value : 0;
         }
 
         /// <summary>
@@ -472,7 +453,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             await EnsureInitializedAsync();
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var count = await GetPendingCountAsync(cancellationToken);
                 
@@ -506,12 +487,10 @@ namespace NoLock.Social.Core.OCR.Services
                 
                 _logger.LogInformation("Cleared all {Count} failed requests", count);
                 return count;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clear all requests");
-                return 0;
-            }
+            },
+            "Failed to clear all requests");
+
+            return result.IsSuccess ? result.Value : 0;
         }
 
         /// <summary>

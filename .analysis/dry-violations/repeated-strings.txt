@@ -1,0 +1,30 @@
+  60 cancellationToken
+  19 logger
+  18 fieldName
+  18 documentType
+  17 ArgumentNullException
+  16 operation
+  14  + _storeName + @
+  13 trackingId
+  12 rawOcrData
+  11 SHA-256
+  10 documentId
+  10 
+   9 TResult
+   8 Session ID cannot be null or empty
+   8 localStorage
+   7 request
+   7 eval
+   7 configuration
+   7 1.0
+   7  + _dbVersion + @
+   6 signature
+   6 Session '{sessionId}' not found
+   6 score
+   6 NoLock.Social.Core
+   6 message
+   6 Check
+   5 W4
+   5 Unknown
+   5 TimeoutException
+   5 retryPolicy

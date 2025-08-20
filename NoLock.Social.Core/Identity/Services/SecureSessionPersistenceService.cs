@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Identity.Configuration;
 using NoLock.Social.Core.Identity.Interfaces;
@@ -44,7 +46,7 @@ namespace NoLock.Social.Core.Identity.Services
             if (sessionData == null)
                 throw new ArgumentNullException(nameof(sessionData));
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Persisting session metadata for user: {Username}", sessionData.Username);
 
@@ -76,18 +78,17 @@ namespace NoLock.Social.Core.Identity.Services
 
                 _logger.LogInformation("Session metadata persisted successfully with {Minutes} minute expiry", expiryMinutes);
                 return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to persist session metadata");
-                return false;
-            }
+            }, "Persist session metadata");
+
+            return result.Match(
+                onSuccess: success => success,
+                onFailure: _ => false);
         }
 
         /// <inheritdoc />
         public async Task<EncryptedSessionData?> GetPersistedSessionAsync()
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Retrieving persisted session metadata");
 
@@ -132,12 +133,11 @@ namespace NoLock.Social.Core.Identity.Services
 
                 _logger.LogDebug("Retrieved valid persisted session metadata");
                 return encryptedData;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to retrieve persisted session metadata");
-                return null;
-            }
+            }, "Retrieve session metadata");
+
+            return result.Match(
+                onSuccess: session => session,
+                onFailure: _ => null);
         }
 
         /// <inheritdoc />
@@ -152,7 +152,7 @@ namespace NoLock.Social.Core.Identity.Services
         /// <inheritdoc />
         public async Task ClearPersistedSessionAsync()
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Clearing persisted session metadata");
 
@@ -161,11 +161,10 @@ namespace NoLock.Social.Core.Identity.Services
                 await _jsRuntime.InvokeVoidAsync($"{storageType}.removeItem", MetadataKey);
 
                 _logger.LogInformation("Persisted session metadata cleared");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clear persisted session metadata");
-            }
+            }, "Clear session metadata");
+            
+            // Log error but don't throw - clearing should be best effort
+            result.OnFailure(ex => _logger.LogDebug("Failed to clear metadata but continuing"));
         }
 
         /// <inheritdoc />
@@ -185,7 +184,7 @@ namespace NoLock.Social.Core.Identity.Services
         /// <inheritdoc />
         public async Task ExtendSessionExpiryAsync(int additionalMinutes)
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Extending session by {Minutes} minutes", additionalMinutes);
 
@@ -217,11 +216,10 @@ namespace NoLock.Social.Core.Identity.Services
                 await _jsRuntime.InvokeVoidAsync($"{storageType}.setItem", MetadataKey, json);
 
                 _logger.LogInformation("Session extended until {ExpiryTime}", metadata.ExpiresAt);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to extend session expiry");
-            }
+            }, "Extend session expiry");
+            
+            // Log error but don't throw - extension failure should not be critical
+            result.OnFailure(ex => _logger.LogDebug("Failed to extend session but continuing"));
         }
 
         /// <inheritdoc />

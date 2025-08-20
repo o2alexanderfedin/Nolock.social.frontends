@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.OCR.Interfaces
@@ -38,7 +39,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// <param name="requestId">The unique identifier of the request.</param>
         /// <param name="cancellationToken">Cancellation token for the operation.</param>
         /// <returns>The failed request if found; otherwise, null.</returns>
-        Task<FailedOCRRequest?> GetRequestAsync(
+        Task<Result<FailedOCRRequest?>> GetRequestAsync(
             string requestId,
             CancellationToken cancellationToken = default);
 

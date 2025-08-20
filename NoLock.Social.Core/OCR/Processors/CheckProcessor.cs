@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Processors
 {
@@ -95,20 +97,18 @@ namespace NoLock.Social.Core.OCR.Processors
                 }
 
                 // Backend returns CheckData as JSON in StructuredData field
-                CheckData checkData = null;
+                CheckData checkData;
                 if (!string.IsNullOrWhiteSpace(statusResponse.ResultData?.StructuredData))
                 {
-                    try
-                    {
-                        checkData = JsonSerializer.Deserialize<CheckData>(
+                    var deserializationResult = _logger.ExecuteWithLogging(
+                        () => JsonSerializer.Deserialize<CheckData>(
                             statusResponse.ResultData.StructuredData,
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogError(ex, "Failed to deserialize CheckData from backend response");
-                        checkData = new CheckData();
-                    }
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }),
+                        "Failed to deserialize CheckData from backend response");
+                    
+                    checkData = deserializationResult.IsSuccess 
+                        ? deserializationResult.Value 
+                        : new CheckData();
                 }
                 else
                 {

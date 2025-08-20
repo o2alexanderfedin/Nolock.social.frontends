@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
 using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Threading.Tasks;

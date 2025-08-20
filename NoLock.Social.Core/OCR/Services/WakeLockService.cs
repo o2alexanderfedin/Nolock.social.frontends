@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using NoLock.Social.Core.ImageProcessing.Interfaces;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Interfaces;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 
@@ -88,82 +90,76 @@ namespace NoLock.Social.Core.OCR.Services
 
             var previousState = IsWakeLockActive;
             
-            try
+            _logger.LogInformation("Attempting to acquire wake lock. Reason: {Reason}", reason);
+
+            // Check if wake lock is already active
+            if (IsWakeLockActive)
             {
-                _logger.LogInformation("Attempting to acquire wake lock. Reason: {Reason}", reason);
+                _logger.LogDebug("Wake lock is already active");
+                return WakeLockResult.Success(WakeLockOperationType.Acquire);
+            }
 
-                // Check if wake lock is already active
-                if (IsWakeLockActive)
-                {
-                    _logger.LogDebug("Wake lock is already active");
-                    return WakeLockResult.Success(WakeLockOperationType.Acquire);
-                }
+            // Check browser support first
+            var isSupportedResult = await CheckBrowserSupportAsync();
+            if (!isSupportedResult.IsSuccess)
+            {
+                _logger.LogWarning("Wake Lock API is not supported in this browser");
+                return isSupportedResult;
+            }
 
-                // Check browser support first
-                var isSupportedResult = await CheckBrowserSupportAsync();
-                if (!isSupportedResult.IsSuccess)
-                {
-                    _logger.LogWarning("Wake Lock API is not supported in this browser");
-                    return isSupportedResult;
-                }
+            // Attempt to acquire wake lock through JavaScript
+            var acquireResult = await _logger.ExecuteWithLogging(
+                async () => await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.acquireWakeLock"),
+                "AcquireWakeLock");
 
-                // Attempt to acquire wake lock through JavaScript
-                var jsResult = await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.acquireWakeLock");
-                
-                if (jsResult)
+            return acquireResult.Match(
+                onSuccess: jsResult =>
                 {
-                    lock (_lockObject)
+                    if (jsResult)
                     {
-                        _isWakeLockActive = true;
-                    }
+                        lock (_lockObject)
+                        {
+                            _isWakeLockActive = true;
+                        }
 
-                    _logger.LogInformation("Wake lock acquired successfully. Reason: {Reason}", reason);
-                    
-                    var result = WakeLockResult.Success(WakeLockOperationType.Acquire);
-                    RaiseWakeLockStatusChanged(true, previousState, WakeLockOperationType.Acquire, result, reason);
-                    
-                    return result;
-                }
-                else
+                        _logger.LogInformation("Wake lock acquired successfully. Reason: {Reason}", reason);
+                        
+                        var result = WakeLockResult.Success(WakeLockOperationType.Acquire);
+                        RaiseWakeLockStatusChanged(true, previousState, WakeLockOperationType.Acquire, result, reason);
+                        
+                        return result;
+                    }
+                    else
+                    {
+                        var errorMessage = "Failed to acquire wake lock through JavaScript interop";
+                        _logger.LogWarning(errorMessage);
+                        
+                        var result = WakeLockResult.Failure(
+                            WakeLockOperationType.Acquire,
+                            errorMessage,
+                            "JavaScript interop returned false");
+                        
+                        RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Acquire, result, reason);
+                        return result;
+                    }
+                },
+                onFailure: ex =>
                 {
-                    var errorMessage = "Failed to acquire wake lock through JavaScript interop";
-                    _logger.LogWarning(errorMessage);
+                    var errorMessage = ex switch
+                    {
+                        JSException jsEx => $"JavaScript error while acquiring wake lock: {jsEx.Message}",
+                        _ => $"Unexpected error while acquiring wake lock: {ex.Message}"
+                    };
                     
                     var result = WakeLockResult.Failure(
                         WakeLockOperationType.Acquire,
                         errorMessage,
-                        "JavaScript interop returned false");
+                        ex.ToString());
                     
                     RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Acquire, result, reason);
                     return result;
                 }
-            }
-            catch (JSException jsEx)
-            {
-                var errorMessage = $"JavaScript error while acquiring wake lock: {jsEx.Message}";
-                _logger.LogError(jsEx, errorMessage);
-                
-                var result = WakeLockResult.Failure(
-                    WakeLockOperationType.Acquire,
-                    errorMessage,
-                    jsEx.ToString());
-                
-                RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Acquire, result, reason);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                var errorMessage = $"Unexpected error while acquiring wake lock: {ex.Message}";
-                _logger.LogError(ex, errorMessage);
-                
-                var result = WakeLockResult.Failure(
-                    WakeLockOperationType.Acquire,
-                    errorMessage,
-                    ex.ToString());
-                
-                RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Acquire, result, reason);
-                return result;
-            }
+            );
         }
 
         /// <summary>
@@ -179,74 +175,68 @@ namespace NoLock.Social.Core.OCR.Services
 
             var previousState = IsWakeLockActive;
 
-            try
+            _logger.LogInformation("Attempting to release wake lock");
+
+            // Check if wake lock is already inactive
+            if (!IsWakeLockActive)
             {
-                _logger.LogInformation("Attempting to release wake lock");
+                _logger.LogDebug("Wake lock is already inactive");
+                return WakeLockResult.Success(WakeLockOperationType.Release);
+            }
 
-                // Check if wake lock is already inactive
-                if (!IsWakeLockActive)
-                {
-                    _logger.LogDebug("Wake lock is already inactive");
-                    return WakeLockResult.Success(WakeLockOperationType.Release);
-                }
+            // Attempt to release wake lock through JavaScript
+            var releaseResult = await _logger.ExecuteWithLogging(
+                async () => await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.releaseWakeLock"),
+                "ReleaseWakeLock");
 
-                // Attempt to release wake lock through JavaScript
-                var jsResult = await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.releaseWakeLock");
-                
-                if (jsResult)
+            return releaseResult.Match(
+                onSuccess: jsResult =>
                 {
-                    lock (_lockObject)
+                    if (jsResult)
                     {
-                        _isWakeLockActive = false;
-                    }
+                        lock (_lockObject)
+                        {
+                            _isWakeLockActive = false;
+                        }
 
-                    _logger.LogInformation("Wake lock released successfully");
-                    
-                    var result = WakeLockResult.Success(WakeLockOperationType.Release);
-                    RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Release, result);
-                    
-                    return result;
-                }
-                else
+                        _logger.LogInformation("Wake lock released successfully");
+                        
+                        var result = WakeLockResult.Success(WakeLockOperationType.Release);
+                        RaiseWakeLockStatusChanged(false, previousState, WakeLockOperationType.Release, result);
+                        
+                        return result;
+                    }
+                    else
+                    {
+                        var errorMessage = "Failed to release wake lock through JavaScript interop";
+                        _logger.LogWarning(errorMessage);
+                        
+                        var result = WakeLockResult.Failure(
+                            WakeLockOperationType.Release,
+                            errorMessage,
+                            "JavaScript interop returned false");
+                        
+                        RaiseWakeLockStatusChanged(_isWakeLockActive, previousState, WakeLockOperationType.Release, result);
+                        return result;
+                    }
+                },
+                onFailure: ex =>
                 {
-                    var errorMessage = "Failed to release wake lock through JavaScript interop";
-                    _logger.LogWarning(errorMessage);
+                    var errorMessage = ex switch
+                    {
+                        JSException jsEx => $"JavaScript error while releasing wake lock: {jsEx.Message}",
+                        _ => $"Unexpected error while releasing wake lock: {ex.Message}"
+                    };
                     
                     var result = WakeLockResult.Failure(
                         WakeLockOperationType.Release,
                         errorMessage,
-                        "JavaScript interop returned false");
+                        ex.ToString());
                     
                     RaiseWakeLockStatusChanged(_isWakeLockActive, previousState, WakeLockOperationType.Release, result);
                     return result;
                 }
-            }
-            catch (JSException jsEx)
-            {
-                var errorMessage = $"JavaScript error while releasing wake lock: {jsEx.Message}";
-                _logger.LogError(jsEx, errorMessage);
-                
-                var result = WakeLockResult.Failure(
-                    WakeLockOperationType.Release,
-                    errorMessage,
-                    jsEx.ToString());
-                
-                RaiseWakeLockStatusChanged(_isWakeLockActive, previousState, WakeLockOperationType.Release, result);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                var errorMessage = $"Unexpected error while releasing wake lock: {ex.Message}";
-                _logger.LogError(ex, errorMessage);
-                
-                var result = WakeLockResult.Failure(
-                    WakeLockOperationType.Release,
-                    errorMessage,
-                    ex.ToString());
-                
-                RaiseWakeLockStatusChanged(_isWakeLockActive, previousState, WakeLockOperationType.Release, result);
-                return result;
-            }
+            );
         }
 
         /// <summary>
@@ -266,29 +256,35 @@ namespace NoLock.Social.Core.OCR.Services
                 return;
             }
 
-            try
-            {
-                _logger.LogInformation("Starting visibility monitoring");
+            _logger.LogInformation("Starting visibility monitoring");
 
-                // Create a .NET object reference for JavaScript callbacks
-                var objRef = DotNetObjectReference.Create(this);
-                await _jsRuntime.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", objRef);
-                
-                _isVisibilityMonitoring = true;
-                _logger.LogInformation("Visibility monitoring started successfully");
-            }
-            catch (JSException jsEx)
-            {
-                var errorMessage = $"JavaScript error while starting visibility monitoring: {jsEx.Message}";
-                _logger.LogError(jsEx, errorMessage);
-                throw new InvalidOperationException(errorMessage, jsEx);
-            }
-            catch (Exception ex)
-            {
-                var errorMessage = $"Unexpected error while starting visibility monitoring: {ex.Message}";
-                _logger.LogError(ex, errorMessage);
-                throw;
-            }
+            var startResult = await _logger.ExecuteWithLogging(
+                async () =>
+                {
+                    // Create a .NET object reference for JavaScript callbacks
+                    var objRef = DotNetObjectReference.Create(this);
+                    await _jsRuntime.InvokeVoidAsync("wakeLockInterop.startVisibilityMonitoring", objRef);
+                    return true;
+                },
+                "StartVisibilityMonitoring");
+
+            startResult.Match(
+                onSuccess: _ =>
+                {
+                    _isVisibilityMonitoring = true;
+                    _logger.LogInformation("Visibility monitoring started successfully");
+                    return true;
+                },
+                onFailure: ex =>
+                {
+                    var errorMessage = ex switch
+                    {
+                        JSException jsEx => $"JavaScript error while starting visibility monitoring: {jsEx.Message}",
+                        _ => $"Unexpected error while starting visibility monitoring: {ex.Message}"
+                    };
+                    throw new InvalidOperationException(errorMessage, ex);
+                }
+            );
         }
 
         /// <summary>
@@ -308,27 +304,33 @@ namespace NoLock.Social.Core.OCR.Services
                 return;
             }
 
-            try
-            {
-                _logger.LogInformation("Stopping visibility monitoring");
+            _logger.LogInformation("Stopping visibility monitoring");
 
-                await _jsRuntime.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring");
-                
-                _isVisibilityMonitoring = false;
-                _logger.LogInformation("Visibility monitoring stopped successfully");
-            }
-            catch (JSException jsEx)
-            {
-                var errorMessage = $"JavaScript error while stopping visibility monitoring: {jsEx.Message}";
-                _logger.LogError(jsEx, errorMessage);
-                throw new InvalidOperationException(errorMessage, jsEx);
-            }
-            catch (Exception ex)
-            {
-                var errorMessage = $"Unexpected error while stopping visibility monitoring: {ex.Message}";
-                _logger.LogError(ex, errorMessage);
-                throw;
-            }
+            var stopResult = await _logger.ExecuteWithLogging(
+                async () =>
+                {
+                    await _jsRuntime.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring");
+                    return true;
+                },
+                "StopVisibilityMonitoring");
+
+            stopResult.Match(
+                onSuccess: _ =>
+                {
+                    _isVisibilityMonitoring = false;
+                    _logger.LogInformation("Visibility monitoring stopped successfully");
+                    return true;
+                },
+                onFailure: ex =>
+                {
+                    var errorMessage = ex switch
+                    {
+                        JSException jsEx => $"JavaScript error while stopping visibility monitoring: {jsEx.Message}",
+                        _ => $"Unexpected error while stopping visibility monitoring: {ex.Message}"
+                    };
+                    throw new InvalidOperationException(errorMessage, ex);
+                }
+            );
         }
 
         /// <summary>
@@ -366,30 +368,33 @@ namespace NoLock.Social.Core.OCR.Services
         /// <returns>A wake lock result indicating browser support status.</returns>
         private async Task<WakeLockResult> CheckBrowserSupportAsync()
         {
-            try
-            {
-                var isSupported = await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.isWakeLockSupported");
-                
-                if (!isSupported)
+            var supportResult = await _logger.ExecuteWithLogging(
+                async () => await _jsRuntime.InvokeAsync<bool>("wakeLockInterop.isWakeLockSupported"),
+                "CheckBrowserSupport");
+
+            return supportResult.Match(
+                onSuccess: isSupported =>
+                {
+                    if (!isSupported)
+                    {
+                        return WakeLockResult.Failure(
+                            WakeLockOperationType.Acquire,
+                            "Wake Lock API is not supported in this browser",
+                            "The browser does not support the Screen Wake Lock API",
+                            false);
+                    }
+
+                    return WakeLockResult.Success(WakeLockOperationType.Acquire);
+                },
+                onFailure: ex =>
                 {
                     return WakeLockResult.Failure(
                         WakeLockOperationType.Acquire,
-                        "Wake Lock API is not supported in this browser",
-                        "The browser does not support the Screen Wake Lock API",
+                        "Unable to determine Wake Lock API support",
+                        ex.Message,
                         false);
                 }
-
-                return WakeLockResult.Success(WakeLockOperationType.Acquire);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking Wake Lock API support");
-                return WakeLockResult.Failure(
-                    WakeLockOperationType.Acquire,
-                    "Unable to determine Wake Lock API support",
-                    ex.Message,
-                    false);
-            }
+            );
         }
 
         /// <summary>
@@ -420,7 +425,7 @@ namespace NoLock.Social.Core.OCR.Services
             if (_disposed)
                 return;
 
-            try
+            var disposeResult = _logger.ExecuteWithLogging(() =>
             {
                 // Create tasks for cleanup operations
                 var cleanupTasks = new List<Task>();
@@ -444,15 +449,12 @@ namespace NoLock.Social.Core.OCR.Services
                 {
                     Task.WaitAll(cleanupTasks.ToArray(), TimeSpan.FromSeconds(5));
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during WakeLockService disposal");
-            }
-            finally
-            {
-                _disposed = true;
-            }
+            },
+            "WakeLockServiceDispose");
+
+            // We don't need to handle the result since disposal shouldn't throw
+            // The ExecuteWithLogging will log any errors that occur
+            _disposed = true;
         }
     }
 }

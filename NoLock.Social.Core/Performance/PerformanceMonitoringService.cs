@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.Performance;
 
@@ -235,30 +237,34 @@ public class PerformanceMonitoringService : IPerformanceMonitoringService
         _logger.LogInformation("Performance metrics cleared");
     }
     
-    public Task<string> ExportMetricsAsync()
+    public async Task<string> ExportMetricsAsync()
     {
-        try
-        {
-            var export = new
-            {
-                ExportTime = DateTime.UtcNow,
-                Statistics = GetAllStatistics(),
-                RecentAlerts = GetRecentAlerts(50),
-                Thresholds = _thresholds.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-            };
+        var result = await _logger.ExecuteWithLogging(
+            () => Task.FromResult(SerializeMetricsToJson()),
+            "Error exporting performance metrics");
             
-            var json = System.Text.Json.JsonSerializer.Serialize(export, new System.Text.Json.JsonSerializerOptions 
-            { 
-                WriteIndented = true 
-            });
-            
-            return Task.FromResult(json);
-        }
-        catch (Exception ex)
+        if (result.IsSuccess)
         {
-            _logger.LogError(ex, "Error exporting performance metrics");
-            throw;
+            return result.Value;
         }
+        
+        throw result.Exception;
+    }
+    
+    private string SerializeMetricsToJson()
+    {
+        var export = new
+        {
+            ExportTime = DateTime.UtcNow,
+            Statistics = GetAllStatistics(),
+            RecentAlerts = GetRecentAlerts(50),
+            Thresholds = _thresholds.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+        };
+        
+        return System.Text.Json.JsonSerializer.Serialize(export, new System.Text.Json.JsonSerializerOptions 
+        { 
+            WriteIndented = true 
+        });
     }
     
     public async Task<BrowserPerformanceMetrics?> GetBrowserMetricsAsync()

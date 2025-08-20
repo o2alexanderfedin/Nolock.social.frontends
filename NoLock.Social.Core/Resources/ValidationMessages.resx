@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Session-related messages -->
+  <data name="SessionIdRequired" xml:space="preserve">
+    <value>Session ID cannot be null or empty</value>
+    <comment>Validation message when session ID is missing</comment>
+  </data>
+  <data name="SessionNotFound" xml:space="preserve">
+    <value>Session '{0}' not found</value>
+    <comment>Error message when session cannot be found. {0} is the session ID</comment>
+  </data>
+  <data name="SessionAlreadyExists" xml:space="preserve">
+    <value>Session '{0}' already exists</value>
+    <comment>Error when trying to create duplicate session</comment>
+  </data>
+  
+  <!-- Operation-related messages -->
+  <data name="OperationIdRequired" xml:space="preserve">
+    <value>Operation ID cannot be null or empty</value>
+    <comment>Validation message when operation ID is missing</comment>
+  </data>
+  <data name="OperationNotFound" xml:space="preserve">
+    <value>Operation '{0}' not found</value>
+    <comment>Error message when operation cannot be found</comment>
+  </data>
+  
+  <!-- Document-related messages -->
+  <data name="DocumentIdRequired" xml:space="preserve">
+    <value>Document ID cannot be null or empty</value>
+    <comment>Validation message when document ID is missing</comment>
+  </data>
+  <data name="DocumentNotFound" xml:space="preserve">
+    <value>Document '{0}' not found</value>
+    <comment>Error message when document cannot be found</comment>
+  </data>
+  <data name="DocumentTypeRequired" xml:space="preserve">
+    <value>Document type must be specified</value>
+    <comment>Validation message when document type is missing</comment>
+  </data>
+  
+  <!-- Image-related messages -->
+  <data name="ImageIdRequired" xml:space="preserve">
+    <value>Image ID cannot be null or empty</value>
+    <comment>Validation message when image ID is missing</comment>
+  </data>
+  <data name="ImageDataRequired" xml:space="preserve">
+    <value>Image data cannot be null or empty</value>
+    <comment>Validation message when image data is missing</comment>
+  </data>
+  
+  <!-- Field validation messages -->
+  <data name="FieldNameRequired" xml:space="preserve">
+    <value>Field name cannot be null or empty</value>
+    <comment>Validation message when field name is missing</comment>
+  </data>
+  <data name="FieldValueInvalid" xml:space="preserve">
+    <value>Field '{0}' has invalid value: {1}</value>
+    <comment>Validation error for field value. {0} is field name, {1} is the invalid value</comment>
+  </data>
+  
+  <!-- Storage-related messages -->
+  <data name="StorageInitializationFailed" xml:space="preserve">
+    <value>Failed to initialize storage: {0}</value>
+    <comment>Error during storage initialization. {0} is the error details</comment>
+  </data>
+  <data name="StorageOperationFailed" xml:space="preserve">
+    <value>Storage operation '{0}' failed: {1}</value>
+    <comment>Generic storage operation failure. {0} is operation name, {1} is error</comment>
+  </data>
+  
+  <!-- OCR-related messages -->
+  <data name="OCRProcessingFailed" xml:space="preserve">
+    <value>OCR processing failed for document '{0}': {1}</value>
+    <comment>OCR processing error. {0} is document ID, {1} is error message</comment>
+  </data>
+  <data name="OCRServiceUnavailable" xml:space="preserve">
+    <value>OCR service is currently unavailable</value>
+    <comment>Message when OCR service cannot be reached</comment>
+  </data>
+  
+  <!-- Camera-related messages -->
+  <data name="CameraPermissionDenied" xml:space="preserve">
+    <value>Camera permission denied. Please enable camera access</value>
+    <comment>Message when camera permission is not granted</comment>
+  </data>
+  <data name="CameraInitializationFailed" xml:space="preserve">
+    <value>Failed to initialize camera: {0}</value>
+    <comment>Camera initialization error. {0} is error details</comment>
+  </data>
+  <data name="CameraNotAvailable" xml:space="preserve">
+    <value>No camera device available</value>
+    <comment>Message when no camera is detected</comment>
+  </data>
+</root>

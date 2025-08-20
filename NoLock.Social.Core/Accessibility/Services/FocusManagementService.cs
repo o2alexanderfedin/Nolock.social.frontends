@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Accessibility.Services;
 
@@ -26,20 +28,21 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
 
     public async Task StoreFocusAsync(ElementReference element)
     {
-        try
-        {
-            _storedFocusElement = element;
-            _logger.LogDebug("Focus element stored for restoration");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error storing focus element");
-        }
+        var result = _logger.ExecuteWithLogging(
+            () =>
+            {
+                _storedFocusElement = element;
+                _logger.LogDebug("Focus element stored for restoration");
+            },
+            "StoreFocus");
+        
+        // Await to maintain async behavior for interface compatibility
+        await Task.CompletedTask;
     }
 
     public async Task RestoreFocusAsync()
     {
-        try
+        await _logger.ExecuteWithLogging(async () =>
         {
             if (_storedFocusElement.HasValue)
             {
@@ -50,40 +53,29 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
             {
                 _logger.LogDebug("No stored focus element to restore");
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error restoring focus");
-        }
+        }, "RestoreFocus");
     }
 
     public async Task SetFocusAsync(ElementReference element)
     {
-        try
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             await module.InvokeVoidAsync("setFocus", element);
             _logger.LogDebug("Focus set to specified element");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error setting focus to element");
-        }
+        },
+        "SetFocusAsync");
     }
 
     public async Task TrapFocusAsync(ElementReference container)
     {
-        try
+        await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             await module.InvokeVoidAsync("trapFocus", container);
             _focusTrapped = true;
             _logger.LogDebug("Focus trapped within container");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trapping focus");
-        }
+        }, "TrapFocusAsync");
     }
 
     public async Task ReleaseFocusTrapAsync()
@@ -103,58 +95,44 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
 
     public async Task FocusFirstElementAsync(ElementReference container)
     {
-        try
+        await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             await module.InvokeVoidAsync("focusFirstElement", container);
             _logger.LogDebug("Focus moved to first element in container");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error focusing first element");
-        }
+        }, "FocusFirstElementAsync");
     }
 
     public async Task FocusLastElementAsync(ElementReference container)
     {
-        try
+        await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             await module.InvokeVoidAsync("focusLastElement", container);
             _logger.LogDebug("Focus moved to last element in container");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error focusing last element");
-        }
+        }, "FocusLastElementAsync");
     }
 
     public async Task<bool> IsFocusedAsync(ElementReference element)
     {
-        try
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             return await module.InvokeAsync<bool>("isFocused", element);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error checking focus state");
-            return false;
-        }
+        }, "IsFocusedAsync");
+        
+        return result.IsSuccess ? result.Value : false;
     }
 
     public async Task<ElementReference?> GetActiveElementAsync()
     {
-        try
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
             return await module.InvokeAsync<ElementReference?>("getActiveElement");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting active element");
-            return null;
-        }
+        }, "GetActiveElementAsync");
+        
+        return result.IsSuccess ? result.Value : null;
     }
 
     public async ValueTask DisposeAsync()

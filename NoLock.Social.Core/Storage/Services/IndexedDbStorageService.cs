@@ -4,6 +4,11 @@ using System.Threading.Tasks;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
+using NoLock.Social.Core.Common.Services;
+using NoLock.Social.Core.Common.Guards;
+using NoLock.Social.Core.Resources;
+using NoLock.Social.Core.Common.Results;
 using System.Text.Json;
 
 namespace NoLock.Social.Core.Storage.Services
@@ -65,8 +70,7 @@ namespace NoLock.Social.Core.Storage.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
 
             await EnsureInitializedAsync();
 
@@ -98,15 +102,30 @@ namespace NoLock.Social.Core.Storage.Services
 
             await EnsureInitializedAsync();
 
+            var result = await ExecuteSaveImageOperation(image);
+            
+            if (result.IsFailure)
+            {
+                // Transform JSException to OfflineStorageException to maintain compatibility
+                if (result.Exception is JSException jsEx)
+                    throw new OfflineStorageException("Failed to save image", "saveImage", jsEx);
+                
+                throw result.Exception;
+            }
+        }
+
+        private async Task<Result> ExecuteSaveImageOperation(CapturedImage image)
+        {
             try
             {
                 var imageJson = JsonSerializer.Serialize(image);
                 var imageId = image.Timestamp.ToString("yyyyMMddHHmmssfff");
                 await _jsRuntime.InvokeVoidAsync("indexedDBStorage.saveImage", imageId, imageJson);
+                return Result.Success();
             }
-            catch (JSException ex)
+            catch (Exception ex)
             {
-                throw new OfflineStorageException($"Failed to save image", "saveImage", ex);
+                return Result.Failure(ex);
             }
         }
 
@@ -114,8 +133,7 @@ namespace NoLock.Social.Core.Storage.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(imageId))
-                throw new ArgumentException("Image ID cannot be null or empty", nameof(imageId));
+            Guard.AgainstNullOrEmpty(imageId, ValidationMessages.ImageIdRequired);
 
             await EnsureInitializedAsync();
 
@@ -199,8 +217,7 @@ namespace NoLock.Social.Core.Storage.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(operationId))
-                throw new ArgumentException("Operation ID cannot be null or empty", nameof(operationId));
+            Guard.AgainstNullOrEmpty(operationId, ValidationMessages.OperationIdRequired);
 
             await EnsureInitializedAsync();
 

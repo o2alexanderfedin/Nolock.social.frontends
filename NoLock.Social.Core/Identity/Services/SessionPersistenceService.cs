@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Identity.Configuration;
 using NoLock.Social.Core.Identity.Interfaces;
@@ -46,7 +48,7 @@ namespace NoLock.Social.Core.Identity.Services
             if (encryptionKey == null || encryptionKey.Length == 0)
                 throw new ArgumentException("Encryption key cannot be null or empty", nameof(encryptionKey));
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Persisting session for user: {Username}", sessionData.Username);
 
@@ -92,18 +94,17 @@ namespace NoLock.Social.Core.Identity.Services
 
                 _logger.LogInformation("Session persisted successfully with {Minutes} minute expiry", expiryMinutes);
                 return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to persist session");
-                return false;
-            }
+            }, "Persist session");
+
+            return result.Match(
+                onSuccess: success => success,
+                onFailure: _ => false);
         }
 
         /// <inheritdoc />
         public async Task<EncryptedSessionData?> GetPersistedSessionAsync()
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Retrieving persisted session");
 
@@ -136,12 +137,11 @@ namespace NoLock.Social.Core.Identity.Services
 
                 _logger.LogDebug("Retrieved valid persisted session");
                 return encryptedSession;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to retrieve persisted session");
-                return null;
-            }
+            }, "Retrieve persisted session");
+
+            return result.Match(
+                onSuccess: session => session,
+                onFailure: _ => null);
         }
 
         /// <inheritdoc />
@@ -152,7 +152,7 @@ namespace NoLock.Social.Core.Identity.Services
             if (decryptionKey == null || decryptionKey.Length == 0)
                 throw new ArgumentException("Decryption key cannot be null or empty", nameof(decryptionKey));
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Decrypting session data");
 
@@ -177,19 +177,18 @@ namespace NoLock.Social.Core.Identity.Services
 
                 // For now, return null to indicate we need to re-login
                 _logger.LogInformation("Session decryption not fully implemented - user will need to re-login");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to decrypt session");
-                return null;
-            }
+                return await Task.FromResult<PersistedSessionData?>(null);
+            }, "Decrypt session");
+
+            return result.Match(
+                onSuccess: session => session,
+                onFailure: _ => null);
         }
 
         /// <inheritdoc />
         public async Task ClearPersistedSessionAsync()
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Clearing persisted session");
 
@@ -198,11 +197,10 @@ namespace NoLock.Social.Core.Identity.Services
                 await _jsRuntime.InvokeVoidAsync($"{storageType}.removeItem", MetadataKey);
 
                 _logger.LogInformation("Persisted session cleared");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clear persisted session");
-            }
+            }, "Clear persisted session");
+            
+            // Log error but don't throw - clearing should be best effort
+            result.OnFailure(ex => _logger.LogDebug("Failed to clear session but continuing"));
         }
 
         /// <inheritdoc />
@@ -222,7 +220,7 @@ namespace NoLock.Social.Core.Identity.Services
         /// <inheritdoc />
         public async Task ExtendSessionExpiryAsync(int additionalMinutes)
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Extending session by {Minutes} minutes", additionalMinutes);
 
@@ -244,11 +242,10 @@ namespace NoLock.Social.Core.Identity.Services
                 await StoreSessionDataAsync(session);
 
                 _logger.LogInformation("Session extended until {ExpiryTime}", session.Metadata.ExpiresAt);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to extend session expiry");
-            }
+            }, "Extend session expiry");
+            
+            // Log error but don't throw - extension failure should not be critical
+            result.OnFailure(ex => _logger.LogDebug("Failed to extend session but continuing"));
         }
 
         /// <inheritdoc />

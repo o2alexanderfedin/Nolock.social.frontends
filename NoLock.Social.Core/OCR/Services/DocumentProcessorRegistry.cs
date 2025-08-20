@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -239,39 +241,34 @@ namespace NoLock.Social.Core.OCR.Services
             // First, try using the document type detector if available
             if (_documentTypeDetector != null)
             {
-                try
+                var detectionResult = _logger.ExecuteWithLogging(
+                    () => _documentTypeDetector.DetectDocumentTypeAsync(rawOcrData).GetAwaiter().GetResult(),
+                    "Document type detection");
+                
+                if (detectionResult.IsSuccess && detectionResult.Value != null && 
+                    !string.IsNullOrEmpty(detectionResult.Value.DocumentType) &&
+                    detectionResult.Value.DocumentType != "Unknown" &&
+                    detectionResult.Value.DocumentType != "Ambiguous")
                 {
-                    var detectionResult = _documentTypeDetector.DetectDocumentTypeAsync(rawOcrData).GetAwaiter().GetResult();
+                    var detectedProcessor = GetProcessor(detectionResult.Value.DocumentType);
                     
-                    if (detectionResult != null && 
-                        !string.IsNullOrEmpty(detectionResult.DocumentType) &&
-                        detectionResult.DocumentType != "Unknown" &&
-                        detectionResult.DocumentType != "Ambiguous")
+                    if (detectedProcessor != null && detectedProcessor.CanProcess(rawOcrData))
                     {
-                        var detectedProcessor = GetProcessor(detectionResult.DocumentType);
+                        _logger.LogInformation(
+                            "Found processor {ProcessorType} using document type detector with confidence {Confidence:P}",
+                            detectedProcessor.DocumentType,
+                            detectionResult.Value.ConfidenceScore);
                         
-                        if (detectedProcessor != null && detectedProcessor.CanProcess(rawOcrData))
-                        {
-                            _logger.LogInformation(
-                                "Found processor {ProcessorType} using document type detector with confidence {Confidence:P}",
-                                detectedProcessor.DocumentType,
-                                detectionResult.ConfidenceScore);
-                            
-                            return detectedProcessor;
-                        }
-                    }
-                    
-                    // Log if detection was ambiguous or low confidence
-                    if (detectionResult.RequiresManualConfirmation)
-                    {
-                        _logger.LogWarning(
-                            "Document type detection requires manual confirmation: {Reason}",
-                            detectionResult.ManualConfirmationReason);
+                        return detectedProcessor;
                     }
                 }
-                catch (Exception ex)
+                
+                // Log if detection was ambiguous or low confidence
+                if (detectionResult.IsSuccess && detectionResult.Value != null && detectionResult.Value.RequiresManualConfirmation)
                 {
-                    _logger.LogError(ex, "Error during document type detection");
+                    _logger.LogWarning(
+                        "Document type detection requires manual confirmation: {Reason}",
+                        detectionResult.Value.ManualConfirmationReason);
                 }
             }
 

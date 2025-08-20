@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
 using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Collections.Generic;
@@ -39,7 +40,7 @@ namespace NoLock.Social.Core.Tests.Storage
         {
             // Setup initialization
             _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
 
             // Setup save session
             _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.saveSession", It.IsAny<object?[]?>()))
@@ -55,7 +56,7 @@ namespace NoLock.Social.Core.Tests.Storage
                         }
                     }
                 })
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
 
             // Setup load session
             _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadSession", It.IsAny<object?[]?>()))
@@ -86,7 +87,7 @@ namespace NoLock.Social.Core.Tests.Storage
                         }
                     }
                 })
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
 
             // Setup load image
             _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadImage", It.IsAny<object?[]?>()))
@@ -117,7 +118,7 @@ namespace NoLock.Social.Core.Tests.Storage
                         }
                     }
                 })
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
 
             // Setup get pending operations
             _jsRuntimeWrapperMock.Setup(x => x.InvokeAsync<string[]>("indexedDBStorage.getPendingOperations", It.IsAny<object?[]?>()))
@@ -146,11 +147,11 @@ namespace NoLock.Social.Core.Tests.Storage
             // Setup clear all data
             _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.clearAllData", It.IsAny<object?[]?>()))
                 .Callback(() => _mockIndexedDb.Clear())
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
 
             // Setup dispose
             _jsRuntimeWrapperMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.dispose", It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
         }
 
         #region Browser Refresh Scenarios
@@ -278,7 +279,7 @@ namespace NoLock.Social.Core.Tests.Storage
             // Need to override the default mock for this specific test
             var corruptedMock = new Mock<IJSRuntimeWrapper>();
             corruptedMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
             corruptedMock.Setup(x => x.InvokeAsync<string>("indexedDBStorage.loadSession", It.IsAny<object?[]?>()))
                 .ThrowsAsync(new JSException("IndexedDB corrupted"));
             
@@ -301,7 +302,7 @@ namespace NoLock.Social.Core.Tests.Storage
             // Create a special mock for this test
             var quotaMock = new Mock<IJSRuntimeWrapper>();
             quotaMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.initialize", It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Returns(Task.CompletedTask);
             
             int callCount = 0;
             quotaMock.Setup(x => x.InvokeVoidAsync("indexedDBStorage.saveImage", It.IsAny<object?[]?>()))
@@ -312,7 +313,7 @@ namespace NoLock.Social.Core.Tests.Storage
                     {
                         throw new JSException("QuotaExceededError");
                     }
-                    return ValueTask.CompletedTask;
+                    return Task.CompletedTask;
                 });
             
             using var testService = new IndexedDbStorageService(quotaMock.Object);

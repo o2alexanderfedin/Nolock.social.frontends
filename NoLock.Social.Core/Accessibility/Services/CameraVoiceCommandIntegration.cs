@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Camera.Interfaces;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Accessibility.Services
 {
@@ -44,7 +47,7 @@ namespace NoLock.Social.Core.Accessibility.Services
                 return;
             }
             
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogInformation("Initializing camera voice command integration");
                 
@@ -92,12 +95,10 @@ namespace NoLock.Social.Core.Accessibility.Services
                 
                 _isInitialized = true;
                 _logger.LogInformation("Camera voice command integration initialized with {CommandCount} commands", commands.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize camera voice command integration");
-                throw;
-            }
+                return commands.Count;
+            }, "Initialize camera voice command integration");
+            
+            result.ThrowIfFailure();
         }
         
         /// <summary>
@@ -111,16 +112,13 @@ namespace NoLock.Social.Core.Accessibility.Services
             if (!_isInitialized)
                 await InitializeAsync();
             
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogInformation("Starting voice command listening for camera operations");
                 await _voiceCommandService.StartListeningAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to start voice command listening");
-                throw;
-            }
+            }, "Start voice command listening");
+            
+            result.ThrowIfFailure();
         }
         
         /// <summary>
@@ -131,77 +129,58 @@ namespace NoLock.Social.Core.Accessibility.Services
             if (_isDisposed)
                 throw new ObjectDisposedException(nameof(CameraVoiceCommandIntegration));
                 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogInformation("Stopping voice command listening");
                 await _voiceCommandService.StopListeningAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to stop voice command listening");
-                throw;
-            }
+            }, "Stop voice command listening");
+            
+            result.ThrowIfFailure();
         }
         
         // Camera operation implementations
         private async Task CaptureImageAsync()
         {
-            try
-            {
-                _logger.LogInformation("Executing voice command: Capture image");
-                await _cameraService.CaptureImageAsync();
-                _logger.LogInformation("Image captured successfully via voice command");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to capture image via voice command");
-                throw;
-            }
+            var result = await (_logger ?? NullLogger<CameraVoiceCommandIntegration>.Instance).ExecuteWithLogging(
+                async () => await _cameraService.CaptureImageAsync(),
+                "Capture image via voice command");
+                
+            if (result.IsFailure)
+                throw result.Exception!;
         }
         
         private async Task StartCameraAsync()
         {
-            try
-            {
-                _logger.LogInformation("Executing voice command: Start camera");
-                await _cameraService.StartStreamAsync();
-                _logger.LogInformation("Camera started successfully via voice command");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to start camera via voice command");
-                throw;
-            }
+            var result = await (_logger ?? NullLogger<CameraVoiceCommandIntegration>.Instance).ExecuteWithLogging(
+                async () => await _cameraService.StartStreamAsync(),
+                "Start camera via voice command");
+                
+            if (result.IsFailure)
+                throw result.Exception!;
         }
         
         private async Task StopCameraAsync()
         {
-            try
-            {
-                _logger.LogInformation("Executing voice command: Stop camera");
-                await _cameraService.StopStreamAsync();
-                _logger.LogInformation("Camera stopped successfully via voice command");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to stop camera via voice command");
-                throw;
-            }
+            var result = await (_logger ?? NullLogger<CameraVoiceCommandIntegration>.Instance).ExecuteWithLogging(
+                async () => await _cameraService.StopStreamAsync(),
+                "Stop camera via voice command");
+                
+            if (result.IsFailure)
+                throw result.Exception!;
         }
         
         private async Task ToggleTorchAsync(bool enabled)
         {
-            try
-            {
-                _logger.LogInformation("Executing voice command: Toggle torch {State}", enabled ? "on" : "off");
-                await _cameraService.ToggleTorchAsync(enabled);
-                _logger.LogInformation("Torch toggled {State} successfully via voice command", enabled ? "on" : "off");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to toggle torch via voice command");
-                throw;
-            }
+            var result = await (_logger ?? NullLogger<CameraVoiceCommandIntegration>.Instance).ExecuteWithLogging(
+                async () =>
+                {
+                    await _cameraService.ToggleTorchAsync(enabled);
+                    return enabled;
+                },
+                $"Toggle torch {(enabled ? "on" : "off")} via voice command");
+            
+            if (result.IsFailure)
+                throw result.Exception!;
         }
         
         private async Task ZoomInAsync()

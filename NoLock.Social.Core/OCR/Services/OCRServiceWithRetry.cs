@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.Storage.Interfaces;
@@ -197,27 +198,30 @@ namespace NoLock.Social.Core.OCR.Services
                 return;
             }
 
-            try
-            {
-                var operation = new OfflineOperation
+            var result = await _logger.ExecuteWithLogging(
+                async () =>
                 {
-                    OperationType = "OCR",
-                    Payload = System.Text.Json.JsonSerializer.Serialize(request),
-                    Priority = 1,
-                    MaxRetries = 5
-                };
-                
-                await _offlineQueueService.QueueOperationAsync(operation);
-                
-                _logger.LogInformation(
-                    "OCR request queued for offline retry. ClientRequestId: {ClientRequestId}",
-                    request.ClientRequestId);
-                
-                OnQueuedForOffline?.Invoke(request);
-            }
-            catch (Exception ex)
+                    var operation = new OfflineOperation
+                    {
+                        OperationType = "OCR",
+                        Payload = System.Text.Json.JsonSerializer.Serialize(request),
+                        Priority = 1,
+                        MaxRetries = 5
+                    };
+                    
+                    await _offlineQueueService.QueueOperationAsync(operation);
+                    
+                    _logger.LogInformation(
+                        "OCR request queued for offline retry. ClientRequestId: {ClientRequestId}",
+                        request.ClientRequestId);
+                    
+                    OnQueuedForOffline?.Invoke(request);
+                },
+                $"Queue OCR request for offline retry. ClientRequestId: {request.ClientRequestId}");
+            
+            if (result.IsFailure)
             {
-                _logger.LogError(ex,
+                _logger.LogError(result.Exception,
                     "Failed to queue OCR request for offline retry. ClientRequestId: {ClientRequestId}",
                     request.ClientRequestId);
             }
@@ -296,7 +300,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             return new ExponentialBackoffRetryPolicy(
                 logger as ILogger<ExponentialBackoffRetryPolicy> ?? 
-                    throw new ArgumentException("Logger type mismatch"),
+                    throw new ArgumentException("Logger type mismatch", nameof(logger)),
                 classifier,
                 MaxSubmissionAttempts,
                 InitialDelayMs,
@@ -313,7 +317,7 @@ namespace NoLock.Social.Core.OCR.Services
         {
             return new ExponentialBackoffRetryPolicy(
                 logger as ILogger<ExponentialBackoffRetryPolicy> ?? 
-                    throw new ArgumentException("Logger type mismatch"),
+                    throw new ArgumentException("Logger type mismatch", nameof(logger)),
                 classifier,
                 MaxStatusCheckAttempts,
                 InitialDelayMs / 2, // Status checks use shorter initial delay

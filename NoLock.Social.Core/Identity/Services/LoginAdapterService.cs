@@ -4,6 +4,8 @@ using System.Reactive.Subjects;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
 using NoLock.Social.Core.Identity.Interfaces;
@@ -93,7 +95,7 @@ namespace NoLock.Social.Core.Identity.Services
 
             _logger.LogInformation("Starting login process for user: {Username}", username);
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Step 1: Derive keys from passphrase and username
                 _logger.LogDebug("Deriving identity keys...");
@@ -166,18 +168,15 @@ namespace NoLock.Social.Core.Identity.Services
                     Session = _sessionState.CurrentSession,
                     UserInfo = userInfo
                 };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Login failed for user {Username}", username);
-                
-                // Don't expose internal error details to the user
-                return new LoginResult
+            }, $"Login for user {username}");
+
+            return result.Match(
+                onSuccess: loginResult => loginResult,
+                onFailure: ex => new LoginResult
                 {
                     Success = false,
                     ErrorMessage = "An error occurred during login. Please try again."
-                };
-            }
+                });
         }
 
         /// <inheritdoc />
@@ -185,7 +184,7 @@ namespace NoLock.Social.Core.Identity.Services
         {
             _logger.LogInformation("Logging out user: {Username}", CurrentLoginState.Username);
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // End the session, which clears all sensitive data
                 await _sessionState.EndSessionAsync();
@@ -206,12 +205,9 @@ namespace NoLock.Social.Core.Identity.Services
                 UpdateState(newState, LoginStateChangeReason.Logout, previousState);
 
                 _logger.LogInformation("User logged out successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during logout");
-                throw;
-            }
+            }, "Logout");
+
+            result.ThrowIfFailure();
         }
 
         /// <inheritdoc />
@@ -219,7 +215,7 @@ namespace NoLock.Social.Core.Identity.Services
         {
             _logger.LogInformation("Locking session for user: {Username}", CurrentLoginState.Username);
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Lock the session (keeps keys in memory but requires unlock)
                 await _sessionState.LockSessionAsync();
@@ -235,12 +231,9 @@ namespace NoLock.Social.Core.Identity.Services
                 UpdateState(newState, LoginStateChangeReason.Lock, previousState);
 
                 _logger.LogInformation("Session locked successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during session lock");
-                throw;
-            }
+            }, "Session lock");
+
+            result.ThrowIfFailure();
         }
 
         /// <inheritdoc />
@@ -251,16 +244,15 @@ namespace NoLock.Social.Core.Identity.Services
                 return false;
             }
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var userInfo = await _userTracking.CheckUserExistsAsync(CurrentLoginState.PublicKeyBase64);
                 return userInfo.Exists;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking if user is returning");
-                return false;
-            }
+            }, "Check returning user");
+
+            return result.Match(
+                onSuccess: exists => exists,
+                onFailure: _ => false);
         }
 
         /// <summary>
@@ -357,15 +349,14 @@ namespace NoLock.Social.Core.Identity.Services
                 Timestamp = DateTime.UtcNow
             };
 
-            try
+            var result = _logger.ExecuteWithLogging(() =>
             {
                 _stateChanges.OnNext(change);
                 _logger.LogDebug("Login state change emitted: {Reason}", reason);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error emitting state change");
-            }
+            }, "Emit state change");
+            
+            // Log error but don't throw - state emission is not critical
+            result.OnFailure(ex => _logger.LogDebug("State change emission failed but continuing"));
         }
 
         /// <summary>
@@ -373,7 +364,7 @@ namespace NoLock.Social.Core.Identity.Services
         /// </summary>
         private async Task TryRestorePersistedSessionAsync()
         {
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogInformation("Checking for persisted session to restore");
 
@@ -411,11 +402,10 @@ namespace NoLock.Social.Core.Identity.Services
                 {
                     _logger.LogDebug("Session state service does not support persistence");
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to restore persisted session");
-            }
+            }, "Restore persisted session");
+            
+            // Log error but don't throw - restoration failure should not prevent service initialization
+            result.OnFailure(ex => _logger.LogDebug("Session restoration failed but continuing"));
         }
 
         public void Dispose()

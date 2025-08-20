@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -134,7 +136,7 @@ namespace NoLock.Social.Core.OCR.Services
                 throw new ArgumentNullException(nameof(trackingId));
             }
 
-            try
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogInformation("Checking OCR status for TrackingId: {TrackingId}", trackingId);
 
@@ -208,28 +210,29 @@ namespace NoLock.Social.Core.OCR.Services
                     trackingId, status, progressPercentage, statusMessage);
 
                 return response;
-            }
-            catch (HttpRequestException ex)
+            }, 
+            $"OCR status check for TrackingId: {trackingId}");
+
+            // Handle specific exception types by examining the Result.Exception
+            if (!result.IsSuccess)
             {
-                _logger.LogError(ex, 
-                    "HTTP request failed during status check for TrackingId: {TrackingId}",
-                    trackingId);
-                throw new OCRServiceException("Failed to communicate with OCR API", ex);
+                var ex = result.Exception;
+                
+                if (ex is HttpRequestException)
+                {
+                    throw new OCRServiceException("Failed to communicate with OCR API", ex);
+                }
+                else if (ex is TaskCanceledException)
+                {
+                    throw new OCRServiceException("Status check was cancelled", ex);
+                }
+                else
+                {
+                    throw new OCRServiceException("An unexpected error occurred during status check", ex);
+                }
             }
-            catch (TaskCanceledException ex)
-            {
-                _logger.LogWarning(ex, 
-                    "Status check cancelled for TrackingId: {TrackingId}",
-                    trackingId);
-                throw new OCRServiceException("Status check was cancelled", ex);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, 
-                    "Unexpected error during status check for TrackingId: {TrackingId}",
-                    trackingId);
-                throw new OCRServiceException("An unexpected error occurred during status check", ex);
-            }
+
+            return result.Value;
         }
 
         /// <summary>

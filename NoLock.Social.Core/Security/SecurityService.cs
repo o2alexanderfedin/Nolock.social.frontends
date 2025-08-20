@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.Security;
 
@@ -49,7 +51,7 @@ public class SecurityService : ISecurityService
     
     public async Task ApplySecurityHeadersAsync()
     {
-        try
+        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Applying security headers");
             
@@ -72,17 +74,18 @@ public class SecurityService : ISecurityService
             ");
             
             _logger.LogInformation("Security headers applied successfully");
-        }
-        catch (Exception ex)
+        },
+        "ApplySecurityHeadersAsync");
+        
+        if (!result.IsSuccess)
         {
-            _logger.LogError(ex, "Failed to apply security headers");
-            throw;
+            throw new InvalidOperationException("Failed to apply security headers", result.Exception);
         }
     }
     
     public async Task ConfigureSecureCookiesAsync()
     {
-        try
+        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Configuring secure cookie settings");
             
@@ -125,21 +128,22 @@ public class SecurityService : ISecurityService
             ");
             
             _logger.LogInformation("Secure cookie settings configured successfully");
-        }
-        catch (Exception ex)
+        },
+        "ConfigureSecureCookiesAsync");
+        
+        if (!result.IsSuccess)
         {
-            _logger.LogError(ex, "Failed to configure secure cookies");
-            throw;
+            throw new InvalidOperationException("Failed to configure secure cookies", result.Exception);
         }
     }
     
     public async Task<bool> ValidateCspAsync()
     {
-        try
+        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Validating Content Security Policy");
             
-            var result = await _jsRuntime.InvokeAsync<bool>("eval", @"
+            var validationResult = await _jsRuntime.InvokeAsync<bool>("eval", @"
                 (function() {
                     // Check if CSP is active
                     const cspMeta = document.querySelector('meta[http-equiv=""Content-Security-Policy""]');
@@ -169,13 +173,11 @@ public class SecurityService : ISecurityService
                 })();
             ");
             
-            _logger.LogInformation("CSP validation result: {Result}", result);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to validate CSP");
-            return false;
-        }
+            _logger.LogInformation("CSP validation result: {Result}", validationResult);
+            return validationResult;
+        },
+        "ValidateCspAsync");
+        
+        return result.IsSuccess ? result.Value : false;
     }
 }

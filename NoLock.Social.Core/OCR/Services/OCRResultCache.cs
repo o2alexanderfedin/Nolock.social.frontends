@@ -10,6 +10,8 @@ using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.Storage;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -135,62 +137,66 @@ namespace NoLock.Social.Core.OCR.Services
                 return null;
             }
 
-            try
-            {
-                // Retrieve from CAS
-                var bytes = await _storage.GetAsync(cacheKey);
-                if (bytes == null)
+            var result = await _logger.ExecuteWithLogging(
+                async () =>
                 {
-                    await IncrementMissCountAsync();
-                    _logger.LogDebug("Cache miss for key {CacheKey}", cacheKey);
-                    return null;
-                }
+                    // Retrieve from CAS
+                    var bytes = await _storage.GetAsync(cacheKey);
+                    if (bytes == null)
+                    {
+                        await IncrementMissCountAsync();
+                        _logger.LogDebug("Cache miss for key {CacheKey}", cacheKey);
+                        return null;
+                    }
 
-                // Deserialize cached result
-                var json = Encoding.UTF8.GetString(bytes);
-                var cachedResult = JsonSerializer.Deserialize<CachedOCRResult>(json);
-                
-                if (cachedResult == null)
-                {
-                    await IncrementMissCountAsync();
-                    _logger.LogWarning("Failed to deserialize cached result for key {CacheKey}", cacheKey);
-                    return null;
-                }
-
-                // Check expiration
-                if (cachedResult.IsExpired)
-                {
-                    await IncrementMissCountAsync();
-                    _logger.LogDebug("Cached result for key {CacheKey} has expired", cacheKey);
+                    // Deserialize cached result
+                    var json = Encoding.UTF8.GetString(bytes);
+                    var cachedResult = JsonSerializer.Deserialize<CachedOCRResult>(json);
                     
-                    // Remove expired entry
-                    await _storage.DeleteAsync(cacheKey);
-                    await IncrementExpiredCountAsync();
+                    if (cachedResult == null)
+                    {
+                        await IncrementMissCountAsync();
+                        _logger.LogWarning("Failed to deserialize cached result for key {CacheKey}", cacheKey);
+                        return null;
+                    }
+
+                    // Check expiration
+                    if (cachedResult.IsExpired)
+                    {
+                        await IncrementMissCountAsync();
+                        _logger.LogDebug("Cached result for key {CacheKey} has expired", cacheKey);
+                        
+                        // Remove expired entry
+                        await _storage.DeleteAsync(cacheKey);
+                        await IncrementExpiredCountAsync();
+                        
+                        return null;
+                    }
+
+                    // Update access tracking
+                    cachedResult.RecordAccess();
                     
-                    return null;
-                }
+                    // Re-serialize with updated access info (optional, could be skipped for performance)
+                    json = JsonSerializer.Serialize(cachedResult);
+                    bytes = Encoding.UTF8.GetBytes(json);
+                    await _storage.StoreAsync(bytes);
 
-                // Update access tracking
-                cachedResult.RecordAccess();
-                
-                // Re-serialize with updated access info (optional, could be skipped for performance)
-                json = JsonSerializer.Serialize(cachedResult);
-                bytes = Encoding.UTF8.GetBytes(json);
-                await _storage.StoreAsync(bytes);
+                    await IncrementHitCountAsync();
+                    _logger.LogDebug(
+                        "Cache hit for key {CacheKey}, accessed {AccessCount} times",
+                        cacheKey, cachedResult.AccessCount);
 
-                await IncrementHitCountAsync();
-                _logger.LogDebug(
-                    "Cache hit for key {CacheKey}, accessed {AccessCount} times",
-                    cacheKey, cachedResult.AccessCount);
+                    return cachedResult.Result;
+                },
+                $"retrieving cached result for key {cacheKey}");
 
-                return cachedResult.Result;
-            }
-            catch (Exception ex)
+            if (result.IsFailure)
             {
-                _logger.LogError(ex, "Failed to retrieve cached result for key {CacheKey}", cacheKey);
                 await IncrementMissCountAsync();
                 return null;
             }
+
+            return result.Value;
         }
 
         /// <inheritdoc />

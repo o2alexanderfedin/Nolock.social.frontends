@@ -3,9 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.JSInterop;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Common.Guards;
+using NoLock.Social.Core.Resources;
+using NoLock.Social.Core.Common.Results;
+using NoLock.Social.Core.Common.Extensions;
 using System.Text.Json;
 
 namespace NoLock.Social.Core.Camera.Services
@@ -16,6 +22,7 @@ namespace NoLock.Social.Core.Camera.Services
         private readonly IOfflineStorageService _offlineStorage;
         private readonly IOfflineQueueService _offlineQueue;
         private readonly IConnectivityService _connectivity;
+        private readonly ILogger<CameraService> _logger;
         private CameraPermissionState _currentPermissionState = CameraPermissionState.Prompt;
         private CameraStream _currentStream = null;
         private CameraControlSettings _controlSettings = new CameraControlSettings();
@@ -26,51 +33,64 @@ namespace NoLock.Social.Core.Camera.Services
             IJSRuntime jsRuntime,
             IOfflineStorageService offlineStorage,
             IOfflineQueueService offlineQueue,
-            IConnectivityService connectivity)
+            IConnectivityService connectivity,
+            ILogger<CameraService> logger = null)
         {
-            _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
-            _offlineStorage = offlineStorage ?? throw new ArgumentNullException(nameof(offlineStorage));
-            _offlineQueue = offlineQueue ?? throw new ArgumentNullException(nameof(offlineQueue));
-            _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
+            _jsRuntime = Guard.AgainstNull(jsRuntime);
+            _offlineStorage = Guard.AgainstNull(offlineStorage);
+            _offlineQueue = Guard.AgainstNull(offlineQueue);
+            _connectivity = Guard.AgainstNull(connectivity);
+            _logger = logger;
         }
 
         public async Task InitializeAsync()
         {
             ThrowIfDisposed();
             
-            try
-            {
-                // Load all sessions from IndexedDB
-                var sessions = await _offlineStorage.GetAllSessionsAsync();
-                
-                foreach (var session in sessions)
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(
+                async () =>
                 {
-                    if (session != null && !string.IsNullOrEmpty(session.SessionId))
+                    try
                     {
-                        _activeSessions[session.SessionId] = session;
+                        // Load all sessions from IndexedDB
+                        var sessions = await _offlineStorage.GetAllSessionsAsync();
+                        
+                        foreach (var session in sessions)
+                        {
+                            if (session != null && !string.IsNullOrEmpty(session.SessionId))
+                            {
+                                _activeSessions[session.SessionId] = session;
+                            }
+                        }
+                        
+                        // Trigger processing of pending operations
+                        await _offlineQueue.ProcessQueueAsync();
                     }
-                }
-                
-                // Trigger processing of pending operations
-                await _offlineQueue.ProcessQueueAsync();
-            }
-            catch (Exception ex)
-            {
-                // Log the error but don't throw - initialization should be resilient
-                // The application should continue to work even if some data can't be restored
-                Console.WriteLine($"Warning: Failed to restore some session data during initialization: {ex.Message}");
-                
-                // Clear any corrupted data that might have been partially loaded
-                var corruptedSessionIds = _activeSessions
-                    .Where(kvp => kvp.Value == null || string.IsNullOrEmpty(kvp.Value.SessionId))
-                    .Select(kvp => kvp.Key)
-                    .ToList();
-                    
-                foreach (var corruptedId in corruptedSessionIds)
-                {
-                    _activeSessions.Remove(corruptedId);
-                }
-            }
+                    catch (Exception ex)
+                    {
+                        // Clear any corrupted data that might have been partially loaded
+                        var corruptedSessionIds = _activeSessions
+                            .Where(kvp => kvp.Value == null || string.IsNullOrEmpty(kvp.Value.SessionId))
+                            .Select(kvp => kvp.Key)
+                            .ToList();
+                            
+                        foreach (var corruptedId in corruptedSessionIds)
+                        {
+                            _activeSessions.Remove(corruptedId);
+                        }
+                        
+                        // Log the error but don't rethrow - initialization should be resilient
+                        _logger.LogWarning(ex, "Error during camera service initialization, continuing with degraded state");
+                        
+                        // Don't rethrow - maintain graceful degradation
+                        // The application should continue to work even if some data can't be restored
+                    }
+                },
+                "InitializeAsync"
+            );
+            
+            // Result is always successful due to graceful error handling, but we maintain the pattern
+            // for consistency and potential future use of the result information
         }
 
         public async Task<CameraPermissionState> GetPermissionStateAsync()
@@ -152,22 +172,18 @@ namespace NoLock.Social.Core.Camera.Services
                 return;
             }
 
-            try
-            {
-                // Call JavaScript to stop the camera stream
-                await _jsRuntime.InvokeVoidAsync("camera.stopStream", _currentStream.StreamId);
-                
-                // Clear the current stream reference
-                _currentStream = null;
-            }
-            catch (JSException ex)
-            {
-                // Log the error but don't throw - stream might already be stopped
-                Console.WriteLine($"Error stopping camera stream: {ex.Message}");
-                
-                // Clear the stream reference anyway
-                _currentStream = null;
-            }
+            // Use ExecuteWithLogging for error handling
+            var result = await (_logger ?? NullLogger<CameraService>.Instance)
+                .ExecuteWithLogging(async () =>
+                {
+                    // Call JavaScript to stop the camera stream
+                    await _jsRuntime.InvokeVoidAsync("camera.stopStream", _currentStream.StreamId);
+                },
+                "StopStreamAsync");
+            
+            // Clear the current stream reference regardless of result
+            // Stream might already be stopped, so we clear it anyway
+            _currentStream = null;
         }
 
         public async Task<CapturedImage> CaptureImageAsync()
@@ -200,15 +216,14 @@ namespace NoLock.Social.Core.Camera.Services
             };
             
             // Save image to offline storage (new functionality)
-            try
-            {
-                await _offlineStorage.SaveImageAsync(capturedImage);
-            }
-            catch (OfflineStorageException ex)
-            {
-                // Log the error but continue - image is still captured
-                Console.WriteLine($"Warning: Failed to save captured image to offline storage: {ex.Message}");
-            }
+            var saveResult = await (_logger ?? NullLogger<CameraService>.Instance)
+                .ExecuteWithLogging(async () =>
+                {
+                    await _offlineStorage.SaveImageAsync(capturedImage);
+                },
+                "Failed to save captured image to offline storage");
+
+            // Continue processing regardless of storage result - image capture is non-critical for storage
             
             return capturedImage;
         }
@@ -224,7 +239,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async Task<bool> ToggleTorchAsync(bool enabled)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Check if torch is supported before attempting to toggle
                 if (!await IsTorchSupportedAsync())
@@ -233,26 +248,25 @@ namespace NoLock.Social.Core.Camera.Services
                 }
 
                 // Call JavaScript to toggle torch/flash
-                var result = await _jsRuntime.InvokeAsync<bool>("camera.setTorch", enabled);
+                var jsResult = await _jsRuntime.InvokeAsync<bool>("camera.setTorch", enabled);
                 
                 // Update settings state if successful
-                if (result)
+                if (jsResult)
                 {
                     _controlSettings.IsTorchEnabled = enabled;
                 }
                 
-                return result;
-            }
-            catch (JSException)
-            {
-                // Torch control failed, return false
-                return false;
-            }
+                return jsResult;
+            },
+            "ToggleTorchAsync");
+            
+            // Return false on failure, or the actual result on success
+            return result.IsSuccess ? result.Value : false;
         }
 
         public async Task<bool> IsTorchSupportedAsync()
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to check torch support
                 var supported = await _jsRuntime.InvokeAsync<bool>("camera.getTorchSupport");
@@ -261,28 +275,32 @@ namespace NoLock.Social.Core.Camera.Services
                 _controlSettings.HasTorchSupport = supported;
                 
                 return supported;
-            }
-            catch (JSException)
+            },
+            "IsTorchSupportedAsync");
+            
+            // If JavaScript call fails, assume no torch support
+            if (!result.IsSuccess)
             {
-                // If JavaScript call fails, assume no torch support
                 _controlSettings.HasTorchSupport = false;
                 return false;
             }
+            
+            return result.Value;
         }
 
         // Placeholder implementations for remaining interface methods
         public async Task<bool> SwitchCameraAsync(string deviceId)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Stop current stream before switching
                 await StopStreamAsync();
                 
                 // Call JavaScript to switch to specified camera device
-                var result = await _jsRuntime.InvokeAsync<bool>("camera.switchCamera", deviceId);
+                var switchResult = await _jsRuntime.InvokeAsync<bool>("camera.switchCamera", deviceId);
                 
                 // If switch was successful, update control settings with new camera ID
-                if (result)
+                if (switchResult)
                 {
                     _controlSettings.CurrentCameraId = deviceId;
                     
@@ -290,18 +308,17 @@ namespace NoLock.Social.Core.Camera.Services
                     await StartStreamAsync();
                 }
                 
-                return result;
-            }
-            catch (JSException)
-            {
-                // Camera switch failed, return false
-                return false;
-            }
+                return switchResult;
+            },
+            "SwitchCameraAsync");
+            
+            // Camera switch failed, return false
+            return result.IsSuccess ? result.Value : false;
         }
 
         public async Task<bool> SetZoomAsync(double zoomLevel)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Validate zoom level range
                 if (zoomLevel < 1.0)
@@ -317,26 +334,25 @@ namespace NoLock.Social.Core.Camera.Services
                 }
 
                 // Call JavaScript to set zoom level
-                var result = await _jsRuntime.InvokeAsync<bool>("camera.setZoom", zoomLevel);
+                var setResult = await _jsRuntime.InvokeAsync<bool>("camera.setZoom", zoomLevel);
                 
                 // Update settings state if successful
-                if (result)
+                if (setResult)
                 {
                     _controlSettings.ZoomLevel = zoomLevel;
                 }
                 
-                return result;
-            }
-            catch (JSException)
-            {
-                // Zoom control failed, return false
-                return false;
-            }
+                return setResult;
+            },
+            "SetZoomAsync");
+            
+            // Zoom control failed, return false
+            return result.IsSuccess ? result.Value : false;
         }
 
         public async Task<double> GetZoomAsync()
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to get current zoom level
                 var zoomLevel = await _jsRuntime.InvokeAsync<double>("camera.getZoom");
@@ -345,33 +361,31 @@ namespace NoLock.Social.Core.Camera.Services
                 _controlSettings.ZoomLevel = zoomLevel;
                 
                 return zoomLevel;
-            }
-            catch (JSException)
-            {
-                // If getting zoom fails, return default zoom of 1.0
-                return 1.0;
-            }
+            },
+            "GetZoomAsync");
+            
+            // If getting zoom fails, return default zoom of 1.0
+            return result.IsSuccess ? result.Value : 1.0;
         }
 
         public async Task<string[]> GetAvailableCamerasAsync()
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to enumerate available camera devices
                 var devices = await _jsRuntime.InvokeAsync<string[]>("camera.getAvailableCameras");
                 
                 return devices ?? new string[0];
-            }
-            catch (JSException)
-            {
-                // If enumeration fails, return empty array
-                return new string[0];
-            }
+            },
+            "GetAvailableCamerasAsync");
+            
+            // If enumeration fails, return empty array
+            return result.IsSuccess ? result.Value : new string[0];
         }
 
         public async Task<bool> IsZoomSupportedAsync()
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to check zoom support
                 var supported = await _jsRuntime.InvokeAsync<bool>("camera.getZoomSupport");
@@ -380,18 +394,22 @@ namespace NoLock.Social.Core.Camera.Services
                 _controlSettings.HasZoomSupport = supported;
                 
                 return supported;
-            }
-            catch (JSException)
+            },
+            "IsZoomSupportedAsync");
+            
+            // If JavaScript call fails, assume no zoom support
+            if (!result.IsSuccess)
             {
-                // If JavaScript call fails, assume no zoom support
                 _controlSettings.HasZoomSupport = false;
                 return false;
             }
+            
+            return result.Value;
         }
 
         public async Task<double> GetMaxZoomAsync()
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to get maximum zoom level
                 var maxZoom = await _jsRuntime.InvokeAsync<double>("camera.getMaxZoom");
@@ -400,24 +418,23 @@ namespace NoLock.Social.Core.Camera.Services
                 _controlSettings.MaxZoomLevel = maxZoom;
                 
                 return maxZoom;
-            }
-            catch (JSException)
-            {
-                // If getting max zoom fails, return default max of 3.0
-                return 3.0;
-            }
+            },
+            "GetMaxZoomAsync");
+            
+            // If getting max zoom fails, return default max of 3.0
+            return result.IsSuccess ? result.Value : 3.0;
         }
 
         public async Task<ImageQualityResult> ValidateImageQualityAsync(CapturedImage capturedImage)
         {
-            try
+            // Validate input
+            if (capturedImage == null || string.IsNullOrEmpty(capturedImage?.ImageData))
             {
-                // Validate input
-                if (capturedImage == null || string.IsNullOrEmpty(capturedImage.ImageData))
-                {
-                    throw new ArgumentException("Invalid captured image data");
-                }
+                throw new ArgumentException("Invalid captured image data", nameof(capturedImage));
+            }
 
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            {
                 // Perform individual quality analyses
                 var blurResult = await DetectBlurAsync(capturedImage.ImageData);
                 var lightingResult = await AssessLightingAsync(capturedImage.ImageData);
@@ -429,7 +446,7 @@ namespace NoLock.Social.Core.Camera.Services
                                         edgeResult.EdgeScore * 0.3) * 100);
 
                 // Create result with combined analysis
-                var result = new ImageQualityResult
+                var qualityResult = new ImageQualityResult
                 {
                     OverallScore = overallScore,
                     BlurScore = blurResult.BlurScore,
@@ -444,95 +461,103 @@ namespace NoLock.Social.Core.Camera.Services
 
                 if (hasBlurIssue)
                 {
-                    result.Issues.Add("Image appears blurry");
+                    qualityResult.Issues.Add("Image appears blurry");
                     
                     // Specific blur suggestions based on score severity
                     if (blurResult.BlurScore < 0.3)
                     {
-                        result.Suggestions.Add("Hold device much steadier - significant motion detected");
+                        qualityResult.Suggestions.Add("Hold device much steadier - significant motion detected");
                     }
                     else if (blurResult.BlurScore < 0.4)
                     {
-                        result.Suggestions.Add("Move closer to document for better focus");
+                        qualityResult.Suggestions.Add("Move closer to document for better focus");
                     }
                     else
                     {
-                        result.Suggestions.Add("Hold camera steadier and tap to focus");
+                        qualityResult.Suggestions.Add("Hold camera steadier and tap to focus");
                     }
                 }
 
                 if (hasLightingIssue)
                 {
-                    result.Issues.Add("Poor lighting conditions");
+                    qualityResult.Issues.Add("Poor lighting conditions");
                     
                     // Specific lighting suggestions based on brightness and score
                     if (lightingResult.Brightness < 100)
                     {
-                        result.Suggestions.Add("Move to brighter location or enable torch/flash");
+                        qualityResult.Suggestions.Add("Move to brighter location or enable torch/flash");
                     }
                     else if (lightingResult.Contrast < 0.4)
                     {
-                        result.Suggestions.Add("Avoid shadows and ensure even lighting");
+                        qualityResult.Suggestions.Add("Avoid shadows and ensure even lighting");
                     }
                     else
                     {
-                        result.Suggestions.Add("Improve lighting conditions for better clarity");
+                        qualityResult.Suggestions.Add("Improve lighting conditions for better clarity");
                     }
                 }
 
                 if (hasEdgeIssue)
                 {
-                    result.Issues.Add("Document edges not clearly detected");
+                    qualityResult.Issues.Add("Document edges not clearly detected");
                     
                     // Specific edge detection suggestions based on score and confidence
                     if (edgeResult.Confidence < 0.4)
                     {
-                        result.Suggestions.Add("Ensure document is flat and well-positioned");
+                        qualityResult.Suggestions.Add("Ensure document is flat and well-positioned");
                     }
                     else if (edgeResult.EdgeScore < 0.5)
                     {
-                        result.Suggestions.Add("Position document fully within frame boundaries");
+                        qualityResult.Suggestions.Add("Position document fully within frame boundaries");
                     }
                     else
                     {
-                        result.Suggestions.Add("Move camera to capture complete document outline");
+                        qualityResult.Suggestions.Add("Move camera to capture complete document outline");
                     }
                 }
 
                 // Add combination suggestions for multiple issues
                 if (hasBlurIssue && hasLightingIssue)
                 {
-                    result.Suggestions.Add("Use tripod or stable surface in well-lit area");
+                    qualityResult.Suggestions.Add("Use tripod or stable surface in well-lit area");
                 }
                 
                 if (hasLightingIssue && hasEdgeIssue)
                 {
-                    result.Suggestions.Add("Move to better lighting and reposition document");
+                    qualityResult.Suggestions.Add("Move to better lighting and reposition document");
                 }
                 
                 if (hasBlurIssue && hasEdgeIssue)
                 {
-                    result.Suggestions.Add("Stabilize camera and ensure document fits completely in frame");
+                    qualityResult.Suggestions.Add("Stabilize camera and ensure document fits completely in frame");
                 }
 
-                return result;
-            }
-            catch (JSException ex)
+                return qualityResult;
+            },
+            "ValidateImageQualityAsync");
+
+            if (result.IsFailure)
             {
                 // Handle JavaScript interop errors
-                throw new InvalidOperationException($"Image quality analysis failed: {ex.Message}", ex);
+                if (result.Exception is JSException jsEx)
+                {
+                    throw new InvalidOperationException($"Image quality analysis failed: {jsEx.Message}", jsEx);
+                }
+                throw result.Exception;
             }
+
+            return result.Value;
         }
 
         public async Task<BlurDetectionResult> DetectBlurAsync(string imageData)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript blur detection function
-                var result = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectBlur", imageData);
+                var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectBlur", imageData);
                 
-                var blurScore = result?.blurScore ?? 0.0;
-                var threshold = result?.threshold ?? 0.5;
+                var blurScore = jsResult?.blurScore ?? 0.0;
+                var threshold = jsResult?.threshold ?? 0.5;
                 
                 return new BlurDetectionResult
                 {
@@ -540,10 +565,12 @@ namespace NoLock.Social.Core.Camera.Services
                     BlurThreshold = threshold,
                     IsBlurry = blurScore < threshold
                 };
-            }
-            catch (JSException)
+            },
+            "DetectBlurAsync");
+
+            // Return default values if JavaScript call fails
+            if (result.IsFailure)
             {
-                // Return default values if JavaScript call fails
                 return new BlurDetectionResult
                 {
                     BlurScore = 0.5,
@@ -551,18 +578,20 @@ namespace NoLock.Social.Core.Camera.Services
                     IsBlurry = false
                 };
             }
+
+            return result.Value;
         }
 
         public async Task<LightingQualityResult> AssessLightingAsync(string imageData)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript lighting assessment function
-                var result = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.assessLighting", imageData);
+                var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.assessLighting", imageData);
                 
-                var lightingScore = result?.lightingScore ?? 0.0;
-                var brightness = result?.brightness ?? 128.0;
-                var contrast = result?.contrast ?? 0.5;
+                var lightingScore = jsResult?.lightingScore ?? 0.0;
+                var brightness = jsResult?.brightness ?? 128.0;
+                var contrast = jsResult?.contrast ?? 0.5;
                 
                 return new LightingQualityResult
                 {
@@ -571,10 +600,12 @@ namespace NoLock.Social.Core.Camera.Services
                     Contrast = contrast,
                     IsAdequate = lightingScore >= 0.6
                 };
-            }
-            catch (JSException)
+            },
+            "AssessLightingAsync");
+
+            // Return default values if JavaScript call fails
+            if (result.IsFailure)
             {
-                // Return default values if JavaScript call fails
                 return new LightingQualityResult
                 {
                     LightingScore = 0.6,
@@ -583,18 +614,20 @@ namespace NoLock.Social.Core.Camera.Services
                     IsAdequate = true
                 };
             }
+
+            return result.Value;
         }
 
         public async Task<EdgeDetectionResult> DetectDocumentEdgesAsync(string imageData)
         {
-            try
+            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 // Call JavaScript edge detection function
-                var result = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectEdges", imageData);
+                var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectEdges", imageData);
                 
-                var edgeScore = result?.edgeScore ?? 0.0;
-                var edgeCount = result?.edgeCount ?? 0;
-                var confidence = result?.confidence ?? 0.0;
+                var edgeScore = jsResult?.edgeScore ?? 0.0;
+                var edgeCount = jsResult?.edgeCount ?? 0;
+                var confidence = jsResult?.confidence ?? 0.0;
                 
                 return new EdgeDetectionResult
                 {
@@ -603,10 +636,12 @@ namespace NoLock.Social.Core.Camera.Services
                     Confidence = confidence,
                     HasClearEdges = edgeScore >= 0.7 && confidence >= 0.6
                 };
-            }
-            catch (JSException)
+            },
+            "DetectDocumentEdgesAsync");
+
+            // Return default values if JavaScript call fails
+            if (result.IsFailure)
             {
-                // Return default values if JavaScript call fails
                 return new EdgeDetectionResult
                 {
                     EdgeScore = 0.5,
@@ -615,6 +650,8 @@ namespace NoLock.Social.Core.Camera.Services
                     HasClearEdges = false
                 };
             }
+
+            return result.Value;
         }
 
         // Multi-Page Document Session Management
@@ -633,32 +670,25 @@ namespace NoLock.Social.Core.Camera.Services
             _activeSessions[sessionId] = session;
             
             // Save to offline storage (new functionality)
-            try
+            var saveResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 await _offlineStorage.SaveSessionAsync(session);
-            }
-            catch (OfflineStorageException ex)
-            {
-                // Log the error but continue - session is still in memory
-                Console.WriteLine($"Warning: Failed to save session to offline storage: {ex.Message}");
-            }
+            },
+            "SaveSessionToOfflineStorage");
             
             // Queue operation if offline (new functionality)
-            bool isOffline = false;
-            try
+            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
-                isOffline = !await _connectivity.IsOnlineAsync();
-            }
-            catch (Exception ex)
-            {
-                // If connectivity check fails, assume offline mode
-                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
-                isOffline = true;
-            }
+                return !await _connectivity.IsOnlineAsync();
+            },
+            "CheckConnectivity");
+            
+            // If connectivity check fails, assume offline mode
+            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
             
             if (isOffline)
             {
-                try
+                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
                 {
                     var operation = new OfflineOperation
                     {
@@ -667,12 +697,8 @@ namespace NoLock.Social.Core.Camera.Services
                         Priority = 1 // Normal priority for session creation
                     };
                     await _offlineQueue.QueueOperationAsync(operation);
-                }
-                catch (Exception ex)
-                {
-                    // Log the error but continue - session is still valid
-                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
-                }
+                },
+                "QueueOfflineOperation");
             }
             
             return sessionId;
@@ -682,14 +708,13 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
             
             if (capturedImage == null)
                 throw new ArgumentNullException(nameof(capturedImage));
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
             
             // Add to memory session (existing functionality)
             session.Pages.Add(capturedImage);
@@ -697,43 +722,32 @@ namespace NoLock.Social.Core.Camera.Services
             session.UpdateActivity(); // Track activity for timeout management
             
             // Save image to offline storage (new functionality)
-            try
+            var saveImageResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 await _offlineStorage.SaveImageAsync(capturedImage);
-            }
-            catch (OfflineStorageException ex)
-            {
-                // Log the error but continue - image is still in memory
-                Console.WriteLine($"Warning: Failed to save image to offline storage: {ex.Message}");
-            }
+            },
+            "SaveImageToOfflineStorage");
             
             // Update session in offline storage (new functionality)
-            try
+            var saveSessionResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
                 await _offlineStorage.SaveSessionAsync(session);
-            }
-            catch (OfflineStorageException ex)
-            {
-                // Log the error but continue - session is still in memory
-                Console.WriteLine($"Warning: Failed to save session to offline storage: {ex.Message}");
-            }
+            },
+            "SaveSessionToOfflineStorage");
             
             // Queue operation if offline (new functionality)
-            bool isOffline = false;
-            try
+            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
-                isOffline = !await _connectivity.IsOnlineAsync();
-            }
-            catch (Exception ex)
-            {
-                // If connectivity check fails, assume offline mode
-                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
-                isOffline = true;
-            }
+                return !await _connectivity.IsOnlineAsync();
+            },
+            "CheckConnectivity");
+            
+            // If connectivity check fails, assume offline mode
+            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
             
             if (isOffline)
             {
-                try
+                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
                 {
                     var operation = new OfflineOperation
                     {
@@ -746,12 +760,8 @@ namespace NoLock.Social.Core.Camera.Services
                         Priority = 0 // High priority for captured images
                     };
                     await _offlineQueue.QueueOperationAsync(operation);
-                }
-                catch (Exception ex)
-                {
-                    // Log the error but continue - page is still added to session
-                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
-                }
+                },
+                "QueueOfflineOperation");
             }
         }
 
@@ -759,11 +769,10 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
                 
             session.UpdateActivity(); // Track activity for timeout management
             return session.Pages.ToArray();
@@ -773,11 +782,10 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
                 
             session.UpdateActivity(); // Track activity for timeout management
             return session;
@@ -787,11 +795,10 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
                 
             if (pageIndex < 0 || pageIndex >= session.Pages.Count)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range");
@@ -811,21 +818,18 @@ namespace NoLock.Social.Core.Camera.Services
             session.UpdateActivity(); // Track activity for timeout management
             
             // Queue operation if offline (new functionality)
-            bool isOffline = false;
-            try
+            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
-                isOffline = !await _connectivity.IsOnlineAsync();
-            }
-            catch (Exception ex)
-            {
-                // If connectivity check fails, assume offline mode
-                Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
-                isOffline = true;
-            }
+                return !await _connectivity.IsOnlineAsync();
+            },
+            "CheckConnectivity");
+            
+            // If connectivity check fails, assume offline mode
+            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
             
             if (isOffline)
             {
-                try
+                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
                 {
                     var operation = new OfflineOperation
                     {
@@ -837,12 +841,8 @@ namespace NoLock.Social.Core.Camera.Services
                         Priority = 2 // Lower priority for remove operations
                     };
                     await _offlineQueue.QueueOperationAsync(operation);
-                }
-                catch (Exception ex)
-                {
-                    // Log the error but continue - page is still removed from session
-                    Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
-                }
+                },
+                "QueueOfflineOperation");
             }
         }
 
@@ -850,11 +850,10 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
                 
             if (fromIndex < 0 || fromIndex >= session.Pages.Count)
                 throw new ArgumentOutOfRangeException(nameof(fromIndex));
@@ -890,11 +889,10 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ThrowIfDisposed();
             
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException($"Session '{sessionId}' not found");
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
                 
             session.Pages.Clear();
             session.CurrentPageIndex = 0;
@@ -904,27 +902,23 @@ namespace NoLock.Social.Core.Camera.Services
         // Session Cleanup and Disposal Implementation
         public async Task DisposeDocumentSessionAsync(string sessionId)
         {
-            if (string.IsNullOrEmpty(sessionId))
-                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
 
             if (_activeSessions.TryGetValue(sessionId, out var session))
             {
                 // Queue disposal operation if offline (new functionality)
-                bool isOffline = false;
-                try
+                var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
                 {
-                    isOffline = !await _connectivity.IsOnlineAsync();
-                }
-                catch (Exception ex)
-                {
-                    // If connectivity check fails, assume offline mode
-                    Console.WriteLine($"Warning: Connectivity check failed, assuming offline mode: {ex.Message}");
-                    isOffline = true;
-                }
+                    return !await _connectivity.IsOnlineAsync();
+                },
+                "CheckConnectivity");
+                
+                // If connectivity check fails, assume offline mode
+                bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
                 
                 if (isOffline)
                 {
-                    try
+                    var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
                     {
                         var operation = new OfflineOperation
                         {
@@ -933,12 +927,8 @@ namespace NoLock.Social.Core.Camera.Services
                             Priority = 2 // Low priority for disposal operations
                         };
                         await _offlineQueue.QueueOperationAsync(operation);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log the error but continue - session disposal should proceed
-                        Console.WriteLine($"Warning: Failed to queue offline operation: {ex.Message}");
-                    }
+                    },
+                    "QueueOfflineOperation");
                 }
                 
                 // Clear all pages to release memory

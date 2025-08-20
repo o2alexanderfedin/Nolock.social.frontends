@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
-using NoLock.Social.Core.ImageProcessing.Interfaces;
+using NoLock.Social.Core.Common.Interfaces;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Services;
