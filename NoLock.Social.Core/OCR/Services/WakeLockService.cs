@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -421,18 +422,27 @@ namespace NoLock.Social.Core.OCR.Services
 
             try
             {
+                // Create tasks for cleanup operations
+                var cleanupTasks = new List<Task>();
+
                 // Release wake lock if active
                 if (IsWakeLockActive)
                 {
                     _logger.LogInformation("Disposing WakeLockService, releasing active wake lock");
-                    _ = Task.Run(async () => await ReleaseWakeLockAsync());
+                    cleanupTasks.Add(Task.Run(async () => await ReleaseWakeLockAsync()));
                 }
 
                 // Stop visibility monitoring if active
                 if (_isVisibilityMonitoring)
                 {
                     _logger.LogInformation("Disposing WakeLockService, stopping visibility monitoring");
-                    _ = Task.Run(async () => await StopVisibilityMonitoringAsync());
+                    cleanupTasks.Add(Task.Run(async () => await StopVisibilityMonitoringAsync()));
+                }
+
+                // Wait for cleanup tasks to complete (with timeout to avoid hanging)
+                if (cleanupTasks.Count > 0)
+                {
+                    Task.WaitAll(cleanupTasks.ToArray(), TimeSpan.FromSeconds(5));
                 }
             }
             catch (Exception ex)
