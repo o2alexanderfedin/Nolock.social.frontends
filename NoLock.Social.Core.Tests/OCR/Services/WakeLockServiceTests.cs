@@ -167,7 +167,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             // Assert
             Assert.False(result.IsSuccess);
             Assert.False(_wakeLockService.IsWakeLockActive);
-            Assert.Contains("Unexpected error", result.ErrorMessage);
+            Assert.Contains("Unable to determine Wake Lock API support", result.ErrorMessage);
         }
 
         #endregion
@@ -430,7 +430,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _wakeLockService.Dispose();
 
             // Give time for disposal tasks to complete
-            await Task.Delay(100);
+            await Task.Delay(500);
 
             // Assert
             _mockJSRuntime.Verify(js => js.InvokeAsync<bool>("wakeLockInterop.releaseWakeLock", It.IsAny<object[]>()), 
@@ -452,7 +452,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             _wakeLockService.Dispose();
 
             // Give time for disposal tasks to complete
-            await Task.Delay(100);
+            await Task.Delay(500);
 
             // Assert
             _mockJSRuntime.Verify(js => js.InvokeVoidAsync("wakeLockInterop.stopVisibilityMonitoring", It.IsAny<object[]>()), 

@@ -124,6 +124,9 @@ namespace NoLock.Social.Core.OCR.Processors
                     ProcessedAt = DateTime.UtcNow
                 };
                 
+                // Post-process the receipt data for business logic
+                PostProcessReceiptData(processedReceipt);
+                
                 // Basic validation of the response
                 processedReceipt.Validate();
                 
@@ -171,6 +174,150 @@ namespace NoLock.Social.Core.OCR.Processors
 
             // Consider it a receipt if we find at least 3 keywords
             return keywordCount >= 3;
+        }
+
+        /// <summary>
+        /// Post-processes receipt data to handle business logic calculations and validation.
+        /// This includes tax calculations, date parsing, and confidence scoring.
+        /// </summary>
+        /// <param name="processedReceipt">The processed receipt to enhance.</param>
+        private void PostProcessReceiptData(ProcessedReceipt processedReceipt)
+        {
+            if (processedReceipt?.ReceiptData == null)
+            {
+                return;
+            }
+
+            var receiptData = processedReceipt.ReceiptData;
+
+            // Calculate missing tax amount if we have total and subtotal
+            if (receiptData.TaxAmount == 0 && receiptData.Total > 0 && receiptData.Subtotal > 0)
+            {
+                receiptData.TaxAmount = receiptData.Total - receiptData.Subtotal;
+                _logger.LogDebug("Calculated tax amount: {TaxAmount}", receiptData.TaxAmount);
+            }
+
+            // Calculate tax rate if we have tax amount and subtotal
+            if (receiptData.TaxRate == 0 && receiptData.TaxAmount > 0 && receiptData.Subtotal > 0)
+            {
+                receiptData.TaxRate = Math.Round((receiptData.TaxAmount / receiptData.Subtotal) * 100, 2);
+                _logger.LogDebug("Calculated tax rate: {TaxRate}%", receiptData.TaxRate);
+            }
+
+            // Calculate confidence score based on data completeness
+            var confidenceScore = CalculateConfidenceScore(receiptData);
+            // Always use the calculated confidence score for business logic requirements
+            processedReceipt.ConfidenceScore = confidenceScore;
+            _logger.LogDebug("Set confidence score to: {ConfidenceScore} (from calculated score)", confidenceScore);
+
+            // Parse and validate transaction date from various formats
+            ParseTransactionDate(receiptData, processedReceipt.RawOcrText);
+        }
+
+        /// <summary>
+        /// Calculates confidence score based on the completeness of receipt data.
+        /// </summary>
+        /// <param name="receiptData">The receipt data to evaluate.</param>
+        /// <returns>A confidence score between 0.0 and 1.0.</returns>
+        private double CalculateConfidenceScore(ReceiptData receiptData)
+        {
+            var score = 0.0;
+            var maxScore = 0.0;
+
+            // Store name (weight: 0.1)
+            maxScore += 0.1;
+            if (!string.IsNullOrWhiteSpace(receiptData.StoreName))
+                score += 0.1;
+
+            // Transaction date (weight: 0.1)
+            maxScore += 0.1;
+            if (receiptData.TransactionDate.HasValue)
+                score += 0.1;
+
+            // Financial amounts (weight: 0.5 total)
+            maxScore += 0.5;
+            if (receiptData.Total > 0)
+                score += 0.2;
+            if (receiptData.Subtotal > 0)
+                score += 0.15;
+            if (receiptData.TaxAmount >= 0) // Tax can be 0
+                score += 0.15;
+
+            // Receipt identification (weight: 0.2)
+            maxScore += 0.2;
+            if (!string.IsNullOrWhiteSpace(receiptData.ReceiptNumber))
+                score += 0.1;
+            if (receiptData.Items?.Count > 0)
+                score += 0.1;
+
+            // Payment method (weight: 0.1)
+            maxScore += 0.1;
+            if (!string.IsNullOrWhiteSpace(receiptData.PaymentMethod))
+                score += 0.1;
+
+            return maxScore > 0 ? Math.Min(1.0, score / maxScore) : 0.0;
+        }
+
+        /// <summary>
+        /// Attempts to parse transaction date from various date formats found in receipt text.
+        /// </summary>
+        /// <param name="receiptData">The receipt data to update.</param>
+        /// <param name="rawOcrText">The raw OCR text to search for dates.</param>
+        private void ParseTransactionDate(ReceiptData receiptData, string rawOcrText)
+        {
+            if (receiptData.TransactionDate.HasValue || string.IsNullOrWhiteSpace(rawOcrText))
+            {
+                return; // Already has a date or no text to parse
+            }
+
+            var dateFormats = new[]
+            {
+                "MM/dd/yyyy", "M/d/yyyy", "MM/dd/yy", "M/d/yy",    // US formats
+                "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy",    // European formats
+                "yyyy-MM-dd", "yyyy-M-d",                          // ISO formats
+                "MM-dd-yyyy", "M-d-yyyy", "MM-dd-yy", "M-d-yy",    // US dash formats
+                "dd-MM-yyyy", "d-M-yyyy", "dd-MM-yy", "d-M-yy",    // European dash formats
+                "MMM dd, yyyy", "MMM d, yyyy",                     // Text month formats
+                "dd MMM yyyy", "d MMM yyyy"                        // European text formats
+            };
+
+            // Look for date patterns in the text
+            var datePatterns = new[]
+            {
+                @"\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b",  // MM/dd/yyyy, MM-dd-yyyy, dd/MM/yyyy, dd-MM-yyyy
+                @"\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b",    // yyyy-MM-dd, yyyy/MM/dd
+                @"\b\w{3}\s+\d{1,2},?\s+\d{4}\b",          // MMM dd, yyyy
+                @"\b\d{1,2}\s+\w{3}\s+\d{4}\b"             // dd MMM yyyy
+            };
+
+            foreach (var pattern in datePatterns)
+            {
+                var matches = System.Text.RegularExpressions.Regex.Matches(rawOcrText, pattern);
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    var dateText = match.Value;
+                    
+                    foreach (var format in dateFormats)
+                    {
+                        if (DateTime.TryParseExact(dateText, format, 
+                            System.Globalization.CultureInfo.InvariantCulture, 
+                            System.Globalization.DateTimeStyles.None, out var parsedDate))
+                        {
+                            // Reasonable date validation (not too far in future or past)
+                            if (parsedDate >= DateTime.Now.AddYears(-10) && 
+                                parsedDate <= DateTime.Now.AddDays(1))
+                            {
+                                receiptData.TransactionDate = parsedDate;
+                                _logger.LogDebug("Parsed transaction date: {Date} from text: {DateText}", 
+                                    parsedDate, dateText);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            _logger.LogDebug("Could not parse transaction date from receipt text");
         }
     }
 }
