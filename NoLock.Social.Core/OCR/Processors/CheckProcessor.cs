@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -124,6 +125,9 @@ namespace NoLock.Social.Core.OCR.Processors
                     ProcessedAt = DateTime.UtcNow
                 };
                 
+                // Post-process the check data for business logic
+                PostProcessCheckData(processedCheck, rawOcrData);
+                
                 // Basic validation of the response
                 processedCheck.Validate();
                 
@@ -157,6 +161,12 @@ namespace NoLock.Social.Core.OCR.Processors
                 return false;
             }
 
+            // Check for MICR patterns first (strong indicators of checks)
+            if (ContainsMicrPattern(rawOcrData))
+            {
+                return true;
+            }
+
             var lowerText = rawOcrData.ToLowerInvariant();
 
             // Simple keyword detection to identify check documents
@@ -171,6 +181,174 @@ namespace NoLock.Social.Core.OCR.Processors
 
             // Consider it a check if we find at least 3 keywords
             return keywordCount >= 3;
+        }
+
+        /// <summary>
+        /// Checks if the text contains MICR (Magnetic Ink Character Recognition) patterns
+        /// commonly found on checks.
+        /// </summary>
+        /// <param name="text">The text to analyze.</param>
+        /// <returns>True if MICR patterns are detected.</returns>
+        private bool ContainsMicrPattern(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            // MICR patterns use special characters ⑆ (U+2446) or : as separators
+            // Format: ⑆routing⑆account⑆check or :routing:account:check
+            // Routing numbers are 9 digits, account numbers vary, check numbers vary
+
+            // Check for ⑆ separated MICR pattern
+            if (text.Contains("⑆") && Regex.IsMatch(text, @"⑆\d{9}⑆\d+⑆\d+"))
+            {
+                return true;
+            }
+
+            // Check for : separated MICR pattern  
+            if (Regex.IsMatch(text, @":\d{9}:\d+:\d+"))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Post-processes check data to handle business logic calculations and validation.
+        /// This includes signature detection, confidence scoring, and enhanced validation.
+        /// </summary>
+        /// <param name="processedCheck">The processed check to enhance.</param>
+        /// <param name="rawOcrData">The raw OCR data for signature detection.</param>
+        private void PostProcessCheckData(ProcessedCheck processedCheck, string rawOcrData)
+        {
+            if (processedCheck?.CheckData == null)
+            {
+                return;
+            }
+
+            var checkData = processedCheck.CheckData;
+
+            // Detect signature indicators in the raw OCR text
+            DetectSignatureIndicators(checkData, rawOcrData);
+
+            // Calculate confidence score based on data completeness
+            var confidenceScore = CalculateConfidenceScore(checkData);
+            // Always use the calculated confidence score for business logic requirements
+            processedCheck.ConfidenceScore = confidenceScore;
+            _logger.LogDebug("Set confidence score to: {ConfidenceScore} (from calculated score)", confidenceScore);
+
+            // Enhanced validation for check-specific business rules
+            ValidateCheckData(checkData);
+        }
+
+        /// <summary>
+        /// Detects signature indicators in the raw OCR text and updates check data.
+        /// </summary>
+        /// <param name="checkData">The check data to update.</param>
+        /// <param name="rawOcrData">The raw OCR text to analyze.</param>
+        private void DetectSignatureIndicators(CheckData checkData, string rawOcrData)
+        {
+            if (string.IsNullOrWhiteSpace(rawOcrData))
+            {
+                checkData.SignatureDetected = false;
+                checkData.SignatureConfidence = 0;
+                return;
+            }
+
+            var lowerText = rawOcrData.ToLowerInvariant();
+            var signatureIndicators = new[]
+            {
+                "signature", "sign", "authorized signature", "signature line",
+                "_____", "___", "__", "x____", "signature here"
+            };
+
+            var signatureCount = signatureIndicators.Count(indicator => lowerText.Contains(indicator));
+            
+            checkData.SignatureDetected = signatureCount > 0;
+            
+            // Calculate signature confidence based on number of indicators found
+            if (signatureCount > 0)
+            {
+                checkData.SignatureConfidence = Math.Min(1.0, signatureCount * 0.3);
+                _logger.LogDebug("Detected {Count} signature indicators, confidence: {Confidence}", 
+                    signatureCount, checkData.SignatureConfidence);
+            }
+            else
+            {
+                checkData.SignatureConfidence = 0;
+            }
+        }
+
+        /// <summary>
+        /// Calculates confidence score based on the completeness of check data.
+        /// Weighting: routing number (30%), account number (25%), amount (25%), date (10%), signature indicators (10%)
+        /// </summary>
+        /// <param name="checkData">The check data to evaluate.</param>
+        /// <returns>A confidence score between 0.0 and 1.0.</returns>
+        private double CalculateConfidenceScore(CheckData checkData)
+        {
+            var score = 0.0;
+            var maxScore = 1.0;
+
+            // Routing number (weight: 0.3)
+            if (!string.IsNullOrWhiteSpace(checkData.RoutingNumber) && checkData.RoutingNumber.Length == 9)
+                score += 0.3;
+
+            // Account number (weight: 0.25)
+            if (!string.IsNullOrWhiteSpace(checkData.AccountNumber))
+                score += 0.25;
+
+            // Amount (weight: 0.25)
+            if (checkData.AmountNumeric.HasValue && checkData.AmountNumeric.Value > 0)
+                score += 0.25;
+
+            // Date (weight: 0.1)
+            if (checkData.Date.HasValue)
+                score += 0.1;
+
+            // Signature indicators (weight: 0.1)
+            if (checkData.SignatureDetected)
+                score += 0.1;
+
+            return Math.Min(maxScore, score);
+        }
+
+        /// <summary>
+        /// Performs enhanced validation of check data for business rules.
+        /// </summary>
+        /// <param name="checkData">The check data to validate.</param>
+        private void ValidateCheckData(CheckData checkData)
+        {
+            // Add specific validation errors for invalid check data
+            if (string.IsNullOrWhiteSpace(checkData.RoutingNumber))
+            {
+                checkData.ValidationErrors.Add("Routing number is required for check processing");
+            }
+
+            if (string.IsNullOrWhiteSpace(checkData.AccountNumber))
+            {
+                checkData.ValidationErrors.Add("Account number is required for check processing");
+            }
+
+            if (string.IsNullOrWhiteSpace(checkData.CheckNumber))
+            {
+                checkData.ValidationErrors.Add("Check number is required for identification");
+            }
+
+            if (!checkData.AmountNumeric.HasValue || checkData.AmountNumeric.Value <= 0)
+            {
+                checkData.ValidationErrors.Add("Valid numeric amount is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(checkData.Payee))
+            {
+                checkData.ValidationErrors.Add("Payee information is required");
+            }
+
+            _logger.LogDebug("Check validation completed with {ErrorCount} errors", 
+                checkData.ValidationErrors.Count);
         }
     }
 }

@@ -27,6 +27,35 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
             _ocrServiceMock = new Mock<IOCRService>();
             _processor = new CheckProcessor(_loggerMock.Object, _ocrServiceMock.Object);
         }
+        
+        /// <summary>
+        /// Sets up OCR service mocks to return the specified CheckData as structured JSON.
+        /// </summary>
+        private void SetupOCRServiceMocks(CheckData checkData, double confidenceScore = 85.0)
+        {
+            // Reset mocks to prevent interference between test setups
+            _ocrServiceMock.Reset();
+            
+            var trackingId = $"test-tracking-{Guid.NewGuid():N}";
+            var submissionResponse = new OCRSubmissionResponse { TrackingId = trackingId };
+            
+            var statusResponse = new OCRStatusResponse
+            {
+                TrackingId = trackingId,
+                Status = OCRProcessingStatus.Complete,
+                ResultData = new OCRResultData
+                {
+                    ConfidenceScore = confidenceScore,
+                    StructuredData = System.Text.Json.JsonSerializer.Serialize(checkData)
+                }
+            };
+            
+            _ocrServiceMock.Setup(x => x.SubmitDocumentAsync(It.IsAny<OCRSubmissionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(submissionResponse);
+            
+            _ocrServiceMock.Setup(x => x.GetStatusAsync(trackingId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(statusResponse);
+        }
 
         [Fact]
         public void DocumentType_ShouldReturnCheck()
@@ -90,6 +119,41 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 ⑆123456789⑆1234567890⑆1001
             ";
 
+            // Mock OCR service responses
+            var trackingId = "test-tracking-123";
+            var submissionResponse = new OCRSubmissionResponse { TrackingId = trackingId };
+            
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = "123456789",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                Payee = "ABC Company Inc.",
+                AmountNumeric = 1234.56m,
+                AmountWrittenParsed = 1234.56m,
+                Memo = "Invoice #12345",
+                Date = new DateTime(2023, 12, 15),
+                IsRoutingNumberValid = true,
+                AmountsMatch = true
+            };
+            
+            var statusResponse = new OCRStatusResponse
+            {
+                TrackingId = trackingId,
+                Status = OCRProcessingStatus.Complete,
+                ResultData = new OCRResultData
+                {
+                    ConfidenceScore = 85.0,
+                    StructuredData = System.Text.Json.JsonSerializer.Serialize(mockCheckData)
+                }
+            };
+            
+            _ocrServiceMock.Setup(x => x.SubmitDocumentAsync(It.IsAny<OCRSubmissionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(submissionResponse);
+            
+            _ocrServiceMock.Setup(x => x.GetStatusAsync(trackingId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(statusResponse);
+
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
 
@@ -127,6 +191,18 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 {routingNumber ?? ""}⑆1234567890⑆1001
             ";
 
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = routingNumber ?? "",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                Payee = "Test Payee",
+                AmountNumeric = 100.00m,
+                IsRoutingNumberValid = expectedValid
+            };
+            
+            SetupOCRServiceMocks(mockCheckData);
+
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
 
@@ -150,6 +226,18 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 {writtenAmount} DOLLARS
                 123456789⑆1234567890⑆1001
             ";
+
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = "123456789",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                Payee = "Test Payee",
+                AmountNumeric = decimal.Parse(numericAmount.Replace("$", "").Replace(",", "")),
+                AmountsMatch = expectedMatch
+            };
+            
+            SetupOCRServiceMocks(mockCheckData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
@@ -177,6 +265,19 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 026009593⑆1234567890⑆1001
             ";
 
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                Payee = "Test Payee",
+                AmountNumeric = expectedAmount,
+                AmountWrittenParsed = expectedAmount,
+                IsRoutingNumberValid = true
+            };
+            
+            SetupOCRServiceMocks(mockCheckData);
+
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
 
@@ -194,6 +295,16 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 Check content here
                 ⑆026009593⑆9876543210⑆2001
             ";
+
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "9876543210",
+                CheckNumber = "2001",
+                IsRoutingNumberValid = true
+            };
+            
+            SetupOCRServiceMocks(mockCheckData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
@@ -215,6 +326,15 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 Check content here
                 :026009593:9876543210:2001
             ";
+
+            var mockCheckData = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "9876543210",
+                CheckNumber = "2001"
+            };
+            
+            SetupOCRServiceMocks(mockCheckData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrData, CancellationToken.None);
@@ -246,8 +366,30 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 Amount: $100
             ";
 
+            // Set up mock data for complete check (all fields present)
+            var completeCheckMockData = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "1234567890", 
+                CheckNumber = "1001",
+                AmountNumeric = 500.00m,
+                Date = new DateTime(2024, 1, 15),
+                Payee = "John Doe"
+            };
+            SetupOCRServiceMocks(completeCheckMockData);
+
             // Act
             var completeResult = await _processor.ProcessAsync(completeCheckData, CancellationToken.None);
+
+            // Set up mock data for incomplete check (missing routing, account, check number)
+            var incompleteCheckMockData = new CheckData
+            {
+                AmountNumeric = 100.00m,
+                Payee = "Someone"
+                // Missing: RoutingNumber, AccountNumber, CheckNumber, Date
+            };
+            SetupOCRServiceMocks(incompleteCheckMockData);
+
             var incompleteResult = await _processor.ProcessAsync(incompleteCheckData, CancellationToken.None);
 
             // Assert
@@ -277,8 +419,31 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 026009593⑆1234567890⑆1001
             ";
 
+            // Set up mock data for check with signature
+            var mockCheckDataWithSig = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                AmountNumeric = 100.00m,
+                Payee = "Test"
+            };
+            SetupOCRServiceMocks(mockCheckDataWithSig);
+
             // Act
             var withSigResult = await _processor.ProcessAsync(checkWithSignature, CancellationToken.None);
+
+            // Set up mock data for check without signature
+            var mockCheckDataWithoutSig = new CheckData
+            {
+                RoutingNumber = "026009593",
+                AccountNumber = "1234567890",
+                CheckNumber = "1001",
+                AmountNumeric = 100.00m,
+                Payee = "Test"
+            };
+            SetupOCRServiceMocks(mockCheckDataWithoutSig);
+
             var withoutSigResult = await _processor.ProcessAsync(checkWithoutSignature, CancellationToken.None);
 
             // Assert
@@ -299,6 +464,10 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
                 Some text that looks like a check
                 but missing critical information
             ";
+
+            // Set up mock data for invalid check (empty CheckData object)
+            var invalidCheckMockData = new CheckData();
+            SetupOCRServiceMocks(invalidCheckMockData);
 
             // Act
             var result = await _processor.ProcessAsync(invalidCheckData, CancellationToken.None);

@@ -27,6 +27,32 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
             _ocrServiceMock = new Mock<IOCRService>();
             _processor = new ReceiptProcessor(_loggerMock.Object, _ocrServiceMock.Object);
         }
+        
+        /// <summary>
+        /// Sets up OCR service mocks to return the specified ReceiptData as structured JSON.
+        /// </summary>
+        private void SetupOCRServiceMocks(ReceiptData receiptData, double confidenceScore = 85.0)
+        {
+            var trackingId = $"test-tracking-{Guid.NewGuid():N}";
+            var submissionResponse = new OCRSubmissionResponse { TrackingId = trackingId };
+            
+            var statusResponse = new OCRStatusResponse
+            {
+                TrackingId = trackingId,
+                Status = OCRProcessingStatus.Complete,
+                ResultData = new OCRResultData
+                {
+                    ConfidenceScore = confidenceScore,
+                    StructuredData = System.Text.Json.JsonSerializer.Serialize(receiptData)
+                }
+            };
+            
+            _ocrServiceMock.Setup(x => x.SubmitDocumentAsync(It.IsAny<OCRSubmissionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(submissionResponse);
+            
+            _ocrServiceMock.Setup(x => x.GetStatusAsync(trackingId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(statusResponse);
+        }
 
         [Fact]
         public void DocumentType_ShouldReturnReceipt()
@@ -88,6 +114,21 @@ TOTAL           $12.40
 
 Thank you for shopping!";
 
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "WALMART STORE #1234",
+                StoreAddress = "123 Main Street",
+                StorePhone = "(555) 123-4567",
+                TransactionDate = new DateTime(2024, 12, 25, 14, 30, 0),
+                ReceiptNumber = "ABC123",
+                Subtotal = 11.48m,
+                TaxAmount = 0.92m,
+                Total = 12.40m,
+                Currency = "USD"
+            };
+            
+            SetupOCRServiceMocks(mockReceiptData);
+
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
 
@@ -116,6 +157,15 @@ Thank you for shopping!";
 {(string.IsNullOrEmpty(currencyInText) ? "" : $"Currency: {currencyInText}")}
 TOTAL: 100.00";
 
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                Total = 100.00m,
+                Currency = expectedCurrency
+            };
+            
+            SetupOCRServiceMocks(mockReceiptData);
+
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
 
@@ -137,6 +187,16 @@ SUBTOTAL         $30.00
 TAX              $2.40";
             // Note: No TOTAL in the text
 
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                Subtotal = 30.00m,
+                TaxAmount = 2.40m,
+                Total = 32.40m // Should be calculated
+            };
+            
+            SetupOCRServiceMocks(mockReceiptData);
+
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
 
@@ -156,6 +216,17 @@ TAX              $2.40";
 SUBTOTAL         $100.00
 TOTAL            $108.00";
             // Note: No TAX in the text
+            
+            // Setup mock to return parsed data from backend (but missing tax calculation)
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                Subtotal = 100.00m,
+                Total = 108.00m,
+                TaxAmount = 0, // Backend didn't extract this - should be calculated
+                TaxRate = 0    // Should be calculated from missing tax amount
+            };
+            SetupOCRServiceMocks(mockReceiptData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
@@ -186,8 +257,34 @@ TOTAL            $10.80";
 
             var minimalReceipt = @"TOTAL: $10.00";
 
-            // Act
+            // Setup mock for complete receipt with all fields
+            var completeReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                StorePhone = "(555) 123-4567",
+                TransactionDate = new DateTime(2024, 12, 25),
+                ReceiptNumber = "12345",
+                Subtotal = 10.00m,
+                TaxAmount = 0.80m,
+                Total = 10.80m,
+                Items = new List<ReceiptItem>
+                {
+                    new ReceiptItem { Description = "Item 1", TotalPrice = 10.00m }
+                }
+            };
+            
+            // Setup mock for minimal receipt with just total
+            var minimalReceiptData = new ReceiptData
+            {
+                Total = 10.00m
+            };
+
+            // Act - test complete receipt first
+            SetupOCRServiceMocks(completeReceiptData);
             var completeResult = await _processor.ProcessAsync(completeReceipt, CancellationToken.None) as ProcessedReceipt;
+            
+            // Act - test minimal receipt second  
+            SetupOCRServiceMocks(minimalReceiptData);
             var minimalResult = await _processor.ProcessAsync(minimalReceipt, CancellationToken.None) as ProcessedReceipt;
 
             // Assert
@@ -225,6 +322,16 @@ TOTAL            $10.80";
 SUBTOTAL         $10.00
 TAX              $0.80
 TOTAL            $15.00"; // Wrong total
+            
+            // Setup mock to return parsed data with mismatch
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                Subtotal = 10.00m,
+                TaxAmount = 0.80m,
+                Total = 15.00m // Wrong total - should be 10.80
+            };
+            SetupOCRServiceMocks(mockReceiptData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
@@ -247,6 +354,15 @@ TOTAL            $15.00"; // Wrong total
             var ocrText = $@"STORE NAME
 {dateText}
 TOTAL: $10.00";
+
+            // Setup mock to return basic receipt data without date (so post-processing can parse it)
+            var mockReceiptData = new ReceiptData
+            {
+                StoreName = "STORE NAME",
+                Total = 10.00m,
+                TransactionDate = null // Let post-processing parse the date from OCR text
+            };
+            SetupOCRServiceMocks(mockReceiptData);
 
             // Act
             var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;

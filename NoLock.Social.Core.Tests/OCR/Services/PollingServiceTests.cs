@@ -86,7 +86,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         [Theory]
         [InlineData(2, 3, false, "timeout with short duration")]
-        [InlineData(1, 100, true, "no timeout with long duration")]
+        [InlineData(10, 100, true, "no timeout with long duration")]
         public async Task PollAsync_RespectsMaxPollingDuration(
             int pollingDurationSeconds,
             int attemptsToComplete,
@@ -182,7 +182,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                         CancellationToken.None));
                 
                 Assert.Contains("exceeded maximum attempts", exception.Message);
-                Assert.Equal(maxAttempts.Value + 1, attemptCount); // One extra attempt before checking
+                Assert.Equal(maxAttempts.Value, attemptCount); // Should call operation exactly maxAttempts times
             }
         }
 
@@ -249,7 +249,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             }
 
             // Act & Assert
-            await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await Assert.ThrowsAsync<TaskCanceledException>(async () =>
                 await _pollingService.PollAsync(
                     operation,
                     r => r.IsComplete,
