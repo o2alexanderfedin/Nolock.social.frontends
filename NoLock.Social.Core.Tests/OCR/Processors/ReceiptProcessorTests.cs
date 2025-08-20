@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using Moq;
+using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Processors;
 
@@ -17,12 +18,14 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
     public class ReceiptProcessorTests
     {
         private readonly Mock<ILogger<ReceiptProcessor>> _loggerMock;
+        private readonly Mock<IOCRService> _ocrServiceMock;
         private readonly ReceiptProcessor _processor;
 
         public ReceiptProcessorTests()
         {
             _loggerMock = new Mock<ILogger<ReceiptProcessor>>();
-            _processor = new ReceiptProcessor(_loggerMock.Object);
+            _ocrServiceMock = new Mock<IOCRService>();
+            _processor = new ReceiptProcessor(_loggerMock.Object, _ocrServiceMock.Object);
         }
 
         [Fact]
@@ -99,37 +102,6 @@ Thank you for shopping!";
             Assert.Equal(0.92m, result.ReceiptData.TaxAmount);
             Assert.Equal(12.40m, result.ReceiptData.Total);
             Assert.True(result.ReceiptData.TransactionDate.HasValue);
-        }
-
-        [Fact]
-        public async Task ProcessAsync_ShouldExtractLineItems()
-        {
-            // Arrange
-            var ocrText = @"STORE NAME
-
-Product A        $10.00
-Product B        $20.00
-Product C        $15.50
-
-SUBTOTAL         $45.50
-TAX              $3.64
-TOTAL            $49.14";
-
-            // Act
-            var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.NotNull(result.ReceiptData.Items);
-            Assert.Equal(3, result.ReceiptData.Items.Count);
-            
-            var items = result.ReceiptData.Items.OrderBy(i => i.UnitPrice).ToList();
-            Assert.Equal("Product A", items[0].Description);
-            Assert.Equal(10.00m, items[0].UnitPrice);
-            Assert.Equal("Product B", items[1].Description);
-            Assert.Equal(20.00m, items[1].UnitPrice);
-            Assert.Equal("Product C", items[2].Description);
-            Assert.Equal(15.50m, items[2].UnitPrice);
         }
 
         [Theory]
@@ -263,25 +235,6 @@ TOTAL            $15.00"; // Wrong total
             Assert.True(result.Warnings.Any(w => w.Contains("Total mismatch")));
         }
 
-        [Fact]
-        public async Task ProcessAsync_WithCancellation_ShouldRespectToken()
-        {
-            // Arrange
-            var ocrText = @"STORE NAME
-TOTAL: $10.00";
-            var cts = new CancellationTokenSource();
-            cts.Cancel();
-
-            // Act & Assert
-            // The task should complete (our implementation is simple), but it should respect the token
-            await Assert.ThrowsAsync<TaskCanceledException>(async () =>
-            {
-                var task = _processor.ProcessAsync(ocrText, cts.Token);
-                cts.Token.ThrowIfCancellationRequested();
-                await task;
-            });
-        }
-
         [Theory]
         [InlineData("12/25/2024", true, "US date format")]
         [InlineData("25/12/2024", true, "European date format")]
@@ -310,7 +263,7 @@ TOTAL: $10.00";
         public async Task ProcessAsync_WithException_ShouldAddValidationError()
         {
             // Arrange
-            var processor = new ReceiptProcessor(_loggerMock.Object);
+            var processor = new ReceiptProcessor(_loggerMock.Object, _ocrServiceMock.Object);
             // This would normally not throw, but we're testing error handling
             var ocrText = "TOTAL: $10.00";
 

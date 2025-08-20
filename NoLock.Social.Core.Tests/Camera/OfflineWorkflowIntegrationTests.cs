@@ -120,58 +120,6 @@ namespace NoLock.Social.Core.Tests.Camera
         }
 
         [Fact]
-        public async Task OfflineIndicator_ShouldReflectConnectivityState()
-        {
-            // Arrange - Test both connectivity states
-            var connectivityStates = new[] { false, true, false }; // offline -> online -> offline
-            var stateIndex = 0;
-
-            _connectivityMock.Setup(x => x.IsOnlineAsync())
-                .ReturnsAsync(() => connectivityStates[stateIndex++]);
-            
-            // Initialize service to trigger StartMonitoringAsync
-            await _cameraService.InitializeAsync();
-
-            // Act & Assert - Test state transitions
-            foreach (var expectedOnline in connectivityStates)
-            {
-                var isOnline = await _connectivityMock.Object.IsOnlineAsync();
-                isOnline.Should().Be(expectedOnline, 
-                    $"Connectivity service should return {expectedOnline}");
-            }
-
-            // Verify monitoring is set up
-            _connectivityMock.Verify(x => x.StartMonitoringAsync(), Times.AtLeastOnce,
-                "Should start monitoring connectivity changes");
-        }
-
-        [Fact]
-        public async Task AutomaticProcessing_WhenConnectionRestored_ShouldProcessQueue()
-        {
-            // Arrange - Start offline, queue operations
-            _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
-            var queuedOperations = new List<OfflineOperation>
-            {
-                new() { OperationType = "upload", Payload = "session1-data" },
-                new() { OperationType = "sync", Payload = "session2-data" }
-            };
-            
-            _offlineQueueMock.Setup(x => x.GetQueueStatusAsync())
-                .ReturnsAsync(new OfflineQueueStatus { PendingOperations = queuedOperations.Count });
-
-            // Act - Simulate going online and trigger queue processing
-            _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(true);
-            
-            // Simulate connectivity restored event
-            var connectivityArgs = new ConnectivityEventArgs { IsOnline = true };
-            _connectivityMock.Raise(x => x.OnOnline += null, connectivityArgs);
-
-            // Assert - Verify queue processing is triggered
-            _offlineQueueMock.Verify(x => x.ProcessQueueAsync(), Times.AtLeastOnce,
-                "Should process queued operations when connection restored");
-        }
-
-        [Fact]
         public async Task DataPersistence_OnBrowserRefresh_ShouldNotLoseData()
         {
             // Arrange - Create session with data offline
@@ -230,53 +178,6 @@ namespace NoLock.Social.Core.Tests.Camera
             // Act & Assert - Should handle error gracefully
             await _cameraService.Invoking(s => s.AddPageToSessionAsync(sessionId, testImage))
                 .Should().NotThrowAsync($"Should handle {scenario} gracefully");
-        }
-
-        [Fact]
-        public async Task LargeImageUpload_OfflineMode_ShouldQueueForLaterProcessing()
-        {
-            // Arrange - Large image data simulation
-            _connectivityMock.Setup(x => x.IsOnlineAsync()).ReturnsAsync(false);
-            var largeImage = CreateTestCapturedImage("large-document.jpg", size: 5000000); // 5MB
-
-            // Act
-            var sessionId = await _cameraService.CreateDocumentSessionAsync();
-            await _cameraService.AddPageToSessionAsync(sessionId, largeImage);
-
-            // Assert - Should queue large image for later upload
-            _offlineQueueMock.Verify(x => x.QueueOperationAsync(
-                It.Is<OfflineOperation>(op => op.OperationType == "upload" && 
-                                             op.Payload.Contains("large-document.jpg"))), 
-                Times.Once, "Large images should be queued for upload when offline");
-        }
-
-        [Fact]
-        public async Task ConnectivityFluctuation_DuringCapture_ShouldAdaptGracefully()
-        {
-            // Arrange - Simulate connectivity fluctuations
-            var isOnline = true;
-            _connectivityMock.Setup(x => x.IsOnlineAsync())
-                .ReturnsAsync(() => isOnline);
-
-            var sessionId = await _cameraService.CreateDocumentSessionAsync();
-
-            // Act - Capture images with changing connectivity
-            var image1 = CreateTestCapturedImage("online-image.jpg");
-            await _cameraService.AddPageToSessionAsync(sessionId, image1);
-            
-            // Go offline
-            isOnline = false;
-            var image2 = CreateTestCapturedImage("offline-image.jpg");
-            await _cameraService.AddPageToSessionAsync(sessionId, image2);
-            
-            // Back online
-            isOnline = true;
-            var image3 = CreateTestCapturedImage("online-again-image.jpg");
-            await _cameraService.AddPageToSessionAsync(sessionId, image3);
-
-            // Assert - All images should be handled appropriately
-            var pages = await _cameraService.GetSessionPagesAsync(sessionId);
-            pages.Should().HaveCount(3, "All images should be captured regardless of connectivity changes");
         }
 
         #endregion

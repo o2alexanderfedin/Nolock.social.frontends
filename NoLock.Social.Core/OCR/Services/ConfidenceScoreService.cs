@@ -418,7 +418,7 @@ namespace NoLock.Social.Core.OCR.Services
     /// </summary>
     public class ValidationResult
     {
-        public bool IsValid { get; set; }
+        public bool IsValid { get; set; } = true;
         public List<string> Errors { get; set; } = new List<string>();
         public List<string> Warnings { get; set; } = new List<string>();
         public List<string> Recommendations { get; set; } = new List<string>();

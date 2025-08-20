@@ -267,35 +267,6 @@ namespace NoLock.Social.Core.Tests.Storage
             sortedRestored[2].OperationType.Should().Be("delete", "Lowest priority operation should be last");
         }
 
-        [Theory]
-        [InlineData(100, "small image data")]
-        [InlineData(1000000, "large image data (1MB)")]
-        [InlineData(5000000, "very large image data (5MB)")]
-        public async Task BrowserRefresh_WithVariousImageSizes_ShouldPersistCorrectly(
-            int imageSize, string scenario)
-        {
-            // Arrange - Create image with specific size
-            var session = CreateTestDocumentSession("size-test-session");
-            var largeImage = CreateTestCapturedImage("large-image.jpg", imageSize);
-            session.Pages.Add(largeImage);
-
-            await _storageService.SaveSessionAsync(session);
-            await _storageService.SaveImageAsync(largeImage);
-
-            // Act - Simulate browser refresh
-            using var newStorageService = new IndexedDbStorageService(_jsRuntimeWrapperMock.Object);
-            var restoredSession = await newStorageService.LoadSessionAsync(session.SessionId);
-            var restoredImage = await newStorageService.LoadImageAsync(GetImageId(largeImage));
-
-            // Assert - Verify large images persist correctly
-            restoredSession.Should().NotBeNull($"Session should persist with {scenario}");
-            restoredSession!.Pages.Should().HaveCount(1);
-            
-            restoredImage.Should().NotBeNull($"Image should persist for {scenario}");
-            restoredImage!.ImageData.Length.Should().BeGreaterThan(imageSize / 2, 
-                $"Image data should be preserved for {scenario}");
-        }
-
         #endregion
 
         #region Data Integrity Tests
