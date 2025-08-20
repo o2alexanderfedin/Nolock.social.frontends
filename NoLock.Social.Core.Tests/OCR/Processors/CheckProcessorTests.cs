@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 using NoLock.Social.Core.OCR.Processors;
@@ -17,12 +18,14 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
     public class CheckProcessorTests
     {
         private readonly Mock<ILogger<CheckProcessor>> _loggerMock;
+        private readonly Mock<IOCRService> _ocrServiceMock;
         private readonly CheckProcessor _processor;
 
         public CheckProcessorTests()
         {
             _loggerMock = new Mock<ILogger<CheckProcessor>>();
-            _processor = new CheckProcessor(_loggerMock.Object);
+            _ocrServiceMock = new Mock<IOCRService>();
+            _processor = new CheckProcessor(_loggerMock.Object, _ocrServiceMock.Object);
         }
 
         [Fact]

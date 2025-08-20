@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using Moq;
+using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Processors;
 
@@ -17,12 +18,14 @@ namespace NoLock.Social.Core.Tests.OCR.Processors
     public class ReceiptProcessorTests
     {
         private readonly Mock<ILogger<ReceiptProcessor>> _loggerMock;
+        private readonly Mock<IOCRService> _ocrServiceMock;
         private readonly ReceiptProcessor _processor;
 
         public ReceiptProcessorTests()
         {
             _loggerMock = new Mock<ILogger<ReceiptProcessor>>();
-            _processor = new ReceiptProcessor(_loggerMock.Object);
+            _ocrServiceMock = new Mock<IOCRService>();
+            _processor = new ReceiptProcessor(_loggerMock.Object, _ocrServiceMock.Object);
         }
 
         [Fact]
@@ -260,7 +263,7 @@ TOTAL: $10.00";
         public async Task ProcessAsync_WithException_ShouldAddValidationError()
         {
             // Arrange
-            var processor = new ReceiptProcessor(_loggerMock.Object);
+            var processor = new ReceiptProcessor(_loggerMock.Object, _ocrServiceMock.Object);
             // This would normally not throw, but we're testing error handling
             var ocrText = "TOTAL: $10.00";
 
