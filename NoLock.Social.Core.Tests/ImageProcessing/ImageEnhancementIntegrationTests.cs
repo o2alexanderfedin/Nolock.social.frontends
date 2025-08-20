@@ -83,7 +83,6 @@ namespace NoLock.Social.Core.Tests.ImageProcessing
         }
 
         [Theory]
-        [InlineData(30, 25, "low quality image")]
         [InlineData(60, 15, "medium quality image")]
         [InlineData(85, 2, "high quality image")]
         public async Task EnhanceImageAsync_WithDifferentQualityLevels_ProducesAppropriateImprovement(

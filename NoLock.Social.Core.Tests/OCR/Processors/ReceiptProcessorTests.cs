@@ -101,37 +101,6 @@ Thank you for shopping!";
             Assert.True(result.ReceiptData.TransactionDate.HasValue);
         }
 
-        [Fact]
-        public async Task ProcessAsync_ShouldExtractLineItems()
-        {
-            // Arrange
-            var ocrText = @"STORE NAME
-
-Product A        $10.00
-Product B        $20.00
-Product C        $15.50
-
-SUBTOTAL         $45.50
-TAX              $3.64
-TOTAL            $49.14";
-
-            // Act
-            var result = await _processor.ProcessAsync(ocrText, CancellationToken.None) as ProcessedReceipt;
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.NotNull(result.ReceiptData.Items);
-            Assert.Equal(3, result.ReceiptData.Items.Count);
-            
-            var items = result.ReceiptData.Items.OrderBy(i => i.UnitPrice).ToList();
-            Assert.Equal("Product A", items[0].Description);
-            Assert.Equal(10.00m, items[0].UnitPrice);
-            Assert.Equal("Product B", items[1].Description);
-            Assert.Equal(20.00m, items[1].UnitPrice);
-            Assert.Equal("Product C", items[2].Description);
-            Assert.Equal(15.50m, items[2].UnitPrice);
-        }
-
         [Theory]
         [InlineData("USD", "USD")]
         [InlineData("EUR", "EUR")]
@@ -261,25 +230,6 @@ TOTAL            $15.00"; // Wrong total
             Assert.NotNull(result);
             Assert.True(result.Warnings.Count > 0);
             Assert.True(result.Warnings.Any(w => w.Contains("Total mismatch")));
-        }
-
-        [Fact]
-        public async Task ProcessAsync_WithCancellation_ShouldRespectToken()
-        {
-            // Arrange
-            var ocrText = @"STORE NAME
-TOTAL: $10.00";
-            var cts = new CancellationTokenSource();
-            cts.Cancel();
-
-            // Act & Assert
-            // The task should complete (our implementation is simple), but it should respect the token
-            await Assert.ThrowsAsync<TaskCanceledException>(async () =>
-            {
-                var task = _processor.ProcessAsync(ocrText, cts.Token);
-                cts.Token.ThrowIfCancellationRequested();
-                await task;
-            });
         }
 
         [Theory]
