@@ -19,6 +19,7 @@ namespace NoLock.Social.Core.OCR.Services
         private readonly IFailedRequestStore _failedRequestStore;
         private readonly IConnectivityService _connectivityService;
         private readonly IRetryPolicy _retryPolicy;
+        private readonly IFailureClassifier _failureClassifier;
         private readonly ILogger<OCRRetryQueueProcessor> _logger;
         private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
         private CancellationTokenSource? _processingCancellation;
@@ -52,18 +53,21 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="failedRequestStore">Store for failed requests.</param>
         /// <param name="connectivityService">Service for monitoring connectivity.</param>
         /// <param name="retryPolicy">Retry policy for failed requests.</param>
+        /// <param name="failureClassifier">Classifier for determining failure types.</param>
         /// <param name="logger">Logger for processor operations.</param>
         public OCRRetryQueueProcessor(
             IOCRService ocrService,
             IFailedRequestStore failedRequestStore,
             IConnectivityService connectivityService,
             IRetryPolicy retryPolicy,
+            IFailureClassifier failureClassifier,
             ILogger<OCRRetryQueueProcessor> logger)
         {
             _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
             _failedRequestStore = failedRequestStore ?? throw new ArgumentNullException(nameof(failedRequestStore));
             _connectivityService = connectivityService ?? throw new ArgumentNullException(nameof(connectivityService));
             _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+            _failureClassifier = failureClassifier ?? throw new ArgumentNullException(nameof(failureClassifier));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -206,7 +210,7 @@ namespace NoLock.Social.Core.OCR.Services
                         break;
                     }
 
-                    // Check connectivity before each request
+                    // Check connectivity before processing each request
                     if (!await _connectivityService.IsOnlineAsync())
                     {
                         _logger.LogWarning("Lost connectivity during retry processing");
@@ -304,7 +308,7 @@ namespace NoLock.Social.Core.OCR.Services
                     "Failed to retry OCR request. RequestId: {RequestId}",
                     failedRequest.RequestId);
 
-                // Update error message in store
+                // Update error message in store (retry count already incremented before attempt)
                 await _failedRequestStore.UpdateRetryStatusAsync(
                     failedRequest.RequestId,
                     incrementRetryCount: false,
@@ -312,11 +316,7 @@ namespace NoLock.Social.Core.OCR.Services
                     cancellationToken: cancellationToken);
 
                 // Check if this is a permanent failure
-                var classifier = new OCRFailureClassifier(
-                    _logger as ILogger<OCRFailureClassifier> ?? 
-                    throw new InvalidOperationException("Logger type mismatch"));
-                
-                var failureType = classifier.Classify(ex);
+                var failureType = _failureClassifier.Classify(ex);
                 if (failureType == FailureType.Permanent)
                 {
                     // Remove from retry queue if permanent failure
@@ -413,11 +413,22 @@ namespace NoLock.Social.Core.OCR.Services
         {
             if (_disposed)
                 return;
-
-            _disposed = true;
             
-            // Stop monitoring
-            StopMonitoringAsync().GetAwaiter().GetResult();
+            // Stop monitoring - call synchronously with timeout
+            try
+            {
+                var stopTask = StopMonitoringAsync();
+                if (!stopTask.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    _logger?.LogWarning("StopMonitoringAsync timed out during disposal");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error during StopMonitoringAsync in Dispose");
+            }
+            
+            _disposed = true;
             
             // Dispose resources
             _processingCancellation?.Dispose();
