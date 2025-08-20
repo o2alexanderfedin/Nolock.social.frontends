@@ -1,0 +1,105 @@
+{
+  "commands": [
+    {
+      "name": "analyze",
+      "description": "Analyze codebase for anti-patterns, code smells, and quality issues",
+      "aliases": ["quality", "code-review", "patterns"],
+      "script": "./scripts/analyze-code-quality.sh",
+      "args": {
+        "path": {
+          "description": "Path to analyze (default: current directory)",
+          "required": false,
+          "default": "."
+        },
+        "output": {
+          "description": "Output file name (default: code-analysis-report.md)",
+          "required": false,
+          "default": "code-analysis-report.md"
+        }
+      },
+      "examples": [
+        "/analyze",
+        "/analyze path=./src",
+        "/analyze output=my-report.md",
+        "/quality path=./NoLock.Social.Core output=core-analysis.md"
+      ]
+    },
+    {
+      "name": "analyze-detailed",
+      "description": "Run comprehensive code analysis with OOD patterns and SOLID violations",
+      "script": "echo 'Running detailed analysis...' && ./scripts/analyze-code-quality.sh ${path:-.} ${output:-detailed-report.md} && echo '\\n=== Analyzing OOD Patterns ===' && find ${path:-.} -name '*.cs' -type f | xargs grep -l 'class.*:.*,.*,' | wc -l | xargs echo 'Multiple inheritance attempts:' && find ${path:-.} -name '*.cs' -type f | xargs grep -c 'public interface' | awk '$1>5' | wc -l | xargs echo 'Interface segregation violations:' && echo 'Analysis complete!'",
+      "args": {
+        "path": {
+          "description": "Path to analyze",
+          "required": false,
+          "default": "."
+        },
+        "output": {
+          "description": "Output file name",
+          "required": false,
+          "default": "detailed-report.md"
+        }
+      }
+    },
+    {
+      "name": "find-patterns",
+      "description": "Find specific anti-patterns or code patterns",
+      "script": "grep -r \"${pattern}\" ${path:-.} --include=\"*.${ext:-cs}\" | head -${limit:-20}",
+      "args": {
+        "pattern": {
+          "description": "Pattern to search for",
+          "required": true
+        },
+        "path": {
+          "description": "Path to search in",
+          "required": false,
+          "default": "."
+        },
+        "ext": {
+          "description": "File extension",
+          "required": false,
+          "default": "cs"
+        },
+        "limit": {
+          "description": "Max results to show",
+          "required": false,
+          "default": "20"
+        }
+      },
+      "examples": [
+        "/find-patterns pattern=\"try.*catch.*LogError\"",
+        "/find-patterns pattern=\"async void\" path=./src",
+        "/find-patterns pattern=\".Result|.Wait()\" ext=cs limit=10"
+      ]
+    },
+    {
+      "name": "complexity",
+      "description": "Calculate cyclomatic complexity for methods",
+      "script": "echo 'Analyzing cyclomatic complexity...' && find ${path:-.} -name '*.cs' -type f | while read f; do echo \"\\n=== $(basename $f) ===\"; grep -n 'if\\|else\\|for\\|while\\|case\\|catch\\|&&\\|||\\|\\?:' \"$f\" | wc -l | xargs echo 'Complexity points:'; done | head -${limit:-50}",
+      "args": {
+        "path": {
+          "description": "Path to analyze",
+          "required": false,
+          "default": "."
+        },
+        "limit": {
+          "description": "Max files to analyze",
+          "required": false,
+          "default": "50"
+        }
+      }
+    },
+    {
+      "name": "tech-debt",
+      "description": "Find and report technical debt markers",
+      "script": "echo '=== Technical Debt Report ===' && echo '' && echo 'TODO items:' && grep -r 'TODO' ${path:-.} --include='*.cs' | wc -l && echo '' && echo 'FIXME items:' && grep -r 'FIXME' ${path:-.} --include='*.cs' | wc -l && echo '' && echo 'HACK items:' && grep -r 'HACK' ${path:-.} --include='*.cs' | wc -l && echo '' && echo 'Deprecated items:' && grep -r '@Deprecated\\|\\[Obsolete' ${path:-.} --include='*.cs' | wc -l && echo '' && echo '=== Top Files with Debt ===' && grep -r 'TODO\\|FIXME\\|HACK' ${path:-.} --include='*.cs' | cut -d: -f1 | sort | uniq -c | sort -rn | head -10",
+      "args": {
+        "path": {
+          "description": "Path to analyze",
+          "required": false,
+          "default": "."
+        }
+      }
+    }
+  ]
+}
