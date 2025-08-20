@@ -61,19 +61,27 @@ namespace NoLock.Social.Core.OCR.Services
                 // Convert image data to bytes for cache key generation
                 var documentBytes = ConvertImageDataToBytes(request.ImageData);
                 
-                // Check cache first
-                var cachedResult = await _cache.GetResultAsync(documentBytes, cancellationToken);
-                if (cachedResult != null)
+                // Check cache first (with error handling to continue if cache fails)
+                try
                 {
-                    _logger.LogInformation(
-                        "Cache hit for document submission. Returning cached result with TrackingId: {TrackingId}",
-                        cachedResult.TrackingId);
+                    var cachedResult = await _cache.GetResultAsync(documentBytes, cancellationToken);
+                    if (cachedResult != null)
+                    {
+                        _logger.LogInformation(
+                            "Cache hit for document submission. Returning cached result with TrackingId: {TrackingId}",
+                            cachedResult.TrackingId);
+                        
+                        // Convert cached status response to submission response
+                        return ConvertToSubmissionResponse(cachedResult);
+                    }
                     
-                    // Convert cached status response to submission response
-                    return ConvertToSubmissionResponse(cachedResult);
+                    _logger.LogDebug("Cache miss for document submission. Forwarding to OCR service");
                 }
-
-                _logger.LogDebug("Cache miss for document submission. Forwarding to OCR service");
+                catch (Exception cacheEx)
+                {
+                    // Log cache failure but continue with direct OCR service call
+                    _logger.LogWarning(cacheEx, "Failed to read from cache, continuing without cache");
+                }
                 
                 // Cache miss - forward to inner service
                 var response = await _innerService.SubmitDocumentAsync(request, cancellationToken);

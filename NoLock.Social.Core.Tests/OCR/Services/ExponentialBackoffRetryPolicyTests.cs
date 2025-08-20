@@ -230,7 +230,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             cts.Cancel();
             
             // Assert
-            await Assert.ThrowsAsync<OperationCanceledException>(
+            await Assert.ThrowsAsync<TaskCanceledException>(
                 () => _retryPolicy.ExecuteAsync(operation.Object, cts.Token));
         }
     }
