@@ -171,15 +171,15 @@ public class PerformanceMonitoringService : IPerformanceMonitoringService
                 TotalExecutions = metricsList.Count,
                 SuccessfulExecutions = successCount,
                 FailedExecutions = metricsList.Count - successCount,
-                MinDuration = durations.First(),
-                MaxDuration = durations.Last(),
+                MinDuration = durations.FirstOrDefault(TimeSpan.Zero),
+                MaxDuration = durations.LastOrDefault(TimeSpan.Zero),
                 AverageDuration = TimeSpan.FromMilliseconds(durations.Average(d => d.TotalMilliseconds)),
                 MedianDuration = GetPercentile(durations, 50),
                 P95Duration = GetPercentile(durations, 95),
                 P99Duration = GetPercentile(durations, 99),
                 AverageMemoryUsedBytes = (long)metricsList.Average(m => m.MemoryUsedBytes),
-                FirstExecution = metricsList.First().StartTime,
-                LastExecution = metricsList.Last().StartTime
+                FirstExecution = metricsList.FirstOrDefault()?.StartTime ?? DateTime.UtcNow,
+                LastExecution = metricsList.LastOrDefault()?.StartTime ?? DateTime.UtcNow
             };
         }
     }

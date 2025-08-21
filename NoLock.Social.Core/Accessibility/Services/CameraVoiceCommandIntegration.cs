@@ -239,11 +239,22 @@ namespace NoLock.Social.Core.Accessibility.Services
                 _logger.LogInformation("Executing voice command: Switch camera");
                 var availableCameras = await _cameraService.GetAvailableCamerasAsync();
                 
-                if (availableCameras.Length > 1)
+                if (availableCameras.Length >= 2)
                 {
                     // Simple implementation: switch to the next available camera
                     // In a real implementation, you might want to track the current camera
-                    await _cameraService.SwitchCameraAsync(availableCameras[1]);
+                    // Use defensive array access with explicit bounds check
+                    var targetCamera = availableCameras.ElementAtOrDefault(1);
+                    if (targetCamera != null)
+                    {
+                        await _cameraService.SwitchCameraAsync(targetCamera);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Unable to access second camera despite length check");
+                        return;
+                    }
+                    
                     _logger.LogInformation("Camera switched successfully via voice command");
                 }
                 else
