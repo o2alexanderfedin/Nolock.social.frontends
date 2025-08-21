@@ -1,316 +1,227 @@
 using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using NoLock.Social.Core.OCR.Generated;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
-using NoLock.Social.Core.Common.Results;
-using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.OCR.Services
 {
     /// <summary>
-    /// Implementation of the OCR service for document processing using Mistral OCR API.
-    /// Handles document submission, validation, and tracking of OCR processing requests.
+    /// OCR service that calls the Mistral OCR API using a swagger-generated client
     /// </summary>
     public class OCRService : IOCRService
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<OCRService> _logger;
+        private const string BaseUrl = "https://nolock-ocr-services-qbhx5.ondigitalocean.app";
 
-        /// <summary>
-        /// Initializes a new instance of the OCRService class.
-        /// </summary>
-        /// <param name="httpClient">HTTP client for API communication.</param>
-        /// <param name="logger">Logger for service operations.</param>
         public OCRService(HttpClient httpClient, ILogger<OCRService> logger)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <summary>
-        /// Submits a document for OCR processing to the Mistral OCR API.
-        /// </summary>
-        /// <param name="request">The OCR submission request containing document data and metadata.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
-        /// <returns>
-        /// A task that represents the asynchronous operation. 
-        /// The task result contains the OCR submission response with tracking information.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
-        /// <exception cref="OCRServiceException">Thrown when OCR processing fails.</exception>
         public async Task<OCRSubmissionResponse> SubmitDocumentAsync(
             OCRSubmissionRequest request, 
             CancellationToken cancellationToken = default)
         {
-            // Validate input
             if (request == null)
-            {
-                _logger.LogError("OCR submission request is null");
                 throw new ArgumentNullException(nameof(request));
-            }
 
             if (string.IsNullOrWhiteSpace(request.ImageData))
-            {
-                _logger.LogError("Image data is null or empty for request {ClientRequestId}", 
-                    request.ClientRequestId);
-                throw new OCRServiceException("Image data is required for OCR processing");
-            }
+                throw new ArgumentException("Image data cannot be empty", nameof(request));
 
             try
             {
-                // Generate unique tracking ID
-                var trackingId = GenerateTrackingId();
-                var submittedAt = DateTime.UtcNow;
+                _logger.LogInformation("Submitting document for OCR processing. Type: {DocumentType}, ClientRequestId: {ClientRequestId}", 
+                    request.DocumentType, request.ClientRequestId);
 
-                _logger.LogInformation(
-                    "Submitting document for OCR processing. TrackingId: {TrackingId}, " +
-                    "DocumentType: {DocumentType}, ClientRequestId: {ClientRequestId}",
-                    trackingId, request.DocumentType, request.ClientRequestId);
+                // Initialize the generated client
+                var client = new MistralOCRClient(BaseUrl, _httpClient);
 
-                // TODO: Implement actual HTTP call to Mistral OCR API
-                // For now, mock the API call
-                await Task.Delay(100, cancellationToken); // Simulate API latency
+                // Convert base64 to byte array
+                byte[] imageBytes;
+                try
+                {
+                    imageBytes = Convert.FromBase64String(request.ImageData);
+                }
+                catch (FormatException ex)
+                {
+                    throw new ArgumentException("Invalid base64 image data", nameof(request), ex);
+                }
 
-                // Mock successful submission
-                var response = new OCRSubmissionResponse
+                // Create file parameter for the API
+                using var stream = new MemoryStream(imageBytes);
+                var fileParam = new FileParameter(stream, "document.jpg");
+
+                // Route to the appropriate endpoint based on document type
+                string trackingId;
+                switch (request.DocumentType)
+                {
+                    case DocumentType.Receipt:
+                        var receiptResult = await client.ProcessReceiptOcrAsync(fileParam, cancellationToken);
+                        trackingId = ExtractTrackingId(receiptResult);
+                        break;
+
+                    case DocumentType.Invoice:
+                        // Route invoice to receipt endpoint as they're similar
+                        _logger.LogInformation("Routing {DocumentType} to receipt endpoint", request.DocumentType);
+                        var invoiceResult = await client.ProcessReceiptOcrAsync(fileParam, cancellationToken);
+                        trackingId = ExtractTrackingId(invoiceResult);
+                        break;
+
+                    default:
+                        // For unsupported types, route to receipt endpoint as default
+                        _logger.LogWarning("Document type {DocumentType} not directly supported, routing to receipt endpoint", 
+                            request.DocumentType);
+                        var defaultResult = await client.ProcessReceiptOcrAsync(fileParam, cancellationToken);
+                        trackingId = ExtractTrackingId(defaultResult);
+                        break;
+                }
+
+                _logger.LogInformation("Document submitted successfully. TrackingId: {TrackingId}", trackingId);
+
+                return new OCRSubmissionResponse
                 {
                     TrackingId = trackingId,
                     Status = OCRProcessingStatus.Queued,
-                    SubmittedAt = submittedAt,
-                    EstimatedCompletionTime = submittedAt.AddMinutes(2) // Estimate 2 minutes for processing
+                    SubmittedAt = DateTime.UtcNow,
+                    EstimatedCompletionTime = DateTime.UtcNow.AddMinutes(2)
                 };
-
-                _logger.LogInformation(
-                    "Document successfully submitted for OCR processing. TrackingId: {TrackingId}, " +
-                    "Status: {Status}, EstimatedCompletion: {EstimatedCompletionTime}",
-                    response.TrackingId, response.Status, response.EstimatedCompletionTime);
-
-                return response;
+            }
+            catch (MistralOCRException ex)
+            {
+                _logger.LogError(ex, "Mistral OCR API error. Status: {StatusCode}, Response: {Response}", 
+                    ex.StatusCode, ex.Response);
+                
+                throw new InvalidOperationException(
+                    $"OCR API error: {ex.Message}", 
+                    ex);
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, 
-                    "HTTP request failed during OCR submission for ClientRequestId: {ClientRequestId}",
-                    request.ClientRequestId);
-                throw new OCRServiceException("Failed to communicate with OCR API", ex);
+                _logger.LogError(ex, "Network error calling OCR API");
+                throw new InvalidOperationException(
+                    "Network error occurred while submitting document", 
+                    ex);
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, 
-                    "OCR submission cancelled for ClientRequestId: {ClientRequestId}",
-                    request.ClientRequestId);
-                throw new OCRServiceException("OCR submission was cancelled", ex);
+                _logger.LogWarning(ex, "OCR submission cancelled or timed out");
+                throw new InvalidOperationException(
+                    "OCR submission was cancelled or timed out", 
+                    ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, 
-                    "Unexpected error during OCR submission for ClientRequestId: {ClientRequestId}",
-                    request.ClientRequestId);
-                throw new OCRServiceException("An unexpected error occurred during OCR submission", ex);
+                _logger.LogError(ex, "Unexpected error during OCR submission");
+                throw new InvalidOperationException(
+                    "An unexpected error occurred during OCR submission", 
+                    ex);
             }
         }
 
-        /// <summary>
-        /// Gets the current processing status of an OCR submission by tracking ID.
-        /// </summary>
-        /// <param name="trackingId">The unique tracking identifier for the OCR submission.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
-        /// <returns>
-        /// A task that represents the asynchronous operation.
-        /// The task result contains the OCR status response with current processing state.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">Thrown when trackingId is null or empty.</exception>
-        /// <exception cref="OCRServiceException">Thrown when status retrieval fails.</exception>
         public async Task<OCRStatusResponse> GetStatusAsync(
-            string trackingId,
+            string trackingId, 
             CancellationToken cancellationToken = default)
         {
-            // Validate input
             if (string.IsNullOrWhiteSpace(trackingId))
-            {
-                _logger.LogError("Tracking ID is null or empty for status check");
                 throw new ArgumentNullException(nameof(trackingId));
-            }
 
-            var result = await _logger.ExecuteWithLogging(async () =>
+            try
             {
-                _logger.LogInformation("Checking OCR status for TrackingId: {TrackingId}", trackingId);
+                _logger.LogDebug("Checking OCR status for TrackingId: {TrackingId}", trackingId);
 
-                // TODO: Implement actual HTTP call to Mistral OCR API status endpoint
-                // For now, mock the status check with simulated progression
-                await Task.Delay(50, cancellationToken); // Simulate API latency
+                // Initialize the generated client
+                var client = new MistralOCRClient(BaseUrl, _httpClient);
 
-                // Mock status response with simulated progression
-                var now = DateTime.UtcNow;
-                var submittedAt = now.AddMinutes(-1); // Assume submitted 1 minute ago
+                // Note: The swagger spec doesn't show a status endpoint
+                // This might need to be implemented differently based on actual API
+                // For now, returning a mock response
                 
-                // Simulate different statuses based on tracking ID hash for consistency
-                var hashCode = Math.Abs(trackingId.GetHashCode());
-                var simulatedProgress = (hashCode % 100) + 20; // Between 20-119
+                // TODO: Replace with actual status check when endpoint is available
+                _logger.LogWarning("Status endpoint not available in current API spec, returning mock status");
                 
-                OCRProcessingStatus status;
-                int progressPercentage;
-                string statusMessage;
-                DateTime? startedAt = null;
-                DateTime? completedAt = null;
-                int? estimatedSecondsRemaining = null;
-                int? queuePosition = null;
-
-                if (simulatedProgress < 30)
-                {
-                    status = OCRProcessingStatus.Queued;
-                    progressPercentage = 0;
-                    statusMessage = "Document is queued for processing";
-                    queuePosition = simulatedProgress / 10 + 1;
-                    estimatedSecondsRemaining = 120;
-                }
-                else if (simulatedProgress < 90)
-                {
-                    status = OCRProcessingStatus.Processing;
-                    progressPercentage = simulatedProgress - 30;
-                    statusMessage = $"Processing document... {progressPercentage}% complete";
-                    startedAt = submittedAt.AddSeconds(30);
-                    estimatedSecondsRemaining = (int)((100 - progressPercentage) * 1.5);
-                }
-                else
-                {
-                    status = OCRProcessingStatus.Complete;
-                    progressPercentage = 100;
-                    statusMessage = "Document processing completed successfully";
-                    startedAt = submittedAt.AddSeconds(30);
-                    completedAt = submittedAt.AddSeconds(90);
-                }
-
-                var response = new OCRStatusResponse
+                return new OCRStatusResponse
                 {
                     TrackingId = trackingId,
-                    Status = status,
-                    ProgressPercentage = progressPercentage,
-                    SubmittedAt = submittedAt,
-                    StartedAt = startedAt,
-                    CompletedAt = completedAt,
-                    EstimatedSecondsRemaining = estimatedSecondsRemaining,
-                    StatusMessage = statusMessage,
-                    QueuePosition = queuePosition,
-                    ErrorMessage = null,
-                    ErrorCode = null,
-                    ResultUrl = status == OCRProcessingStatus.Complete ? 
-                        $"/api/ocr/results/{trackingId}" : null,
-                    ResultData = status == OCRProcessingStatus.Complete ? 
-                        CreateMockResultData() : null
+                    Status = OCRProcessingStatus.Processing,
+                    ProgressPercentage = 50,
+                    SubmittedAt = DateTime.UtcNow.AddMinutes(-1),
+                    StatusMessage = "Processing document",
+                    QueuePosition = null
                 };
-
-                _logger.LogInformation(
-                    "OCR status retrieved. TrackingId: {TrackingId}, Status: {Status}, " +
-                    "Progress: {Progress}%, Message: {Message}",
-                    trackingId, status, progressPercentage, statusMessage);
-
-                return response;
-            }, 
-            $"OCR status check for TrackingId: {trackingId}");
-
-            // Handle specific exception types by examining the Result.Exception
-            if (!result.IsSuccess)
+            }
+            catch (Exception ex)
             {
-                var ex = result.Exception;
-                
-                if (ex is HttpRequestException)
+                _logger.LogError(ex, "Error checking OCR status for TrackingId: {TrackingId}", trackingId);
+                throw new InvalidOperationException(
+                    $"Failed to check status for tracking ID: {trackingId}", 
+                    ex);
+            }
+        }
+
+        private string ExtractTrackingId(AcceptedResult? result)
+        {
+            // Extract tracking ID from the AcceptedResult
+            // Check if the result contains a tracking ID in its Value property
+            if (result?.Value != null)
+            {
+                // Try to extract tracking ID from the value
+                var valueStr = result.Value.ToString();
+                if (!string.IsNullOrWhiteSpace(valueStr))
                 {
-                    throw new OCRServiceException("Failed to communicate with OCR API", ex);
-                }
-                else if (ex is TaskCanceledException)
-                {
-                    throw new OCRServiceException("Status check was cancelled", ex);
-                }
-                else
-                {
-                    throw new OCRServiceException("An unexpected error occurred during status check", ex);
+                    _logger.LogDebug("Extracted tracking ID from response: {TrackingId}", valueStr);
+                    return valueStr;
                 }
             }
-
-            return result.Value;
+            
+            // If no tracking ID in response, generate a unique ID
+            var trackingId = Guid.NewGuid().ToString("N");
+            _logger.LogDebug("Generated tracking ID: {TrackingId}", trackingId);
+            
+            return trackingId;
         }
 
-        /// <summary>
-        /// Creates mock OCR result data for testing purposes.
-        /// </summary>
-        /// <returns>Mock OCR result data.</returns>
-        private OCRResultData CreateMockResultData()
+        private string DetectImageContentType(byte[] imageBytes)
         {
-            return new OCRResultData
-            {
-                ExtractedText = "This is sample extracted text from the OCR document.",
-                ConfidenceScore = 95.5,
-                DetectedLanguage = "en",
-                PageCount = 1,
-                StructuredData = "{}",
-                ExtractedFields = new List<ExtractedField>
-                {
-                    new ExtractedField
-                    {
-                        FieldName = "DocumentType",
-                        Value = "Invoice",
-                        Confidence = 98.2,
-                        BoundingBox = new BoundingBox
-                        {
-                            X = 100,
-                            Y = 50,
-                            Width = 200,
-                            Height = 30,
-                            PageNumber = 1
-                        }
-                    }
-                },
-                Metrics = new ProcessingMetrics
-                {
-                    ProcessingTimeMs = 1500,
-                    CharacterCount = 250,
-                    WordCount = 45,
-                    LineCount = 5,
-                    ImageQualityScore = 85.0
-                }
-            };
-        }
+            // Simple image type detection based on file headers
+            if (imageBytes.Length < 4)
+                return "application/octet-stream";
 
-        /// <summary>
-        /// Generates a unique tracking ID for the OCR submission.
-        /// </summary>
-        /// <returns>A unique tracking identifier.</returns>
-        private string GenerateTrackingId()
-        {
-            // Format: OCR-YYYYMMDD-HHMMSS-XXXX
-            // Where XXXX is a random 4-character alphanumeric string
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
-            var random = Guid.NewGuid().ToString("N").Substring(0, 4).ToUpper();
-            return $"OCR-{timestamp}-{random}";
-        }
-    }
+            // JPEG
+            if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8)
+                return "image/jpeg";
 
-    /// <summary>
-    /// Exception thrown when OCR service operations fail.
-    /// </summary>
-    public class OCRServiceException : Exception
-    {
-        /// <summary>
-        /// Initializes a new instance of the OCRServiceException class.
-        /// </summary>
-        /// <param name="message">The error message.</param>
-        public OCRServiceException(string message) : base(message)
-        {
-        }
+            // PNG
+            if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50 && imageBytes[2] == 0x4E && imageBytes[3] == 0x47)
+                return "image/png";
 
-        /// <summary>
-        /// Initializes a new instance of the OCRServiceException class.
-        /// </summary>
-        /// <param name="message">The error message.</param>
-        /// <param name="innerException">The inner exception.</param>
-        public OCRServiceException(string message, Exception innerException) 
-            : base(message, innerException)
-        {
+            // GIF
+            if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46)
+                return "image/gif";
+
+            // BMP
+            if (imageBytes[0] == 0x42 && imageBytes[1] == 0x4D)
+                return "image/bmp";
+
+            // WebP
+            if (imageBytes.Length > 12 &&
+                imageBytes[0] == 0x52 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46 && imageBytes[3] == 0x46 &&
+                imageBytes[8] == 0x57 && imageBytes[9] == 0x45 && imageBytes[10] == 0x42 && imageBytes[11] == 0x50)
+                return "image/webp";
+
+            // TIFF
+            if ((imageBytes[0] == 0x49 && imageBytes[1] == 0x49 && imageBytes[2] == 0x2A && imageBytes[3] == 0x00) ||
+                (imageBytes[0] == 0x4D && imageBytes[1] == 0x4D && imageBytes[2] == 0x00 && imageBytes[3] == 0x2A))
+                return "image/tiff";
+
+            // Default
+            return "application/octet-stream";
         }
     }
 }
