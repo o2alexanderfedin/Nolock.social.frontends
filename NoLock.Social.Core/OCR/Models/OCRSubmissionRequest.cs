@@ -35,38 +35,13 @@ namespace NoLock.Social.Core.OCR.Models
     public enum DocumentType
     {
         /// <summary>
-        /// General document type
-        /// </summary>
-        General = 0,
-
-        /// <summary>
-        /// Invoice or billing document
-        /// </summary>
-        Invoice = 1,
-
-        /// <summary>
         /// Receipt from purchase
         /// </summary>
-        Receipt = 2,
+        Receipt = 0,
 
         /// <summary>
-        /// Identity document (ID card, passport, etc.)
+        /// Bank check
         /// </summary>
-        IdentityDocument = 3,
-
-        /// <summary>
-        /// Business card
-        /// </summary>
-        BusinessCard = 4,
-
-        /// <summary>
-        /// Form or application
-        /// </summary>
-        Form = 5,
-
-        /// <summary>
-        /// Contract or legal document
-        /// </summary>
-        Contract = 6
+        Check = 1
     }
 }
