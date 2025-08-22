@@ -29,16 +29,16 @@ classDiagram
     
     class ISigningService {
         <<interface>>
-        +signContent(content: string) Promise~SignedContent~
-        +signContentWithKey(content: string, privateKey: PrivateKey) Promise~SignedContent~
+        +signContent(content: string) Promise~SignedTarget~
+        +signContentWithKey(content: string, privateKey: PrivateKey) Promise~SignedTarget~
         +requiresIdentity() boolean
     }
     
     class IVerificationService {
         <<interface>>
         +verifySignature(content: string, signature: string, publicKey: string) Promise~boolean~
-        +verifySignedContent(signedContent: SignedContent) Promise~boolean~
-        +batchVerify(items: SignedContent[]) Promise~VerificationResult[]~
+        +verifySignedContent(signedContent: SignedTarget) Promise~boolean~
+        +batchVerify(items: SignedTarget[]) Promise~VerificationResult[]~
     }
     
     ICryptoService <|-- IIdentityService
@@ -58,9 +58,8 @@ classDiagram
         +truncatedDisplay() string
     }
     
-    class SignedContent {
-        +content: string
-        +contentHash: string
+    class SignedTarget {
+        +targetHash: string
         +signature: string
         +publicKey: string
         +algorithm: "Ed25519"
@@ -82,8 +81,8 @@ classDiagram
     }
     
     Identity --> PublicKey
-    SignedContent --> Identity
-    VerificationResult --> SignedContent
+    SignedTarget --> Identity
+    VerificationResult --> SignedTarget
 ```
 
 ## 2. Integration Patterns
@@ -143,7 +142,7 @@ sequenceDiagram
     SigningService->>IdentityService: getCurrentIdentity()
     IdentityService-->>SigningService: Identity
     
-    SigningService-->>UI: SignedContent
+    SigningService-->>UI: SignedTarget
     UI-->>User: Content signed successfully
 ```
 
@@ -155,8 +154,8 @@ sequenceDiagram
 classDiagram
     class IStorageAdapter {
         <<interface>>
-        +storeSignedContent(content: SignedContent) Promise~ContentAddress~
-        +retrieveSignedContent(address: ContentAddress) Promise~SignedContent~
+        +storeSignedContent(content: SignedTarget) Promise~ContentAddress~
+        +retrieveSignedContent(address: ContentAddress) Promise~SignedTarget~
         +verifyAndStore(content: string, signature: string, publicKey: string) Promise~ContentAddress~
         +exists(address: ContentAddress) Promise~boolean~
     }
@@ -190,9 +189,9 @@ sequenceDiagram
     participant CryptoService
     participant CAS
     
-    App->>StorageAdapter: storeSignedContent(signedContent)
+    App->>StorageAdapter: storeSignedContent(signedTarget)
     
-    StorageAdapter->>CryptoService: verifySignature(content, sig, pubKey)
+    StorageAdapter->>CryptoService: verifySignature(targetHash, sig, pubKey)
     CryptoService-->>StorageAdapter: isValid
     
     alt Signature Invalid
