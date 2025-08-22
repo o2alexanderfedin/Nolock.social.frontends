@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Generated;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
-using NoLock.Social.Core.Storage.Interfaces;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -18,16 +17,13 @@ namespace NoLock.Social.Core.OCR.Services
     public class ReceiptOCRService : IOCRService
     {
         private readonly MistralOCRClient _ocrClient;
-        private readonly ICASService _casService;
         private readonly ILogger<ReceiptOCRService> _logger;
 
         public ReceiptOCRService(
-            MistralOCRClient ocrClient, 
-            ICASService casService,
+            MistralOCRClient ocrClient,
             ILogger<ReceiptOCRService> logger)
         {
             _ocrClient = ocrClient ?? throw new ArgumentNullException(nameof(ocrClient));
-            _casService = casService ?? throw new ArgumentNullException(nameof(casService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -47,12 +43,8 @@ namespace NoLock.Social.Core.OCR.Services
             {
                 _logger.LogInformation("Processing receipt document");
 
-                // Store image in CAS
-                var imageHash = await _casService.StoreAsync(
-                    request.ImageData, 
-                    ct);
-                
-                _logger.LogDebug("Stored receipt image in CAS with hash: {Hash}", imageHash);
+                // Image storage removed - handled externally if needed
+                _logger.LogDebug("Processing receipt image");
 
                 // Create file parameter for the API
                 using var stream = new MemoryStream(request.ImageData);
@@ -73,12 +65,8 @@ namespace NoLock.Social.Core.OCR.Services
                         receipt.Totals?.Total ?? 0,
                         receiptResult.ProcessingTime);
 
-                    // Store OCR result in CAS
-                    var resultHash = await _casService.StoreAsync(
-                        receiptResult.ModelData, 
-                        ct);
-                    
-                    _logger.LogDebug("Stored OCR result in CAS with hash: {Hash}", resultHash);
+                    // Result storage removed - handled externally if needed
+                    _logger.LogDebug("OCR processing completed successfully");
                 }
                 else
                 {

@@ -6,8 +6,6 @@ using NoLock.Social.Core.OCR.Services;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Generated;
-using NoLock.Social.Core.Storage.Interfaces;
-using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Net.Http;
 
@@ -47,8 +45,7 @@ namespace NoLock.Social.Core.Extensions
                 return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
             });
             
-            // Register CAS service for content storage
-            services.AddScoped<ICASService, CASService>();
+            // CAS service removed - storage handled externally
             
             // Register specific OCR services for each document type with keys
             services.AddKeyedScoped<IOCRService, ReceiptOCRService>(DocumentType.Receipt);
@@ -68,7 +65,7 @@ namespace NoLock.Social.Core.Extensions
             // Confidence score service for result validation
             services.AddScoped<IConfidenceScoreService, ConfidenceScoreService>();
             
-            // Document processing queue for batch operations
+            // Document processing queue for batch operations (in-memory only)
             services.AddSingleton<IBackgroundProcessingQueue, DocumentProcessingQueue>();
             
             // Wake lock service for keeping device awake during processing
@@ -96,8 +93,7 @@ namespace NoLock.Social.Core.Extensions
                 return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
             });
             
-            // Register CAS service for content storage
-            services.AddScoped<ICASService, CASService>();
+            // CAS service removed - storage handled externally
             
             // Register specific OCR services for each document type with keys
             services.AddKeyedScoped<IOCRService, ReceiptOCRService>(DocumentType.Receipt);

@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Models;
-using NoLock.Social.Core.Storage.Interfaces;
 using NoLock.Social.Core.Common.Guards;
 using NoLock.Social.Core.Resources;
 using NoLock.Social.Core.Common.Results;
@@ -19,9 +18,6 @@ namespace NoLock.Social.Core.Camera.Services
     public class CameraService : ICameraService, IDisposable
     {
         private readonly IJSRuntime _jsRuntime;
-        private readonly IOfflineStorageService _offlineStorage;
-        private readonly IOfflineQueueService _offlineQueue;
-        private readonly IConnectivityService _connectivity;
         private readonly ILogger<CameraService> _logger;
         private CameraPermissionState _currentPermissionState = CameraPermissionState.Prompt;
         private CameraStream _currentStream = null;
@@ -31,15 +27,9 @@ namespace NoLock.Social.Core.Camera.Services
 
         public CameraService(
             IJSRuntime jsRuntime,
-            IOfflineStorageService offlineStorage,
-            IOfflineQueueService offlineQueue,
-            IConnectivityService connectivity,
             ILogger<CameraService> logger = null)
         {
             _jsRuntime = Guard.AgainstNull(jsRuntime);
-            _offlineStorage = Guard.AgainstNull(offlineStorage);
-            _offlineQueue = Guard.AgainstNull(offlineQueue);
-            _connectivity = Guard.AgainstNull(connectivity);
             _logger = logger;
         }
 
@@ -50,41 +40,9 @@ namespace NoLock.Social.Core.Camera.Services
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(
                 async () =>
                 {
-                    try
-                    {
-                        // Load all sessions from IndexedDB
-                        var sessions = await _offlineStorage.GetAllSessionsAsync();
-                        
-                        foreach (var session in sessions)
-                        {
-                            if (session != null && !string.IsNullOrEmpty(session.SessionId))
-                            {
-                                _activeSessions[session.SessionId] = session;
-                            }
-                        }
-                        
-                        // Trigger processing of pending operations
-                        await _offlineQueue.ProcessQueueAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        // Clear any corrupted data that might have been partially loaded
-                        var corruptedSessionIds = _activeSessions
-                            .Where(kvp => kvp.Value == null || string.IsNullOrEmpty(kvp.Value.SessionId))
-                            .Select(kvp => kvp.Key)
-                            .ToList();
-                            
-                        foreach (var corruptedId in corruptedSessionIds)
-                        {
-                            _activeSessions.Remove(corruptedId);
-                        }
-                        
-                        // Log the error but don't rethrow - initialization should be resilient
-                        _logger.LogWarning(ex, "Error during camera service initialization, continuing with degraded state");
-                        
-                        // Don't rethrow - maintain graceful degradation
-                        // The application should continue to work even if some data can't be restored
-                    }
+                    // Initialize service - currently no persistent storage
+                    // Sessions are kept in memory only
+                    _logger?.LogInformation("Camera service initialized");
                 },
                 "InitializeAsync"
             );
@@ -215,15 +173,7 @@ namespace NoLock.Social.Core.Camera.Services
                 Quality = quality
             };
             
-            // Save image to offline storage (new functionality)
-            var saveResult = await (_logger ?? NullLogger<CameraService>.Instance)
-                .ExecuteWithLogging(async () =>
-                {
-                    await _offlineStorage.SaveImageAsync(capturedImage);
-                },
-                "Failed to save captured image to offline storage");
-
-            // Continue processing regardless of storage result - image capture is non-critical for storage
+            // Image captured successfully - no persistent storage currently
             
             return capturedImage;
         }
@@ -669,37 +619,7 @@ namespace NoLock.Social.Core.Camera.Services
             // Save to memory (existing functionality)
             _activeSessions[sessionId] = session;
             
-            // Save to offline storage (new functionality)
-            var saveResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                await _offlineStorage.SaveSessionAsync(session);
-            },
-            "SaveSessionToOfflineStorage");
-            
-            // Queue operation if offline (new functionality)
-            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                return !await _connectivity.IsOnlineAsync();
-            },
-            "CheckConnectivity");
-            
-            // If connectivity check fails, assume offline mode
-            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
-            
-            if (isOffline)
-            {
-                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-                {
-                    var operation = new OfflineOperation
-                    {
-                        OperationType = "session_create",
-                        Payload = JsonSerializer.Serialize(new { SessionId = sessionId, CreatedAt = session.CreatedAt }),
-                        Priority = 1 // Normal priority for session creation
-                    };
-                    await _offlineQueue.QueueOperationAsync(operation);
-                },
-                "QueueOfflineOperation");
-            }
+            // Session created in memory only - no persistent storage
             
             return sessionId;
         }
@@ -721,48 +641,7 @@ namespace NoLock.Social.Core.Camera.Services
             session.CurrentPageIndex = session.Pages.Count - 1;
             session.UpdateActivity(); // Track activity for timeout management
             
-            // Save image to offline storage (new functionality)
-            var saveImageResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                await _offlineStorage.SaveImageAsync(capturedImage);
-            },
-            "SaveImageToOfflineStorage");
-            
-            // Update session in offline storage (new functionality)
-            var saveSessionResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                await _offlineStorage.SaveSessionAsync(session);
-            },
-            "SaveSessionToOfflineStorage");
-            
-            // Queue operation if offline (new functionality)
-            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                return !await _connectivity.IsOnlineAsync();
-            },
-            "CheckConnectivity");
-            
-            // If connectivity check fails, assume offline mode
-            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
-            
-            if (isOffline)
-            {
-                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-                {
-                    var operation = new OfflineOperation
-                    {
-                        OperationType = "page_add",
-                        Payload = JsonSerializer.Serialize(new { 
-                            SessionId = sessionId, 
-                            ImageId = capturedImage.Timestamp.ToString("yyyyMMddHHmmssfff"),
-                            PageIndex = session.CurrentPageIndex 
-                        }),
-                        Priority = 0 // High priority for captured images
-                    };
-                    await _offlineQueue.QueueOperationAsync(operation);
-                },
-                "QueueOfflineOperation");
-            }
+            // Page added to session in memory only - no persistent storage
         }
 
         public async Task<CapturedImage[]> GetSessionPagesAsync(string sessionId)
@@ -817,33 +696,7 @@ namespace NoLock.Social.Core.Camera.Services
             
             session.UpdateActivity(); // Track activity for timeout management
             
-            // Queue operation if offline (new functionality)
-            var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-            {
-                return !await _connectivity.IsOnlineAsync();
-            },
-            "CheckConnectivity");
-            
-            // If connectivity check fails, assume offline mode
-            bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
-            
-            if (isOffline)
-            {
-                var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-                {
-                    var operation = new OfflineOperation
-                    {
-                        OperationType = "page_remove",
-                        Payload = JsonSerializer.Serialize(new { 
-                            SessionId = sessionId, 
-                            PageIndex = pageIndex 
-                        }),
-                        Priority = 2 // Lower priority for remove operations
-                    };
-                    await _offlineQueue.QueueOperationAsync(operation);
-                },
-                "QueueOfflineOperation");
-            }
+            // Page removed from session in memory only - no persistent storage
         }
 
         public async Task ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex)
@@ -906,31 +759,6 @@ namespace NoLock.Social.Core.Camera.Services
 
             if (_activeSessions.TryGetValue(sessionId, out var session))
             {
-                // Queue disposal operation if offline (new functionality)
-                var connectivityResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-                {
-                    return !await _connectivity.IsOnlineAsync();
-                },
-                "CheckConnectivity");
-                
-                // If connectivity check fails, assume offline mode
-                bool isOffline = connectivityResult.IsFailure || connectivityResult.Value;
-                
-                if (isOffline)
-                {
-                    var queueResult = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
-                    {
-                        var operation = new OfflineOperation
-                        {
-                            OperationType = "session_dispose",
-                            Payload = JsonSerializer.Serialize(new { SessionId = sessionId, DisposedAt = DateTime.UtcNow }),
-                            Priority = 2 // Low priority for disposal operations
-                        };
-                        await _offlineQueue.QueueOperationAsync(operation);
-                    },
-                    "QueueOfflineOperation");
-                }
-                
                 // Clear all pages to release memory
                 session.Pages.Clear();
                 

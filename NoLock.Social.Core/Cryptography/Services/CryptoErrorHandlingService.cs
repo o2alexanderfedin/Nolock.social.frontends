@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Cryptography.Interfaces;
-using NoLock.Social.Core.Storage.Interfaces;
 
 namespace NoLock.Social.Core.Cryptography.Services
 {
@@ -222,8 +221,7 @@ namespace NoLock.Social.Core.Cryptography.Services
                 }
             }
 
-            if (exception is StorageVerificationException)
-                return ErrorCategory.Storage;
+            // StorageVerificationException removed - storage handled externally
 
             if (exception is OutOfMemoryException)
                 return ErrorCategory.Memory;

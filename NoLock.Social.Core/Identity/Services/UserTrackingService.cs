@@ -7,17 +7,15 @@ using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
-using NoLock.Social.Core.Storage.Interfaces;
 
 namespace NoLock.Social.Core.Identity.Services
 {
     /// <summary>
     /// Service implementation for tracking user identity existence and history.
-    /// Uses content-addressable storage to determine if a user is new or returning.
+    /// Tracks users in memory only without persistent storage.
     /// </summary>
     public class UserTrackingService : IUserTrackingService
     {
-        private readonly IStorageAdapterService _storageAdapter;
         private readonly ILogger<UserTrackingService> _logger;
         
         // Cache user tracking info for the session duration to avoid repeated queries
@@ -25,10 +23,8 @@ namespace NoLock.Social.Core.Identity.Services
         private readonly object _cacheLock = new();
 
         public UserTrackingService(
-            IStorageAdapterService storageAdapter,
             ILogger<UserTrackingService> logger)
         {
-            _storageAdapter = storageAdapter ?? throw new ArgumentNullException(nameof(storageAdapter));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -141,34 +137,13 @@ namespace NoLock.Social.Core.Identity.Services
 
             var contentList = new List<(string address, DateTime timestamp, long size)>();
 
+            // No persistent storage - return empty summary
             var processResult = await _logger.ExecuteWithLogging(
                 async () =>
                 {
-                    await foreach (var metadata in _storageAdapter.ListAllContentAsync())
-                    {
-                        if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
-                        {
-                            summary.TotalContent++;
-                            summary.TotalStorageBytes += metadata.Size;
-                            
-                            // Track for recent content
-                            contentList.Add((metadata.ContentAddress, metadata.Timestamp, metadata.Size));
-
-                            // Update last activity
-                            if (!summary.LastActivity.HasValue || metadata.Timestamp > summary.LastActivity)
-                            {
-                                summary.LastActivity = metadata.Timestamp;
-                            }
-                        }
-                    }
-
-                    // Get the 10 most recent content addresses
-                    summary.RecentContentAddresses = contentList
-                        .OrderByDescending(c => c.timestamp)
-                        .Take(10)
-                        .Select(c => c.address)
-                        .ToList();
-                    
+                    // Without storage adapter, we can't query historical content
+                    // Return an empty summary
+                    await Task.CompletedTask;
                     return summary;
                 },
                 "getting user activity summary");
@@ -191,32 +166,18 @@ namespace NoLock.Social.Core.Identity.Services
         /// <returns>A tuple containing content count, first seen timestamp, and last seen timestamp</returns>
         private async Task<(int contentCount, DateTime? firstSeen, DateTime? lastSeen)> QueryUserContentAsync(string publicKeyBase64)
         {
-            var contentCount = 0;
-            DateTime? firstSeen = null;
-            DateTime? lastSeen = null;
-
-            await foreach (var metadata in _storageAdapter.ListAllContentAsync())
+            // Without storage adapter, we can't query content
+            // Check in-memory cache only
+            lock (_cacheLock)
             {
-                // Check if this content was signed by the given public key
-                if (string.Equals(metadata.PublicKeyBase64, publicKeyBase64, StringComparison.Ordinal))
+                if (_cache.TryGetValue(publicKeyBase64, out var cached))
                 {
-                    contentCount++;
-
-                    // Track first seen timestamp
-                    if (!firstSeen.HasValue || metadata.Timestamp < firstSeen)
-                    {
-                        firstSeen = metadata.Timestamp;
-                    }
-
-                    // Track last seen timestamp
-                    if (!lastSeen.HasValue || metadata.Timestamp > lastSeen)
-                    {
-                        lastSeen = metadata.Timestamp;
-                    }
+                    return (cached.ContentCount, cached.FirstSeen, cached.LastSeen);
                 }
             }
-
-            return (contentCount, firstSeen, lastSeen);
+            
+            await Task.CompletedTask;
+            return (0, null, null);
         }
 
         /// <summary>
