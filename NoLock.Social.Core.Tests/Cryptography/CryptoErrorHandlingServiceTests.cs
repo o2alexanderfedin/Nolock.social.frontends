@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
-using NoLock.Social.Core.Storage.Interfaces;
 using Xunit;
 
 namespace NoLock.Social.Core.Tests.Cryptography
@@ -101,27 +100,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             result.IsCritical.Should().BeFalse();
         }
 
-        [Fact]
-        public async Task HandleErrorAsync_ShouldCategorizeStorageError()
-        {
-            // Arrange
-            var exception = new StorageVerificationException("Content verification failed", "hash123");
-            var context = new ErrorContext
-            {
-                Operation = "RetrieveContent",
-                Component = "StorageAdapterService"
-            };
-
-            // Act
-            var result = await _errorHandler.HandleErrorAsync(exception, context);
-
-            // Assert
-            result.Should().NotBeNull();
-            result.Category.Should().Be(ErrorCategory.Storage);
-            result.UserMessage.Should().Contain("storage");
-            result.RecoverySuggestions.Should().NotBeEmpty();
-            result.IsCritical.Should().BeTrue();
-        }
+        // Storage error test removed - StorageVerificationException no longer exists
 
         [Fact]
         public async Task HandleErrorAsync_ShouldCategorizeMemoryError()

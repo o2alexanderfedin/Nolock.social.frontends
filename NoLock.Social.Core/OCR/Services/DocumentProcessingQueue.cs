@@ -4,21 +4,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using TG.Blazor.IndexedDB;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
-using NoLock.Social.Core.Storage;
 
 namespace NoLock.Social.Core.OCR.Services
 {
     /// <summary>
-    /// Implementation of background processing queue for OCR documents with IndexedDB persistence.
-    /// Manages queue state, persistence, and provides thread-safe access to document queue operations.
+    /// Implementation of background processing queue for OCR documents.
+    /// Manages queue state in memory and provides thread-safe access to document queue operations.
     /// </summary>
     public class DocumentProcessingQueue : IBackgroundProcessingQueue, IDisposable
     {
-        private readonly IIndexedDBManagerWrapper _dbManager;
-        private readonly string _storeName = "ocr_processing_queue";
         
         // Thread-safe collections for in-memory queue state
         private readonly ConcurrentDictionary<string, QueuedDocument> _queuedDocuments;
@@ -38,11 +34,8 @@ namespace NoLock.Social.Core.OCR.Services
         /// <summary>
         /// Initializes a new instance of the DocumentProcessingQueue class.
         /// </summary>
-        /// <param name="dbManager">IndexedDB manager for persistence operations.</param>
-        /// <exception cref="ArgumentNullException">Thrown when dbManager is null.</exception>
-        public DocumentProcessingQueue(IIndexedDBManagerWrapper dbManager)
+        public DocumentProcessingQueue()
         {
-            _dbManager = dbManager ?? throw new ArgumentNullException(nameof(dbManager));
             
             _queuedDocuments = new ConcurrentDictionary<string, QueuedDocument>();
             _processingQueue = new ConcurrentQueue<string>();
@@ -461,70 +454,21 @@ namespace NoLock.Social.Core.OCR.Services
 
         private async Task PersistDocumentAsync(QueuedDocument document, CancellationToken cancellationToken)
         {
-            await _persistenceLock.WaitAsync(cancellationToken);
-            try
-            {
-                var persistableDocument = document.CreatePersistableCopy();
-                var record = new StoreRecord<QueuedDocument>
-                {
-                    Storename = _storeName,
-                    Data = persistableDocument
-                };
-
-                await _dbManager.AddRecord(record);
-            }
-            finally
-            {
-                _persistenceLock.Release();
-            }
+            // No persistence - documents are kept in memory only
+            await Task.CompletedTask;
         }
 
         private async Task RemoveFromPersistenceAsync(string queueId, CancellationToken cancellationToken)
         {
-            await _persistenceLock.WaitAsync(cancellationToken);
-            try
-            {
-                await _dbManager.DeleteRecord(_storeName, queueId);
-            }
-            finally
-            {
-                _persistenceLock.Release();
-            }
+            // No persistence - documents are kept in memory only
+            await Task.CompletedTask;
         }
 
         private async Task LoadPersistedQueueAsync(CancellationToken cancellationToken)
         {
-            await _persistenceLock.WaitAsync(cancellationToken);
-            try
-            {
-                var persistedDocuments = await _dbManager.GetRecords<QueuedDocument>(_storeName);
-                
-                if (persistedDocuments != null)
-                {
-                    foreach (var document in persistedDocuments)
-                    {
-                        // Restore non-serializable components
-                        if (document.IsCancellable)
-                        {
-                            document.CancellationTokenSource = new CancellationTokenSource();
-                        }
-
-                        _queuedDocuments.TryAdd(document.QueueId, document);
-
-                        // Add to processing queue if still queued
-                        if (document.Status == QueuedDocumentStatus.Queued)
-                        {
-                            _processingQueue.Enqueue(document.QueueId);
-                        }
-                    }
-                }
-
-                UpdateQueuePositions();
-            }
-            finally
-            {
-                _persistenceLock.Release();
-            }
+            // No persistence - queue starts empty
+            UpdateQueuePositions();
+            await Task.CompletedTask;
         }
 
         private void UpdateQueuePositions()

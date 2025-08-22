@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using NoLock.Social.Core.Storage;
-using NoLock.Social.Core.Storage.Interfaces;
-using NoLock.Social.Core.Storage.Services;
 using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
@@ -29,9 +27,8 @@ namespace NoLock.Social.Core.Extensions
     {
         public static IServiceCollection AddContentAddressableStorage(this IServiceCollection services)
         {
+            // Content addressable storage removed - handled externally if needed
             services.AddScoped<IHashAlgorithm, SHA256HashAlgorithm>();
-            services.AddScoped<IIndexedDBManagerWrapper, IndexedDBManagerWrapper>();
-            services.AddScoped<IContentAddressableStorage<byte[]>, IndexedDBContentAddressableStorage>();
             return services;
         }
 
@@ -53,8 +50,7 @@ namespace NoLock.Social.Core.Extensions
             }
             // Additional serializers can be added here in the future (e.g., Protobuf, MessagePack)
 
-            // Register the typed storage implementation
-            services.AddScoped<IContentAddressableStorage<T>, TypedContentAddressableStorage<T>>();
+            // Typed storage removed - handled externally if needed
 
             return services;
         }
@@ -89,8 +85,7 @@ namespace NoLock.Social.Core.Extensions
             services.AddScoped<ISigningService, SigningService>();
             services.AddScoped<IVerificationService, VerificationService>();
             
-            // Storage adapter service
-            services.AddScoped<IStorageAdapterService, StorageAdapterService>();
+            // Storage adapter service removed - storage handled externally
             
             // Error handling service
             services.AddScoped<ICryptoErrorHandlingService, CryptoErrorHandlingService>();
@@ -128,11 +123,7 @@ namespace NoLock.Social.Core.Extensions
         
         public static IServiceCollection AddOfflineStorageServices(this IServiceCollection services)
         {
-            // Offline storage and queue services
-            services.AddScoped<IOfflineStorageService, IndexedDbStorageService>();
-            services.AddScoped<IOfflineQueueService, OfflineQueueService>();
-            services.AddScoped<IConnectivityService, ConnectivityService>();
-            
+            // Offline storage services removed - handled externally if needed
             return services;
         }
         

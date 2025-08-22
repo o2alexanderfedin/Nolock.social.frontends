@@ -2,22 +2,19 @@ using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Generated;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
-using NoLock.Social.Core.Storage.Interfaces;
 
 namespace NoLock.Social.Core.OCR.Services
 {
     /// <summary>
-    /// OCR service specifically for processing receipt documents with CAS integration
+    /// OCR service flow for processing documents
     /// </summary>
     public sealed class OCRServiceFlow<T>(
         Func<byte[], CancellationToken, Task<T>> invokeOcrEndpoint,
-        ICASService casService,
         ILogger<ReceiptOCRService> logger
     ) : IOCRService
     where T : IModelOcrResponse
     {
-        private readonly Func<byte[], CancellationToken, Task<T>> _invokeOcrEndpoint = invokeOcrEndpoint ?? throw new ArgumentNullException(nameof(_invokeOcrEndpoint));
-        private readonly ICASService _casService = casService ?? throw new ArgumentNullException(nameof(casService));
+        private readonly Func<byte[], CancellationToken, Task<T>> _invokeOcrEndpoint = invokeOcrEndpoint ?? throw new ArgumentNullException(nameof(invokeOcrEndpoint));
         private readonly ILogger<ReceiptOCRService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         public async Task SubmitDocumentAsync(
@@ -33,10 +30,8 @@ namespace NoLock.Social.Core.OCR.Services
             {
                 _logger.LogInformation("Processing document {DocumentType}", request.DocumentType);
 
-                // Store image in CAS
-                var imageHash = await _casService.StoreAsync(request.ImageData, ct);
-
-                _logger.LogDebug("Stored image in CAS with hash: {Hash}", imageHash);
+                // Image storage removed - handled externally if needed
+                _logger.LogDebug("Processing image");
 
                 var receiptResult = await _invokeOcrEndpoint(request.ImageData, ct);
 
@@ -48,10 +43,8 @@ namespace NoLock.Social.Core.OCR.Services
                 {
                     _logger.LogInformation("OCR processing completed for image: {receiptResult}", receiptResult);
 
-                    // Store OCR result in CAS
-                    var resultHash = await _casService.StoreAsync(receiptResult, ct);
-
-                    _logger.LogDebug("Stored OCR result in CAS with hash: {Hash}", resultHash);
+                    // Result storage removed - handled externally if needed
+                    _logger.LogDebug("OCR processing completed successfully");
                 }
                 else
                 {
