@@ -15,14 +15,14 @@ namespace NoLock.Social.Core.Tests.Storage
 {
     public class StorageAdapterServiceTests
     {
-        private readonly Mock<IContentAddressableStorage> _mockCAS;
+        private readonly Mock<IContentAddressableStorage<byte[]>> _mockCAS;
         private readonly Mock<IHashAlgorithm> _mockHashAlgorithm;
         private readonly Mock<IVerificationService> _mockVerificationService;
         private readonly StorageAdapterService _storageAdapter;
 
         public StorageAdapterServiceTests()
         {
-            _mockCAS = new Mock<IContentAddressableStorage>();
+            _mockCAS = new Mock<IContentAddressableStorage<byte[]>>();
             _mockHashAlgorithm = new Mock<IHashAlgorithm>();
             _mockVerificationService = new Mock<IVerificationService>();
             _storageAdapter = new StorageAdapterService(

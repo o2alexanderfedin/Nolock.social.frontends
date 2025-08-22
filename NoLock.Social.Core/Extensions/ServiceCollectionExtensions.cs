@@ -31,7 +31,31 @@ namespace NoLock.Social.Core.Extensions
         {
             services.AddScoped<IHashAlgorithm, SHA256HashAlgorithm>();
             services.AddScoped<IIndexedDBManagerWrapper, IndexedDBManagerWrapper>();
-            services.AddScoped<IContentAddressableStorage, IndexedDBContentAddressableStorage>();
+            services.AddScoped<IContentAddressableStorage<byte[]>, IndexedDBContentAddressableStorage>();
+            return services;
+        }
+
+        /// <summary>
+        /// Registers typed content-addressable storage for a specific type T.
+        /// </summary>
+        /// <typeparam name="T">The type to register storage for</typeparam>
+        /// <param name="services">The service collection</param>
+        /// <param name="useJsonSerializer">Whether to use JSON serialization (default: true)</param>
+        /// <returns>The service collection for chaining</returns>
+        public static IServiceCollection AddTypedContentAddressableStorage<T>(
+            this IServiceCollection services,
+            bool useJsonSerializer = true)
+        {
+            // Register the serializer based on configuration
+            if (useJsonSerializer)
+            {
+                services.AddScoped<ISerializer<T>, JsonSerializer<T>>();
+            }
+            // Additional serializers can be added here in the future (e.g., Protobuf, MessagePack)
+
+            // Register the typed storage implementation
+            services.AddScoped<IContentAddressableStorage<T>, TypedContentAddressableStorage<T>>();
+
             return services;
         }
 
