@@ -22,12 +22,11 @@ namespace NoLock.Social.Core.OCR.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task<OCRSubmissionResponse> SubmitDocumentAsync(
+        public Task SubmitDocumentAsync(
             OCRSubmissionRequest request, 
             CancellationToken ct = default)
         {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
+            ArgumentNullException.ThrowIfNull(request);
 
             _logger.LogInformation("Routing OCR request for document type: {DocumentType}", request.DocumentType);
 

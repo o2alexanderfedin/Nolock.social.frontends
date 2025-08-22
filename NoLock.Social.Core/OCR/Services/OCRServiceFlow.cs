@@ -20,60 +20,33 @@ namespace NoLock.Social.Core.OCR.Services
         private readonly ICASService _casService = casService ?? throw new ArgumentNullException(nameof(casService));
         private readonly ILogger<ReceiptOCRService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        public async Task<OCRSubmissionResponse> SubmitDocumentAsync(
+        public async Task SubmitDocumentAsync(
             OCRSubmissionRequest request, 
             CancellationToken ct = default)
         {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
+            ArgumentNullException.ThrowIfNull(request);
 
-            if (string.IsNullOrWhiteSpace(request.ImageData))
+            if (request.ImageData is not { Length: > 0 })
                 throw new ArgumentException("Image data cannot be empty", nameof(request));
 
             try
             {
-                _logger.LogInformation("Processing receipt document. ClientRequestId: {ClientRequestId}",
-                    request.ClientRequestId);
+                _logger.LogInformation("Processing document {DocumentType}", request.DocumentType);
 
                 // Store image in CAS
-                var imageHash = await _casService.StoreAsync(
-                    request.ImageData,
-                    ct);
+                var imageHash = await _casService.StoreAsync(request.ImageData, ct);
 
-                _logger.LogDebug("Stored receipt image in CAS with hash: {Hash}", imageHash);
+                _logger.LogDebug("Stored image in CAS with hash: {Hash}", imageHash);
 
-                // Convert base64 to byte array for API call
-                byte[] imageBytes;
-                try
-                {
-                    imageBytes = Convert.FromBase64String(request.ImageData);
-                }
-                catch (FormatException ex)
-                {
-                    throw new ArgumentException("Invalid base64 image data", nameof(request), ex);
-                }
-
-                var receiptResult = await _invokeOcrEndpoint(imageBytes, ct);
-
-                // Process the result
-                var response = new OCRSubmissionResponse
-                {
-                    SubmittedAt = DateTime.UtcNow,
-                    TrackingId = Guid.NewGuid().ToString("N"),
-                    EstimatedCompletionTime = DateTime.UtcNow
-                };
+                var receiptResult = await _invokeOcrEndpoint(request.ImageData, ct);
 
                 if (receiptResult?.Error != null)
                 {
-                    _logger.LogError("OCR processing failed for receipt. Error: {Error}",
-                        receiptResult.Error);
-                    response.Status = OCRProcessingStatus.Failed;
+                    _logger.LogError("OCR processing failed for receipt. Error: {Error}", receiptResult.Error);
                 }
                 else if (receiptResult?.IsSuccess ?? false)
                 {
                     _logger.LogInformation("OCR processing completed for image: {receiptResult}", receiptResult);
-
-                    response.Status = OCRProcessingStatus.Complete;
 
                     // Store OCR result in CAS
                     var resultHash = await _casService.StoreAsync(receiptResult, ct);
@@ -83,10 +56,7 @@ namespace NoLock.Social.Core.OCR.Services
                 else
                 {
                     _logger.LogWarning("Received empty result from OCR API for receipt");
-                    response.Status = OCRProcessingStatus.Failed;
                 }
-
-                return response;
             }
             catch (MistralOCRException ex)
             {

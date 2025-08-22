@@ -11,22 +11,12 @@ namespace NoLock.Social.Core.OCR.Models
         /// <summary>
         /// The image data as a base64 encoded string
         /// </summary>
-        public string ImageData { get; set; }
+        public byte[] ImageData { get; set; }
 
         /// <summary>
         /// The type of document being submitted for OCR
         /// </summary>
         public DocumentType DocumentType { get; set; }
-
-        /// <summary>
-        /// Additional metadata associated with the submission
-        /// </summary>
-        public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
-
-        /// <summary>
-        /// Client-provided request ID for tracking purposes
-        /// </summary>
-        public string ClientRequestId { get; set; } = Guid.NewGuid().ToString();
     }
 
     /// <summary>

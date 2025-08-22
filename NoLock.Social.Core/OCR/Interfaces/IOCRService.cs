@@ -18,13 +18,9 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// <param name="ct">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation. 
-        /// The task result contains the OCR submission response with fully parsed models
-        /// including tracking ID and processed document data.
         /// </returns>
         /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
         /// <exception cref="OCRServiceException">Thrown when OCR processing fails.</exception>
-        Task<OCRSubmissionResponse> SubmitDocumentAsync(
-            OCRSubmissionRequest request, 
-            CancellationToken ct = default);
+        Task SubmitDocumentAsync(OCRSubmissionRequest request, CancellationToken ct = default);
     }
 }
