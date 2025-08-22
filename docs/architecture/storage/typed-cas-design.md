@@ -397,24 +397,6 @@ services.AddTypedContentAddressableStorage<ProcessingEntry>();
 2. Deprecate direct byte-array usage for application types
 3. Maintain byte-array interface only for binary data (images, files)
 
-### Migration Example
-
-**Before (Direct byte-array usage):**
-```
-var json = JsonSerializer.Serialize(document);
-var bytes = Encoding.UTF8.GetBytes(json);
-var hash = await storage.StoreAsync(bytes);
-
-var retrievedBytes = await storage.GetAsync(hash);
-var retrievedJson = Encoding.UTF8.GetString(retrievedBytes);
-var document = JsonSerializer.Deserialize<SignedDocument>(retrievedJson);
-```
-
-**After (Typed storage):**
-```
-var hash = await typedStorage.StoreAsync(document);
-var document = await typedStorage.GetAsync(hash);
-```
 
 ### Zero-Risk Strategy
 - No changes to existing storage implementation
