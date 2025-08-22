@@ -215,7 +215,7 @@
     private string addressToRetrieve = string.Empty;
     private string lastStoredAddress = string.Empty;
     private StorageMetadata? lastStoredMetadata;
-    private SignedContent? retrievedContent;
+    private SignedTarget? retrievedContent;
     private List<StorageMetadata> storedContentList = new();
     
     private bool isProcessing = false;
@@ -295,7 +295,7 @@
             var privateKey = session.PrivateKeyBuffer.Data;
             
             // Sign the content
-            var signedContent = await SigningService.SignContentAsync(contentToStore, privateKey, session.PublicKey);
+            var signedContent = await SigningService.SignAsync(contentToStore, privateKey, session.PublicKey);
             
             // Store in CAS
             var metadata = await StorageAdapter.StoreSignedContentAsync(signedContent);

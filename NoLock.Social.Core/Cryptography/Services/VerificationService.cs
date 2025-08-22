@@ -144,33 +144,55 @@ namespace NoLock.Social.Core.Cryptography.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> VerifySignedContentAsync(SignedContent signedContent)
+        public async Task<bool> VerifySignedContentAsync(SignedTarget signedTarget)
         {
-            if (signedContent == null)
+            if (signedTarget == null)
             {
-                throw new ArgumentNullException(nameof(signedContent));
+                throw new ArgumentNullException(nameof(signedTarget));
             }
 
             // Validate algorithm
-            if (signedContent.Algorithm != "ECDSA-P256")
+            if (signedTarget.Algorithm != "ECDSA-P256")
             {
-                throw new NotSupportedException($"Algorithm '{signedContent.Algorithm}' is not supported. Only ECDSA-P256 is supported.");
+                throw new NotSupportedException($"Algorithm '{signedTarget.Algorithm}' is not supported. Only ECDSA-P256 is supported.");
             }
 
             // Validate version
-            if (signedContent.Version != "1.0")
+            if (signedTarget.Version != "1.0")
             {
-                throw new NotSupportedException($"Version '{signedContent.Version}' is not supported. Only version 1.0 is supported.");
+                throw new NotSupportedException($"Version '{signedTarget.Version}' is not supported. Only version 1.0 is supported.");
             }
 
             _logger.LogDebug("Verifying signed content with algorithm: {Algorithm}, version: {Version}", 
-                signedContent.Algorithm, signedContent.Version);
+                signedTarget.Algorithm, signedTarget.Version);
 
-            // Verify the signature
-            return await VerifySignatureAsync(
-                signedContent.Content, 
-                signedContent.Signature, 
-                signedContent.PublicKey);
+            try
+            {
+                // Verify the signature directly against the target hash
+                _logger.LogDebug("Verifying ECDSA P-256 signature against target hash");
+                var isValid = await _cryptoService.VerifyECDSAAsync(
+                    signedTarget.PublicKey, 
+                    signedTarget.Signature, 
+                    signedTarget.TargetHash, 
+                    "P-256", 
+                    "SHA-256");
+
+                if (isValid)
+                {
+                    _logger.LogInformation("Signature verification successful");
+                }
+                else
+                {
+                    _logger.LogWarning("Signature verification failed - invalid signature");
+                }
+
+                return isValid;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying signed target");
+                throw new CryptoException("Failed to verify signed target", ex);
+            }
         }
     }
 }
