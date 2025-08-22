@@ -31,33 +31,79 @@ The solution is to provide a generic typed interface that handles serialization 
 
 ## Architecture Overview
 
-The typed CAS architecture follows a simple delegation pattern:
+### Class Diagram
+
+The typed CAS architecture follows a simple delegation pattern with clear interface implementations:
 
 ```mermaid
-graph LR
-    Client[Client Code] -->|T objects| TypedCAS["IContentAddressableStorage&lt;T&gt;"]
-    TypedCAS -->|Serialize| Serializer["ISerializer&lt;T&gt;"]
-    Serializer -->|"byte[]"| ByteCAS[IContentAddressableStorage]
-    ByteCAS -->|"byte[]"| Storage[(IndexedDB)]
+classDiagram
+    class IContentAddressableStorage~T~ {
+        <<interface>>
+        +StoreAsync(T content) ValueTask~string~
+        +GetAsync(string hash) ValueTask~T~
+        +ExistsAsync(string hash) ValueTask~bool~
+        +DeleteAsync(string hash) ValueTask~bool~
+        +GetAllHashesAsync() IAsyncEnumerable~string~
+        +GetSizeAsync(string hash) ValueTask~long~
+        +GetTotalSizeAsync() ValueTask~long~
+        +ClearAsync() ValueTask
+    }
     
-    Storage -->|"byte[]"| ByteCAS
-    ByteCAS -->|"byte[]"| Deserializer["ISerializer&lt;T&gt;"]
-    Deserializer -->|Deserialize| TypedCAS
-    TypedCAS -->|T objects| Client
+    class ISerializer~T~ {
+        <<interface>>
+        +Serialize(T value) byte[]
+        +Deserialize(byte[] data) T
+    }
+    
+    class TypedContentAddressableStorage~T~ {
+        -IContentAddressableStorage~byte[]~ byteStorage
+        -ISerializer~T~ serializer
+        +StoreAsync(T content) ValueTask~string~
+        +GetAsync(string hash) ValueTask~T~
+        +ExistsAsync(string hash) ValueTask~bool~
+        +DeleteAsync(string hash) ValueTask~bool~
+        +GetAllHashesAsync() IAsyncEnumerable~string~
+        +GetSizeAsync(string hash) ValueTask~long~
+        +GetTotalSizeAsync() ValueTask~long~
+        +ClearAsync() ValueTask
+    }
+    
+    class IndexedDBContentAddressableStorage {
+        +StoreAsync(byte[] content) ValueTask~string~
+        +GetAsync(string hash) ValueTask~byte[]~
+        +ExistsAsync(string hash) ValueTask~bool~
+        +DeleteAsync(string hash) ValueTask~bool~
+        +GetAllHashesAsync() IAsyncEnumerable~string~
+        +GetSizeAsync(string hash) ValueTask~long~
+        +GetTotalSizeAsync() ValueTask~long~
+        +ClearAsync() ValueTask
+    }
+    
+    class JsonSerializer~T~ {
+        +Serialize(T value) byte[]
+        +Deserialize(byte[] data) T
+    }
+    
+    IContentAddressableStorage~T~ <|.. TypedContentAddressableStorage~T~ : implements
+    IContentAddressableStorage~byte[]~ <|.. IndexedDBContentAddressableStorage : implements
+    ISerializer~T~ <|.. JsonSerializer~T~ : implements
+    TypedContentAddressableStorage~T~ --> IContentAddressableStorage~byte[]~ : uses
+    TypedContentAddressableStorage~T~ --> ISerializer~T~ : uses
 ```
 
 ### Key Components
 
-1. **IContentAddressableStorage<T>** - Generic interface providing type-safe storage operations
-2. **TypedContentAddressableStorage<T>** - Implementation that delegates to byte-array storage
-3. **IContentAddressableStorage** - Existing byte-array interface (unchanged)
+1. **IContentAddressableStorage<T>** - Unified generic interface for all storage operations
+2. **TypedContentAddressableStorage<T>** - Implementation that delegates to `IContentAddressableStorage<byte[]>`
+3. **IContentAddressableStorage<byte[]>** - Byte-array storage implementation (e.g., IndexedDBContentAddressableStorage)
 4. **ISerializer<T>** - Serialization strategy interface for converting T to/from byte arrays
+5. **JsonSerializer<T>** - Default JSON serialization implementation using System.Text.Json
 
 ### Design Principles
 
 - **Single Responsibility**: Typed wrapper only handles type safety and serialization
 - **Delegation Pattern**: All storage operations delegate to existing implementation
-- **Zero Core Changes**: Existing byte-array CAS remains completely unchanged
+- **Unified Interface**: All storage uses the same generic interface pattern
 - **Pluggable Serialization**: Different serializers for different types (JSON, Protobuf, etc.)
 - **Transparent Operation**: Clients work with typed objects, unaware of serialization
 
@@ -65,7 +111,7 @@ graph LR
 
 ### IContentAddressableStorage<T> Interface
 
-The typed interface mirrors the existing `IContentAddressableStorage` interface exactly, replacing `byte[]` with generic type `T`:
+The generic interface defines storage operations for any type `T`:
 
 ```
 public interface IContentAddressableStorage<T>
@@ -130,7 +176,7 @@ The implementation follows a straightforward delegation pattern:
 ```
 public class TypedContentAddressableStorage<T> : IContentAddressableStorage<T>
 {
-    private readonly IContentAddressableStorage _byteStorage;
+    private readonly IContentAddressableStorage<byte[]> _byteStorage;
     private readonly ISerializer<T> _serializer;
 }
 ```
@@ -152,40 +198,34 @@ public class TypedContentAddressableStorage<T> : IContentAddressableStorage<T>
 
 ### Sequence Diagrams
 
-#### Store Operation Sequence
+#### 1. StoreAsync - Store Operation
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant TypedCAS as "IContentAddressableStorage<T>"
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
     participant Serializer as "ISerializer<T>"
-    participant ByteCAS as IContentAddressableStorage
-    participant Storage as IndexedDB
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
     
     Client->>TypedCAS: StoreAsync(T object)
     TypedCAS->>Serializer: Serialize(T object)
     Serializer-->>TypedCAS: byte[] data
     TypedCAS->>ByteCAS: StoreAsync(byte[] data)
-    ByteCAS->>Storage: Store bytes with hash
-    Storage-->>ByteCAS: Success
     ByteCAS-->>TypedCAS: string hash
     TypedCAS-->>Client: string hash
 ```
 
-#### Retrieve Operation Sequence
+#### 2. GetAsync - Retrieve Operation
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant TypedCAS as "IContentAddressableStorage<T>"
-    participant ByteCAS as IContentAddressableStorage
-    participant Storage as IndexedDB
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
     participant Serializer as "ISerializer<T>"
     
     Client->>TypedCAS: GetAsync(string hash)
     TypedCAS->>ByteCAS: GetAsync(string hash)
-    ByteCAS->>Storage: Retrieve by hash
-    Storage-->>ByteCAS: byte[] data or null
     ByteCAS-->>TypedCAS: byte[] data or null
     alt Data exists
         TypedCAS->>Serializer: Deserialize(byte[] data)
@@ -196,26 +236,88 @@ sequenceDiagram
     end
 ```
 
-#### Batch Operations Sequence
+#### 3. ExistsAsync - Check Existence
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant TypedCAS as "IContentAddressableStorage<T>"
-    participant ByteCAS as IContentAddressableStorage
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
+    
+    Client->>TypedCAS: ExistsAsync(string hash)
+    TypedCAS->>ByteCAS: ExistsAsync(string hash)
+    ByteCAS-->>TypedCAS: bool
+    TypedCAS-->>Client: bool
+```
+
+#### 4. DeleteAsync - Delete Operation
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
+    
+    Client->>TypedCAS: DeleteAsync(string hash)
+    TypedCAS->>ByteCAS: DeleteAsync(string hash)
+    ByteCAS-->>TypedCAS: bool
+    TypedCAS-->>Client: bool
+```
+
+#### 5. GetAllHashesAsync - Get All Hashes
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
     
     Client->>TypedCAS: GetAllHashesAsync()
     TypedCAS->>ByteCAS: GetAllHashesAsync()
-    ByteCAS-->>TypedCAS: "IAsyncEnumerable<string>"
-    TypedCAS-->>Client: "IAsyncEnumerable<string>"
+    ByteCAS-->>TypedCAS: IAsyncEnumerable<string>
+    TypedCAS-->>Client: IAsyncEnumerable<string>
+```
+
+#### 6. GetSizeAsync - Get Size by Hash
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
     
-    Note over Client,TypedCAS: Client iterates through hashes
+    Client->>TypedCAS: GetSizeAsync(string hash)
+    TypedCAS->>ByteCAS: GetSizeAsync(string hash)
+    ByteCAS-->>TypedCAS: long size
+    TypedCAS-->>Client: long size
+```
+
+#### 7. GetTotalSizeAsync - Get Total Size
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
     
-    loop For each hash
-        Client->>TypedCAS: GetAsync(hash)
-        Note over TypedCAS: Standard retrieve sequence
-        TypedCAS-->>Client: T object or null
-    end
+    Client->>TypedCAS: GetTotalSizeAsync()
+    TypedCAS->>ByteCAS: GetTotalSizeAsync()
+    ByteCAS-->>TypedCAS: long totalSize
+    TypedCAS-->>Client: long totalSize
+```
+
+#### 8. ClearAsync - Clear All Content
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TypedCAS as "TypedContentAddressableStorage<T>"
+    participant ByteCAS as "IContentAddressableStorage<byte[]>"
+    
+    Client->>TypedCAS: ClearAsync()
+    TypedCAS->>ByteCAS: ClearAsync()
+    ByteCAS-->>TypedCAS: void
+    TypedCAS-->>Client: void
 ```
 
 ### Error Handling
@@ -230,21 +332,17 @@ The typed wrapper handles serialization errors gracefully:
 ### Dependency Injection Setup
 
 ```
-// Register byte-array storage (existing)
-services.AddSingleton<IContentAddressableStorage, ContentAddressableStorage>();
+// Register byte-array storage implementation
+services.AddScoped<IContentAddressableStorage<byte[]>, IndexedDBContentAddressableStorage>();
 
-// Register typed storages
-services.AddSingleton<IContentAddressableStorage<SignedDocument>, 
-    TypedContentAddressableStorage<SignedDocument>>();
-services.AddSingleton<IContentAddressableStorage<OcrResult>, 
-    TypedContentAddressableStorage<OcrResult>>();
-services.AddSingleton<IContentAddressableStorage<ProcessingEntry>, 
-    TypedContentAddressableStorage<ProcessingEntry>>();
+// Register typed storages using extension method
+services.AddTypedContentAddressableStorage<SignedDocument>();
+services.AddTypedContentAddressableStorage<OcrResult>();
+services.AddTypedContentAddressableStorage<ProcessingEntry>();
 
-// Register serializers
-services.AddSingleton<ISerializer<SignedDocument>, JsonSerializer<SignedDocument>>();
-services.AddSingleton<ISerializer<OcrResult>, JsonSerializer<OcrResult>>();
-services.AddSingleton<ISerializer<ProcessingEntry>, JsonSerializer<ProcessingEntry>>();
+// The extension method internally registers:
+// - TypedContentAddressableStorage<T> as IContentAddressableStorage<T>
+// - JsonSerializer<T> as ISerializer<T> (by default)
 ```
 
 ## Benefits
@@ -327,4 +425,4 @@ var document = await typedStorage.GetAsync(hash);
 
 ## Summary
 
-This design provides a clean, type-safe wrapper around the existing Content-Addressable Storage system through a simple delegation pattern. By maintaining the exact same interface structure and delegating all operations to the proven byte-array implementation, we achieve type safety and improved developer experience without any risk to the existing storage infrastructure. The solution is simple, focused, and delivers exactly what is needed: compile-time type safety for CAS operations.
+This design provides a unified, type-safe Content-Addressable Storage system through a generic interface pattern. By using `IContentAddressableStorage<T>` as the single interface for all storage operations—where byte-array storage is just `IContentAddressableStorage<byte[]>`—we achieve type safety and improved developer experience. The typed implementations delegate to the byte-array implementation through serialization, maintaining separation of concerns. The solution is simple, focused, and delivers compile-time type safety for all CAS operations.

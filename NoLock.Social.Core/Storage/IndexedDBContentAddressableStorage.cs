@@ -9,13 +9,17 @@ using NoLock.Social.Core.Hashing;
 
 namespace NoLock.Social.Core.Storage
 {
-    public class IndexedDBContentAddressableStorage : IContentAddressableStorage
+    public class IndexedDBContentAddressableStorage
+        : IContentAddressableStorage<byte[]>
     {
         private readonly IIndexedDBManagerWrapper _dbManager;
         private readonly IHashAlgorithm _hashAlgorithm;
         private readonly string _storeName = "content_addressable_storage";
 
-        public IndexedDBContentAddressableStorage(IIndexedDBManagerWrapper dbManager, IHashAlgorithm hashAlgorithm)
+        public IndexedDBContentAddressableStorage(
+            IIndexedDBManagerWrapper dbManager, 
+            IHashAlgorithm hashAlgorithm
+        )
         {
             _dbManager = dbManager;
             _hashAlgorithm = hashAlgorithm;

@@ -15,12 +15,12 @@ namespace NoLock.Social.Core.Storage
     /// </summary>
     public class StorageAdapterService : IStorageAdapterService
     {
-        private readonly IContentAddressableStorage _cas;
+        private readonly IContentAddressableStorage<byte[]> _cas;
         private readonly IHashAlgorithm _hashAlgorithm;
         private readonly IVerificationService _verificationService;
 
         public StorageAdapterService(
-            IContentAddressableStorage cas,
+            IContentAddressableStorage<byte[]> cas,
             IHashAlgorithm hashAlgorithm,
             IVerificationService verificationService)
         {
@@ -31,8 +31,7 @@ namespace NoLock.Social.Core.Storage
 
         public async Task<StorageMetadata> StoreSignedContentAsync(SignedContent signedContent)
         {
-            if (signedContent == null)
-                throw new ArgumentNullException(nameof(signedContent));
+            ArgumentNullException.ThrowIfNull(signedContent);
 
             // Serialize the signed content
             var serializedContent = SerializeSignedContent(signedContent);
