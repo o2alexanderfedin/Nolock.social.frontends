@@ -58,7 +58,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<AcceptedResult> ProcessReceiptOcrAsync(FileParameter body);
+        System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body);
 
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
@@ -69,7 +69,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<AcceptedResult> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
 
         /// <summary>
         /// Process check image with OCR and extract structured data
@@ -79,7 +79,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<AcceptedResult> ProcessCheckOcrAsync(FileParameter body);
+        System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body);
 
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
@@ -90,7 +90,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<AcceptedResult> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
 
     }
 
@@ -240,7 +240,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual System.Threading.Tasks.Task<AcceptedResult> ProcessReceiptOcrAsync(FileParameter body)
+        public virtual System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body)
         {
             return ProcessReceiptOcrAsync(body, System.Threading.CancellationToken.None);
         }
@@ -254,7 +254,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual async System.Threading.Tasks.Task<AcceptedResult> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
+        public virtual async System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
         {
             if (body == null)
                 throw new System.ArgumentNullException("body");
@@ -301,12 +301,22 @@ namespace NoLock.Social.Core.OCR.Generated
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<ReceiptModelOcrResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
                             }
                             return objectResponse_.Object;
+                        }
+                        else
+                        if (status_ == 202)
+                        {
+                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            if (objectResponse_.Object == null)
+                            {
+                                throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
+                            }
+                            throw new MistralOCRException<AcceptedResult>("Accepted", status_, objectResponse_.Text, headers_, objectResponse_.Object, null);
                         }
                         else
                         if (status_ == 400)
@@ -346,7 +356,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual System.Threading.Tasks.Task<AcceptedResult> ProcessCheckOcrAsync(FileParameter body)
+        public virtual System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body)
         {
             return ProcessCheckOcrAsync(body, System.Threading.CancellationToken.None);
         }
@@ -360,7 +370,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual async System.Threading.Tasks.Task<AcceptedResult> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
+        public virtual async System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
         {
             if (body == null)
                 throw new System.ArgumentNullException("body");
@@ -407,12 +417,22 @@ namespace NoLock.Social.Core.OCR.Generated
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<CheckModelOcrResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
                             }
                             return objectResponse_.Object;
+                        }
+                        else
+                        if (status_ == 202)
+                        {
+                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            if (objectResponse_.Object == null)
+                            {
+                                throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
+                            }
+                            throw new MistralOCRException<AcceptedResult>("Accepted", status_, objectResponse_.Text, headers_, objectResponse_.Object, null);
                         }
                         else
                         if (status_ == 400)
@@ -661,6 +681,20 @@ namespace NoLock.Social.Core.OCR.Generated
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum BankAccountType
+    {
+
+        _0 = 0,
+
+        _1 = 1,
+
+        _2 = 2,
+
+        _3 = 3,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
     public enum CallingConventions
     {
 
@@ -673,6 +707,188 @@ namespace NoLock.Social.Core.OCR.Generated
         _32 = 32,
 
         _64 = 64,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class Check
+    {
+
+        /// <summary>
+        /// Check number or identifier
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("checkNumber")]
+        public string? CheckNumber { get; set; } = default!;
+
+        /// <summary>
+        /// Date on the check (ISO 8601 format when transmitted as string)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("date")]
+        public System.DateTime? Date { get; set; } = default!;
+
+        /// <summary>
+        /// Person or entity to whom the check is payable
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("payee")]
+        public string? Payee { get; set; } = default!;
+
+        /// <summary>
+        /// Person or entity who wrote/signed the check
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("payer")]
+        public string? Payer { get; set; } = default!;
+
+        /// <summary>
+        /// Dollar amount of the check - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("amount")]
+        public double? Amount { get; set; } = default!;
+
+        /// <summary>
+        /// Written amount text on the check
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("amountText")]
+        public string? AmountText { get; set; } = default!;
+
+        /// <summary>
+        /// Memo or note on the check
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("memo")]
+        public string? Memo { get; set; } = default!;
+
+        /// <summary>
+        /// Name of the bank issuing the check
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("bankName")]
+        public string? BankName { get; set; } = default!;
+
+        /// <summary>
+        /// Bank routing number (9 digits)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("routingNumber")]
+        public string? RoutingNumber { get; set; } = default!;
+
+        /// <summary>
+        /// Bank account number
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("accountNumber")]
+        public string? AccountNumber { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("checkType")]
+        public CheckType CheckType { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("accountType")]
+        public BankAccountType AccountType { get; set; } = default!;
+
+        /// <summary>
+        /// Whether the check appears to be signed
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("signature")]
+        public bool? Signature { get; set; } = default!;
+
+        /// <summary>
+        /// Text of the signature if readable
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("signatureText")]
+        public string? SignatureText { get; set; } = default!;
+
+        /// <summary>
+        /// Fractional code on the check (alternative routing identifier)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("fractionalCode")]
+        public string? FractionalCode { get; set; } = default!;
+
+        /// <summary>
+        /// Full MICR (Magnetic Ink Character Recognition) line on the bottom of check
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("micrLine")]
+        public string? MicrLine { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("metadata")]
+        public CheckMetadata Metadata { get; set; } = default!;
+
+        /// <summary>
+        /// Overall confidence score of the extraction
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("confidence")]
+        public double? Confidence { get; set; } = default!;
+
+        /// <summary>
+        /// Indicates if the input appears to be a valid check image. False if the system has detected potential hallucinations
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isValidInput")]
+        public bool? IsValidInput { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CheckMetadata
+    {
+
+        /// <summary>
+        /// Confidence score of the extraction
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("confidenceScore")]
+        public double? ConfidenceScore { get; set; } = default!;
+
+        /// <summary>
+        /// Identifier of the source image
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("sourceImageId")]
+        public string? SourceImageId { get; set; } = default!;
+
+        /// <summary>
+        /// Provider used for OCR
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("ocrProvider")]
+        public string? OcrProvider { get; set; } = default!;
+
+        /// <summary>
+        /// List of warnings from the extraction process
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("warnings")]
+        public System.Collections.Generic.ICollection<string>? Warnings { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CheckModelOcrResponse
+    {
+
+        [System.Text.Json.Serialization.JsonPropertyName("modelData")]
+        public Check ModelData { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("processingTime")]
+        public string ProcessingTime { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("error")]
+        public string? Error { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum CheckType
+    {
+
+        _0 = 0,
+
+        _1 = 1,
+
+        _2 = 2,
+
+        _3 = 3,
+
+        _4 = 4,
+
+        _5 = 5,
+
+        _6 = 6,
+
+        _7 = 7,
+
+        _8 = 8,
+
+        _9 = 9,
 
     }
 
@@ -1141,6 +1357,54 @@ namespace NoLock.Social.Core.OCR.Generated
         _128 = 128,
 
         _191 = 191,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class MerchantInfo
+    {
+
+        /// <summary>
+        /// Name of the merchant or store
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; set; } = default!;
+
+        /// <summary>
+        /// Physical address of the merchant
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("address")]
+        public string? Address { get; set; } = default!;
+
+        /// <summary>
+        /// Contact phone number
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("phone")]
+        public string? Phone { get; set; } = default!;
+
+        /// <summary>
+        /// Website URL
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("website")]
+        public string? Website { get; set; } = default!;
+
+        /// <summary>
+        /// Tax identification number (VAT/GST ID)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxId")]
+        public string? TaxId { get; set; } = default!;
+
+        /// <summary>
+        /// Store or branch identifier
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("storeId")]
+        public string? StoreId { get; set; } = default!;
+
+        /// <summary>
+        /// Name of the store chain if applicable
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("chainName")]
+        public string? ChainName { get; set; } = default!;
 
     }
 
@@ -1662,6 +1926,329 @@ namespace NoLock.Social.Core.OCR.Generated
 
         [System.Text.Json.Serialization.JsonPropertyName("setMethod")]
         public MethodInfo SetMethod { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class Receipt
+    {
+
+        [System.Text.Json.Serialization.JsonPropertyName("merchant")]
+        public MerchantInfo Merchant { get; set; } = default!;
+
+        /// <summary>
+        /// Receipt or invoice number
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("receiptNumber")]
+        public string? ReceiptNumber { get; set; } = default!;
+
+        /// <summary>
+        /// Type of receipt
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("receiptType")]
+        public string? ReceiptType { get; set; } = default!;
+
+        /// <summary>
+        /// Date and time of transaction (ISO 8601 format when transmitted as string)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public System.DateTime? Timestamp { get; set; } = default!;
+
+        /// <summary>
+        /// Method of payment - can be enum or string for flexibility
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("paymentMethod")]
+        public string? PaymentMethod { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("totals")]
+        public ReceiptTotals Totals { get; set; } = default!;
+
+        /// <summary>
+        /// ISO 4217 currency code (3-letter codes like USD, EUR, GBP)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("currency")]
+        public string? Currency { get; set; } = default!;
+
+        /// <summary>
+        /// List of line items on the receipt
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("items")]
+        public System.Collections.Generic.ICollection<ReceiptLineItem>? Items { get; set; } = default!;
+
+        /// <summary>
+        /// Breakdown of taxes
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxes")]
+        public System.Collections.Generic.ICollection<ReceiptTaxItem>? Taxes { get; set; } = default!;
+
+        /// <summary>
+        /// Details about payment methods used
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("payments")]
+        public System.Collections.Generic.ICollection<ReceiptPaymentMethod>? Payments { get; set; } = default!;
+
+        /// <summary>
+        /// Additional notes or comments
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("notes")]
+        public System.Collections.Generic.ICollection<string>? Notes { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("metadata")]
+        public ReceiptMetadata Metadata { get; set; } = default!;
+
+        /// <summary>
+        /// Overall confidence score of the extraction
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("confidence")]
+        public double? Confidence { get; set; } = default!;
+
+        /// <summary>
+        /// Indicates if the input appears to be a valid receipt image. False if the system has detected potential hallucinations
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isValidInput")]
+        public bool? IsValidInput { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum ReceiptFormat
+    {
+
+        _0 = 0,
+
+        _1 = 1,
+
+        _2 = 2,
+
+        _3 = 3,
+
+        _4 = 4,
+
+        _5 = 5,
+
+        _6 = 6,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptLineItem
+    {
+
+        /// <summary>
+        /// Item description or name
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("description")]
+        public string? Description { get; set; } = default!;
+
+        /// <summary>
+        /// Stock keeping unit or product code
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("sku")]
+        public string? Sku { get; set; } = default!;
+
+        /// <summary>
+        /// Quantity purchased
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("quantity")]
+        public double? Quantity { get; set; } = default!;
+
+        /// <summary>
+        /// Unit of measurement - can be enum or string for flexibility
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("unit")]
+        public string? Unit { get; set; } = default!;
+
+        /// <summary>
+        /// Price per unit - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("unitPrice")]
+        public double? UnitPrice { get; set; } = default!;
+
+        /// <summary>
+        /// Total price for this line item - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("totalPrice")]
+        public double? TotalPrice { get; set; } = default!;
+
+        /// <summary>
+        /// Whether the item was discounted
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("discounted")]
+        public bool? Discounted { get; set; } = default!;
+
+        /// <summary>
+        /// Amount of discount applied - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("discountAmount")]
+        public double? DiscountAmount { get; set; } = default!;
+
+        /// <summary>
+        /// Product category
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("category")]
+        public string? Category { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptMetadata
+    {
+
+        /// <summary>
+        /// Confidence score of the extraction
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("confidenceScore")]
+        public double? ConfidenceScore { get; set; } = default!;
+
+        /// <summary>
+        /// ISO currency code detected
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("currency")]
+        public string? Currency { get; set; } = default!;
+
+        /// <summary>
+        /// ISO language code of the receipt
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("languageCode")]
+        public string? LanguageCode { get; set; } = default!;
+
+        /// <summary>
+        /// Time zone identifier
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("timeZone")]
+        public string? TimeZone { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("receiptFormat")]
+        public ReceiptFormat ReceiptFormat { get; set; } = default!;
+
+        /// <summary>
+        /// Identifier of the source image
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("sourceImageId")]
+        public string? SourceImageId { get; set; } = default!;
+
+        /// <summary>
+        /// List of warnings from the extraction process
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("warnings")]
+        public System.Collections.Generic.ICollection<string>? Warnings { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptModelOcrResponse
+    {
+
+        [System.Text.Json.Serialization.JsonPropertyName("modelData")]
+        public Receipt ModelData { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("processingTime")]
+        public string ProcessingTime { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("error")]
+        public string? Error { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptPaymentMethod
+    {
+
+        /// <summary>
+        /// Payment method
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("method")]
+        public string? Method { get; set; } = default!;
+
+        /// <summary>
+        /// Type of card - can be enum or string for flexibility
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("cardType")]
+        public string? CardType { get; set; } = default!;
+
+        /// <summary>
+        /// Last 4 digits of payment card
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("lastDigits")]
+        public string? LastDigits { get; set; } = default!;
+
+        /// <summary>
+        /// Amount paid with this method - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("amount")]
+        public double? Amount { get; set; } = default!;
+
+        /// <summary>
+        /// Payment transaction ID
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("transactionId")]
+        public string? TransactionId { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptTaxItem
+    {
+
+        /// <summary>
+        /// Name of tax (e.g., 'VAT', 'GST', 'Sales Tax')
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxName")]
+        public string? TaxName { get; set; } = default!;
+
+        /// <summary>
+        /// Type of tax - can be enum or string for flexibility
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxType")]
+        public string? TaxType { get; set; } = default!;
+
+        /// <summary>
+        /// Tax rate as decimal (e.g., 0.07 for 7%) - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxRate")]
+        public double? TaxRate { get; set; } = default!;
+
+        /// <summary>
+        /// Tax amount - converted from string to decimal for C# type safety
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxAmount")]
+        public double? TaxAmount { get; set; } = default!;
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.5.0.0 (NJsonSchema v11.4.0.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ReceiptTotals
+    {
+
+        /// <summary>
+        /// Pre-tax total amount
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("subtotal")]
+        public double? Subtotal { get; set; } = default!;
+
+        /// <summary>
+        /// Total tax amount
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("tax")]
+        public double? Tax { get; set; } = default!;
+
+        /// <summary>
+        /// Tip/gratuity amount
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("tip")]
+        public double? Tip { get; set; } = default!;
+
+        /// <summary>
+        /// Total discount amount
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("discount")]
+        public double? Discount { get; set; } = default!;
+
+        /// <summary>
+        /// Final total amount including tax, tip, and adjusting for discounts
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("total")]
+        public double? Total { get; set; } = default!;
 
     }
 

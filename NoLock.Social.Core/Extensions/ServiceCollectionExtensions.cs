@@ -17,7 +17,6 @@ using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Services;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Models;
-using NoLock.Social.Core.OCR.Processors;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;

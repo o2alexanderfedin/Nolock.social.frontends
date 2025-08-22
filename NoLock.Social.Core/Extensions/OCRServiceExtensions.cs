@@ -4,8 +4,10 @@ using Microsoft.Extensions.Http;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Services;
 using NoLock.Social.Core.OCR.Configuration;
-using NoLock.Social.Core.OCR.Processors;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.OCR.Generated;
+using NoLock.Social.Core.Storage.Interfaces;
+using NoLock.Social.Core.Storage.Services;
 using System;
 using System.Net.Http;
 
@@ -24,8 +26,8 @@ namespace NoLock.Social.Core.Extensions
             // Configure OCR service options from configuration
             services.Configure<OCRServiceOptions>(configuration.GetSection(OCRServiceOptions.SectionName));
             
-            // Register HttpClient for OCR service
-            services.AddHttpClient<OCRService>((serviceProvider, client) =>
+            // Register HttpClient for MistralOCRClient
+            services.AddHttpClient<MistralOCRClient>((serviceProvider, client) =>
             {
                 // Set base URL for Mistral OCR API
                 client.BaseAddress = new Uri("https://nolock-ocr-services-qbhx5.ondigitalocean.app");
@@ -38,30 +40,30 @@ namespace NoLock.Social.Core.Extensions
                 client.DefaultRequestHeaders.Add("User-Agent", "NoLock-OCR-Client/1.0");
             });
             
-            // Register the OCR service as IOCRService
-            services.AddScoped<IOCRService, OCRService>();
+            // Register the MistralOCRClient with its base URL
+            services.AddScoped(provider =>
+            {
+                var httpClient = provider.GetRequiredService<HttpClient>();
+                return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
+            });
+            
+            // Register CAS service for content storage
+            services.AddScoped<ICASService, CASService>();
+            
+            // Register specific OCR services for each document type with keys
+            services.AddKeyedScoped<IOCRService, ReceiptOCRService>(DocumentType.Receipt);
+            services.AddKeyedScoped<IOCRService, CheckOCRService>(DocumentType.Check);
+            
+            // Also register them without keys for direct injection
+            services.AddScoped<ReceiptOCRService>();
+            services.AddScoped<CheckOCRService>();
+            
+            // Register IOCRService with a factory that routes to the appropriate service
+            // For processors that specify document type, we'll use the appropriate service
+            // This is mainly for backward compatibility - new code should use specific services
+            services.AddScoped<IOCRService, OCRServiceRouter>();
             
             // Register supporting services that are still needed
-            
-            // Document processors for specific document types
-            services.AddScoped<IDocumentProcessor, ReceiptProcessor>();
-            services.AddScoped<IDocumentProcessor, CheckProcessor>();
-            
-            // Document processor registry
-            services.AddScoped<IDocumentProcessorRegistry>(provider =>
-            {
-                var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DocumentProcessorRegistry>>();
-                var registry = new DocumentProcessorRegistry(logger, (IDocumentTypeDetector?)null); // Explicitly cast to avoid ambiguity
-                
-                // Register processors
-                var processors = provider.GetServices<IDocumentProcessor>();
-                foreach (var processor in processors)
-                {
-                    registry.RegisterProcessor(processor);
-                }
-                
-                return registry;
-            });
             
             // Confidence score service for result validation
             services.AddScoped<IConfidenceScoreService, ConfidenceScoreService>();
@@ -72,9 +74,6 @@ namespace NoLock.Social.Core.Extensions
             // Wake lock service for keeping device awake during processing
             services.AddScoped<IWakeLockService, WakeLockService>();
             
-            // OCR polling service for checking status
-            services.AddScoped<IOCRPollingService, OCRPollingService>();
-            
             return services;
         }
         
@@ -83,15 +82,33 @@ namespace NoLock.Social.Core.Extensions
         /// </summary>
         public static IServiceCollection AddMinimalOCRServices(this IServiceCollection services)
         {
-            // Register HttpClient for OCR service with minimal configuration
-            services.AddHttpClient<OCRService>((serviceProvider, client) =>
+            // Register HttpClient for MistralOCRClient with minimal configuration
+            services.AddHttpClient<MistralOCRClient>((serviceProvider, client) =>
             {
                 client.BaseAddress = new Uri("https://nolock-ocr-services-qbhx5.ondigitalocean.app");
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
             
-            // Register only the OCR service
-            services.AddScoped<IOCRService, OCRService>();
+            // Register the MistralOCRClient
+            services.AddScoped(provider =>
+            {
+                var httpClient = provider.GetRequiredService<HttpClient>();
+                return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
+            });
+            
+            // Register CAS service for content storage
+            services.AddScoped<ICASService, CASService>();
+            
+            // Register specific OCR services for each document type with keys
+            services.AddKeyedScoped<IOCRService, ReceiptOCRService>(DocumentType.Receipt);
+            services.AddKeyedScoped<IOCRService, CheckOCRService>(DocumentType.Check);
+            
+            // Also register them without keys for direct injection
+            services.AddScoped<ReceiptOCRService>();
+            services.AddScoped<CheckOCRService>();
+            
+            // Register only the OCR service (for backward compatibility)
+            services.AddScoped<IOCRService, OCRServiceRouter>();
             
             return services;
         }
