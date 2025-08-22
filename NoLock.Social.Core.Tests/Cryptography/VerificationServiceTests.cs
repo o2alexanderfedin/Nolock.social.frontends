@@ -156,10 +156,9 @@ namespace NoLock.Social.Core.Tests.Cryptography
         public async Task VerifySignedContent_ValidSignature_ReturnsTrue()
         {
             // Arrange
-            var signedContent = new SignedContent
+            var signedContent = new SignedTarget
             {
-                Content = "Test content",
-                ContentHash = new byte[32],
+                TargetHash = new byte[32],
                 Signature = new byte[64],
                 PublicKey = new byte[91],
                 Algorithm = "ECDSA-P256",
@@ -186,20 +185,19 @@ namespace NoLock.Social.Core.Tests.Cryptography
         public async Task VerifySignedContent_NullSignedContent_ThrowsArgumentNullException()
         {
             // Arrange
-            SignedContent signedContent = null!;
+            SignedTarget signedTarget = null!;
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _verificationService.VerifySignedContentAsync(signedContent));
+                () => _verificationService.VerifySignedContentAsync(signedTarget));
         }
 
         [Fact]
         public async Task VerifySignedContent_UnsupportedAlgorithm_ThrowsNotSupportedException()
         {
             // Arrange
-            var signedContent = new SignedContent
+            var signedContent = new SignedTarget
             {
-                Content = "Test content",
                 Signature = new byte[64],
                 PublicKey = new byte[32],
                 Algorithm = "RSA", // Unsupported
@@ -216,9 +214,8 @@ namespace NoLock.Social.Core.Tests.Cryptography
         public async Task VerifySignedContent_UnsupportedVersion_ThrowsNotSupportedException()
         {
             // Arrange
-            var signedContent = new SignedContent
+            var signedContent = new SignedTarget
             {
-                Content = "Test content",
                 Signature = new byte[64],
                 PublicKey = new byte[32],
                 Algorithm = "ECDSA-P256",

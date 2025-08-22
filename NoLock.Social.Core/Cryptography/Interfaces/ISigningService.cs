@@ -11,35 +11,30 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
         /// <summary>
         /// Signs content using Ed25519 with SHA-256 hashing
         /// </summary>
-        /// <param name="content">The content to sign</param>
+        /// <param name="targetHash">The content to sign</param>
         /// <param name="privateKey">Ed25519 private key (32 bytes)</param>
         /// <param name="publicKey">Ed25519 public key (32 bytes)</param>
         /// <returns>Signed content with signature and metadata</returns>
-        Task<SignedContent> SignContentAsync(string content, byte[] privateKey, byte[] publicKey);
+        Task<SignedTarget> SignAsync(string targetHash, byte[] privateKey, byte[] publicKey);
 
         /// <summary>
         /// Signs content using Ed25519 key pair
         /// </summary>
-        /// <param name="content">The content to sign</param>
+        /// <param name="targetHash">The content to sign</param>
         /// <param name="keyPair">Ed25519 key pair</param>
         /// <returns>Signed content with signature and metadata</returns>
-        Task<SignedContent> SignContentAsync(string content, Ed25519KeyPair keyPair);
+        Task<SignedTarget> SignAsync(string targetHash, Ed25519KeyPair keyPair);
     }
 
     /// <summary>
     /// Represents signed content with cryptographic signature
     /// </summary>
-    public class SignedContent
+    public class SignedTarget
     {
-        /// <summary>
-        /// The original content that was signed
-        /// </summary>
-        public string Content { get; set; } = string.Empty;
-
         /// <summary>
         /// SHA-256 hash of the content
         /// </summary>
-        public byte[] ContentHash { get; set; } = Array.Empty<byte>();
+        public byte[] TargetHash { get; set; } = Array.Empty<byte>();
 
         /// <summary>
         /// Ed25519 signature (64 bytes)
@@ -69,11 +64,11 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
         /// <summary>
         /// Convert to base64 representation for transmission/storage
         /// </summary>
-        public SignedContentBase64 ToBase64()
+        public SignedTargetBase64 ToBase64()
         {
-            return new SignedContentBase64
+            return new SignedTargetBase64
             {
-                ContentHashBase64 = Convert.ToBase64String(ContentHash),
+                TargetHashBase64 = Convert.ToBase64String(TargetHash),
                 SignatureBase64 = Convert.ToBase64String(Signature),
                 PublicKeyBase64 = Convert.ToBase64String(PublicKey),
                 Algorithm = Algorithm,
@@ -86,12 +81,12 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
     /// <summary>
     /// Base64-encoded representation of signed content for transmission
     /// </summary>
-    public class SignedContentBase64
+    public class SignedTargetBase64
     {
         /// <summary>
-        /// Base64-encoded SHA-256 hash of the content
+        /// Base64-encoded SHA-256 hash of the target
         /// </summary>
-        public string ContentHashBase64 { get; set; } = string.Empty;
+        public string TargetHashBase64 { get; set; } = string.Empty;
 
         /// <summary>
         /// Base64-encoded Ed25519 signature

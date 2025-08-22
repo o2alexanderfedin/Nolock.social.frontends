@@ -45,12 +45,12 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 .ReturnsAsync(expectedSignature);
 
             // Act
-            var result = await _signingService.SignContentAsync(content, privateKey, publicKey);
+            var result = await _signingService.SignAsync(content, privateKey, publicKey);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(content, result.Content);
-            Assert.Equal(expectedHash, result.ContentHash);
+            // Content is now just passed as targetHash parameter, not stored in result
+            Assert.Equal(expectedHash, result.TargetHash);
             Assert.Equal(expectedSignature, result.Signature);
             Assert.Equal(publicKey, result.PublicKey);
             Assert.Equal("ECDSA-P256", result.Algorithm);
@@ -69,7 +69,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
         }
 
         [Fact]
@@ -82,7 +82,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
         }
 
         [Fact]
@@ -95,7 +95,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<ArgumentException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
             Assert.Contains("private key", exception.Message.ToLower());
         }
 
@@ -109,7 +109,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<ArgumentException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
             Assert.Contains("public key", exception.Message.ToLower());
         }
 
@@ -123,7 +123,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
         }
 
         [Fact]
@@ -136,7 +136,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
         }
 
         [Fact]
@@ -152,7 +152,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<CryptoException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
             Assert.Contains("hash", exception.Message.ToLower());
         }
 
@@ -173,7 +173,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             var exception = await Assert.ThrowsAsync<CryptoException>(
-                () => _signingService.SignContentAsync(content, privateKey, publicKey));
+                () => _signingService.SignAsync(content, privateKey, publicKey));
             Assert.Contains("sign", exception.Message.ToLower());
         }
 
@@ -199,11 +199,11 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 .ReturnsAsync(expectedSignature);
 
             // Act
-            var result = await _signingService.SignContentAsync(content, privateKey, publicKey);
+            var result = await _signingService.SignAsync(content, privateKey, publicKey);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(content, result.Content);
+            // Content is now just passed as targetHash parameter, not stored in result
             Assert.Equal(expectedSignature, result.Signature);
         }
 
@@ -224,11 +224,11 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 .ReturnsAsync(expectedSignature);
 
             // Act
-            var result = await _signingService.SignContentAsync(content, privateKey, publicKey);
+            var result = await _signingService.SignAsync(content, privateKey, publicKey);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(content, result.Content);
+            // Content is now just passed as targetHash parameter, not stored in result
             _mockCryptoService.Verify(x => x.Sha256Async(It.IsAny<byte[]>()), Times.Once);
         }
 
@@ -241,12 +241,11 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var publicKey = new byte[] { 6, 7, 8, 9, 10 };
             var contentHash = new byte[] { 11, 12, 13, 14, 15 };
 
-            var signedContent = new SignedContent
+            var signedContent = new SignedTarget
             {
-                Content = content,
                 Signature = signature,
                 PublicKey = publicKey,
-                ContentHash = contentHash,
+                TargetHash = contentHash,
                 Algorithm = "ECDSA-P256",
                 Version = "1.0",
                 Timestamp = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc)
@@ -259,7 +258,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             Assert.NotNull(base64Result);
             Assert.Equal(Convert.ToBase64String(signature), base64Result.SignatureBase64);
             Assert.Equal(Convert.ToBase64String(publicKey), base64Result.PublicKeyBase64);
-            Assert.Equal(Convert.ToBase64String(contentHash), base64Result.ContentHashBase64);
+            Assert.Equal(Convert.ToBase64String(contentHash), base64Result.TargetHashBase64);
             Assert.Equal("ECDSA-P256", base64Result.Algorithm);
             Assert.Equal("1.0", base64Result.Version);
             Assert.Equal(signedContent.Timestamp, base64Result.Timestamp);
@@ -285,11 +284,11 @@ namespace NoLock.Social.Core.Tests.Cryptography
                 .ReturnsAsync(expectedSignature);
 
             // Act
-            var result = await _signingService.SignContentAsync(content, keyPair);
+            var result = await _signingService.SignAsync(content, keyPair);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(content, result.Content);
+            // Content is now just passed as targetHash parameter, not stored in result
             Assert.Equal(keyPair.PublicKey, result.PublicKey);
         }
 
@@ -302,7 +301,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => _signingService.SignContentAsync(content, keyPair));
+                () => _signingService.SignAsync(content, keyPair));
         }
     }
 }

@@ -27,17 +27,17 @@ namespace NoLock.Social.Core.Cryptography.Services
         }
 
         /// <inheritdoc />
-        public async Task<SignedContent> SignContentAsync(string content, byte[] privateKey, byte[] publicKey)
+        public async Task<SignedTarget> SignAsync(string targetHash, byte[] privateKey, byte[] publicKey)
         {
             // Validate inputs
-            if (content == null)
+            if (targetHash == null)
             {
-                throw new ArgumentNullException(nameof(content));
+                throw new ArgumentNullException(nameof(targetHash));
             }
 
-            if (string.IsNullOrEmpty(content))
+            if (string.IsNullOrEmpty(targetHash))
             {
-                throw new ArgumentException("Content cannot be empty", nameof(content));
+                throw new ArgumentException("Content cannot be empty", nameof(targetHash));
             }
 
             if (privateKey == null)
@@ -66,7 +66,7 @@ namespace NoLock.Social.Core.Cryptography.Services
 
                 // Step 1: Hash the content using SHA-256
                 _logger.LogDebug("Computing SHA-256 hash of content");
-                var contentBytes = Encoding.UTF8.GetBytes(content);
+                var contentBytes = Encoding.UTF8.GetBytes(targetHash);
                 var contentHash = await _cryptoService.Sha256Async(contentBytes);
 
                 if (contentHash == null || contentHash.Length != 32)
@@ -84,10 +84,9 @@ namespace NoLock.Social.Core.Cryptography.Services
                 }
 
                 // Step 3: Create signed content object
-                var signedContent = new SignedContent
+                var signedContent = new SignedTarget
                 {
-                    Content = content,
-                    ContentHash = contentHash,
+                    TargetHash = contentHash,
                     Signature = signature,
                     PublicKey = publicKey,
                     Algorithm = "ECDSA-P256",
@@ -124,14 +123,14 @@ namespace NoLock.Social.Core.Cryptography.Services
         }
 
         /// <inheritdoc />
-        public async Task<SignedContent> SignContentAsync(string content, Ed25519KeyPair keyPair)
+        public async Task<SignedTarget> SignAsync(string targetHash, Ed25519KeyPair keyPair)
         {
             if (keyPair == null)
             {
                 throw new ArgumentNullException(nameof(keyPair));
             }
 
-            return await SignContentAsync(content, keyPair.PrivateKey, keyPair.PublicKey);
+            return await SignAsync(targetHash, keyPair.PrivateKey, keyPair.PublicKey);
         }
     }
 }

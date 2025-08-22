@@ -29,8 +29,8 @@ namespace NoLock.Social.Core.Cryptography.Interfaces
         /// <summary>
         /// Verifies a SignedContent object
         /// </summary>
-        /// <param name="signedContent">The signed content to verify</param>
+        /// <param name="signedTarget">The signed content to verify</param>
         /// <returns>True if signature is valid, false otherwise</returns>
-        Task<bool> VerifySignedContentAsync(SignedContent signedContent);
+        Task<bool> VerifySignedContentAsync(SignedTarget signedTarget);
     }
 }

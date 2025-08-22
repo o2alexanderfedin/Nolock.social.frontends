@@ -143,13 +143,13 @@
     private SigningModel _signingModel = new();
     private bool _isProcessing = false;
     private string _errorMessage = "";
-    private SignedContent? _signatureResult = null;
+    private SignedTarget? _signatureResult = null;
     private string _signatureBase64 = "";
     private string _contentHashBase64 = "";
     private string _publicKeyBase64 = "";
     private bool _copySuccess = false;
 
-    [Parameter] public EventCallback<SignedContent> OnContentSigned { get; set; }
+    [Parameter] public EventCallback<SignedTarget> OnContentSigned { get; set; }
 
     protected override void OnInitialized()
     {
@@ -182,14 +182,14 @@
             var privateKey = session.PrivateKeyBuffer.Data;
             
             // Sign the content
-            _signatureResult = await SigningService.SignContentAsync(
+            _signatureResult = await SigningService.SignAsync(
                 _signingModel.Content,
                 privateKey,
                 session.PublicKey);
 
             // Convert to base64 for display
             _signatureBase64 = Convert.ToBase64String(_signatureResult.Signature);
-            _contentHashBase64 = Convert.ToBase64String(_signatureResult.ContentHash);
+            _contentHashBase64 = Convert.ToBase64String(_signatureResult.TargetHash);
             _publicKeyBase64 = Convert.ToBase64String(_signatureResult.PublicKey);
 
             Logger.LogInformation("Content successfully signed for user: {Username}", session.Username);
