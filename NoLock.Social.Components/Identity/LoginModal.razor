@@ -1,0 +1,45 @@
+@namespace NoLock.Social.Components.Identity
+@using NoLock.Social.Core.Identity.Interfaces
+
+@inject ILoginService LoginService
+
+@if (ShowModal)
+{
+    <div class="modal-backdrop" @onclick="HandleBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Welcome to NoLock Social</h5>
+                </div>
+                <div class="modal-body">
+                    <LoginAdapterComponent />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool ShowModal { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowModalChanged { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if already logged in
+        if (LoginService.CurrentLoginState == LoginState.LoggedIn)
+        {
+            ShowModal = false;
+            await ShowModalChanged.InvokeAsync(false);
+        }
+    }
+
+    private async Task HandleBackdropClick()
+    {
+        // Don't allow closing by clicking backdrop when not logged in
+        if (LoginService.CurrentLoginState == LoginState.LoggedIn)
+        {
+            ShowModal = false;
+            await ShowModalChanged.InvokeAsync(false);
+        }
+    }
+}
