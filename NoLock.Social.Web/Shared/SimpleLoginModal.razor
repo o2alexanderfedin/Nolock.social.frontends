@@ -1,0 +1,114 @@
+@using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Identity.Models
+@inject ILoginAdapterService LoginService
+
+@if (ShowModal && !LoginService.CurrentLoginState.IsLoggedIn)
+{
+    <div class="modal-backdrop-glass" @onclick="HandleBackdropClick">
+        <div class="modal-dialog-glass" @onclick:stopPropagation="true">
+            <div class="glass-modal">
+                <div class="modal-header-glass">
+                    <h5 class="modal-title">Welcome to NoLock Social</h5>
+                </div>
+                <div class="modal-body-glass">
+                    <div class="login-form">
+                        <h6>Please enter your credentials to continue</h6>
+                        <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="text-danger" />
+                            
+                            <div class="mb-3">
+                                <label for="username" class="form-label-glass">Username</label>
+                                <InputText id="username" class="form-control-glass form-control" @bind-Value="loginModel.Username" placeholder="Enter your username" />
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="passphrase" class="form-label-glass">Passphrase</label>
+                                <InputText id="passphrase" type="password" class="form-control-glass form-control" @bind-Value="loginModel.Passphrase" placeholder="Enter your passphrase" />
+                            </div>
+                            
+                            <div class="mb-3 form-check">
+                                <InputCheckbox id="rememberMe" class="form-check-input" @bind-Value="loginModel.RememberMe" />
+                                <label for="rememberMe" class="form-check-label">Remember me</label>
+                            </div>
+                            
+                            <button type="submit" class="btn-primary-glass btn w-100" disabled="@isLoading">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    <span>Logging in...</span>
+                                }
+                                else
+                                {
+                                    <span>Login</span>
+                                }
+                            </button>
+                        </EditForm>
+                        
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger mt-3" role="alert">
+                                @errorMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool ShowModal { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowModalChanged { get; set; }
+    
+    private LoginModel loginModel = new LoginModel();
+    private bool isLoading = false;
+    private string errorMessage = "";
+    
+    private class LoginModel
+    {
+        public string Username { get; set; } = "";
+        public string Passphrase { get; set; } = "";
+        public bool RememberMe { get; set; } = true;
+    }
+    
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        errorMessage = "";
+        
+        try
+        {
+            var result = await LoginService.LoginAsync(loginModel.Username, loginModel.Passphrase, loginModel.RememberMe);
+            
+            if (result.Success)
+            {
+                ShowModal = false;
+                await ShowModalChanged.InvokeAsync(false);
+            }
+            else
+            {
+                errorMessage = result.ErrorMessage ?? "Login failed. Please check your credentials.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    
+    private void HandleBackdropClick()
+    {
+        // Don't allow closing by clicking backdrop when not logged in
+        if (LoginService.CurrentLoginState.IsLoggedIn)
+        {
+            ShowModal = false;
+            ShowModalChanged.InvokeAsync(false);
+        }
+    }
+}

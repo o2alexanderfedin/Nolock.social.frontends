@@ -1,4 +1,8 @@
-﻿<Router AppAssembly="@typeof(App).Assembly">
+﻿@using NoLock.Social.Web.Shared
+
+<SimpleLoginModal ShowModal="@showLoginModal" ShowModalChanged="@((bool val) => showLoginModal = val)" />
+
+<Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
@@ -10,3 +14,7 @@
         </LayoutView>
     </NotFound>
 </Router>
+
+@code {
+    private bool showLoginModal = true;
+}
