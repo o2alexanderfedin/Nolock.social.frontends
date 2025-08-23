@@ -33,6 +33,8 @@ builder.Services.AddLoginServices();
 // Add camera and accessibility services
 builder.Services.AddCameraServices();
 builder.Services.AddAccessibilityServices();
+// Add OCR services for document processing
+builder.Services.AddMinimalOCRServices();
 
 var app = builder.Build();
 

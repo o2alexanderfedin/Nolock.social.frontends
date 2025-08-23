@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Camera Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        #cameraPreview {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            background: #000;
+        }
+        #captureCanvas {
+            display: none;
+        }
+        #capturedImage {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 2px solid #28a745;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .camera-select {
+            padding: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Functionality Test</h1>
+    
+    <div id="status">Ready to test camera</div>
+    
+    <div class="controls">
+        <button onclick="testPermission()">Check Permission</button>
+        <button onclick="requestPermission()">Request Permission</button>
+        <button onclick="startCamera()">Start Camera</button>
+        <button onclick="capturePhoto()" id="captureBtn" disabled>Capture Photo</button>
+        <button onclick="stopCamera()">Stop Camera</button>
+        <select id="cameraSelect" class="camera-select" onchange="switchCamera()">
+            <option value="">Select Camera</option>
+        </select>
+    </div>
+    
+    <video id="cameraPreview" autoplay playsinline></video>
+    <canvas id="captureCanvas"></canvas>
+    <img id="capturedImage" style="display:none;" />
+    
+    <script src="js/camera-interop.js"></script>
+    <script>
+        function updateStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.background = isError ? '#f8d7da' : '#d4edda';
+            status.style.borderColor = isError ? '#f5c6cb' : '#c3e6cb';
+            status.style.color = isError ? '#721c24' : '#155724';
+        }
+        
+        async function testPermission() {
+            try {
+                const result = await window.checkCameraPermission();
+                updateStatus(`Camera permission status: ${result}`);
+            } catch (error) {
+                updateStatus(`Error checking permission: ${error.message}`, true);
+            }
+        }
+        
+        async function requestPermission() {
+            try {
+                const result = await window.requestCameraPermission();
+                updateStatus(`Camera permission: ${result}`);
+            } catch (error) {
+                updateStatus(`Error requesting permission: ${error.message}`, true);
+            }
+        }
+        
+        async function startCamera() {
+            try {
+                const success = await window.setupCamera('cameraPreview');
+                if (success) {
+                    updateStatus('Camera started successfully');
+                    document.getElementById('captureBtn').disabled = false;
+                    await loadCameras();
+                } else {
+                    updateStatus('Failed to start camera', true);
+                }
+            } catch (error) {
+                updateStatus(`Error starting camera: ${error.message}`, true);
+            }
+        }
+        
+        function capturePhoto() {
+            try {
+                const imageData = window.captureImage('captureCanvas', 'cameraPreview');
+                if (imageData) {
+                    const img = document.getElementById('capturedImage');
+                    img.src = imageData;
+                    img.style.display = 'block';
+                    updateStatus('Photo captured successfully');
+                } else {
+                    updateStatus('Failed to capture photo', true);
+                }
+            } catch (error) {
+                updateStatus(`Error capturing photo: ${error.message}`, true);
+            }
+        }
+        
+        function stopCamera() {
+            try {
+                window.stopCamera();
+                updateStatus('Camera stopped');
+                document.getElementById('captureBtn').disabled = true;
+                document.getElementById('cameraSelect').innerHTML = '<option value="">Select Camera</option>';
+            } catch (error) {
+                updateStatus(`Error stopping camera: ${error.message}`, true);
+            }
+        }
+        
+        async function loadCameras() {
+            try {
+                const cameras = await window.getAvailableCameras();
+                const select = document.getElementById('cameraSelect');
+                select.innerHTML = '<option value="">Select Camera</option>';
+                cameras.forEach(camera => {
+                    const option = document.createElement('option');
+                    option.value = camera.id;
+                    option.textContent = camera.label;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading cameras:', error);
+            }
+        }
+        
+        async function switchCamera() {
+            const select = document.getElementById('cameraSelect');
+            const deviceId = select.value;
+            if (deviceId) {
+                try {
+                    await window.switchCamera(deviceId);
+                    updateStatus('Camera switched successfully');
+                } catch (error) {
+                    updateStatus(`Error switching camera: ${error.message}`, true);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

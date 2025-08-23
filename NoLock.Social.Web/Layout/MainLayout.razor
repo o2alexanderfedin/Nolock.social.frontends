@@ -1,7 +1,13 @@
 ﻿@inherits LayoutComponentBase
 @using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Identity.Models
+@using NoLock.Social.Web.Shared
+@using System.Reactive.Linq
 @inject ILoginAdapterService LoginService
 @inject NavigationManager Navigation
+@implements IDisposable
+
+<LoginStatusIndicator />
 
 <div class="page">
     <div class="sidebar">
@@ -10,10 +16,10 @@
 
     <main>
         <div class="top-row px-4">
-            @if (LoginService.CurrentLoginState.IsLoggedIn)
+            @if (isLoggedIn)
             {
                 <div class="user-info">
-                    <span class="username">@LoginService.CurrentLoginState.Username</span>
+                    <span class="username">@username</span>
                     <button class="btn btn-outline-danger btn-sm ms-2" @onclick="HandleLogout">
                         <i class="bi bi-box-arrow-right"></i> Logout
                     </button>
@@ -29,9 +35,34 @@
 </div>
 
 @code {
+    private IDisposable? loginStateSubscription;
+    private bool isLoggedIn;
+    private string? username;
+
+    protected override void OnInitialized()
+    {
+        // Set initial state
+        isLoggedIn = LoginService.CurrentLoginState.IsLoggedIn;
+        username = LoginService.CurrentLoginState.Username;
+
+        // Subscribe to login state changes using Reactive Extensions
+        loginStateSubscription = LoginService.LoginStateChanges
+            .Subscribe(change =>
+            {
+                isLoggedIn = change.NewState.IsLoggedIn;
+                username = change.NewState.Username;
+                InvokeAsync(StateHasChanged);
+            });
+    }
+
     private async Task HandleLogout()
     {
         await LoginService.LogoutAsync();
         Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        loginStateSubscription?.Dispose();
     }
 }

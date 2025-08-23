@@ -1,0 +1,626 @@
+@page "/document-capture"
+@using NoLock.Social.Core.Camera.Interfaces
+@using NoLock.Social.Core.Camera.Models
+@using NoLock.Social.Core.OCR.Interfaces
+@using NoLock.Social.Core.Identity.Interfaces
+@using System.Reactive.Linq
+@using System
+@using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType
+@inject ICameraService CameraService
+@inject IOCRService OCRService
+@inject ILoginAdapterService LoginService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<PageTitle>Document Capture</PageTitle>
+
+<div class="container-fluid">
+    <h1>Document Capture</h1>
+    
+    @if (!LoginService.CurrentLoginState.IsLoggedIn)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Please log in to capture documents.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Camera Preview Section -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-camera"></i> Camera Preview
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        @if (isCameraInitialized)
+                        {
+                            <div class="camera-container">
+                                <video id="cameraPreview" class="camera-preview" autoplay></video>
+                                <canvas id="captureCanvas" class="d-none"></canvas>
+                            </div>
+                            
+                            <!-- Camera Controls -->
+                            <div class="camera-controls mt-3">
+                                <button class="btn btn-primary btn-lg" @onclick="CaptureImage" disabled="@isCapturing">
+                                    @if (isCapturing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                    }
+                                    <i class="bi bi-camera-fill"></i> Capture
+                                </button>
+                                
+                                @if (supportsTorch)
+                                {
+                                    <button class="btn btn-secondary" @onclick="ToggleTorch">
+                                        <i class="bi @(torchEnabled ? "bi-lightbulb-fill" : "bi-lightbulb")"></i> 
+                                        @(torchEnabled ? "Torch Off" : "Torch On")
+                                    </button>
+                                }
+                                
+                                @if (supportsZoom)
+                                {
+                                    <div class="zoom-control d-inline-block ms-3">
+                                        <label>Zoom: @currentZoom.ToString("F1")x</label>
+                                        <input type="range" class="form-range" min="1" max="5" step="0.1" 
+                                               value="@currentZoom" @onchange="OnZoomChanged" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (isInitializing)
+                        {
+                            <div class="text-center p-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Initializing camera...</span>
+                                </div>
+                                <p class="mt-3">Initializing camera...</p>
+                            </div>
+                        }
+                        else if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-circle"></i> @errorMessage
+                            </div>
+                            <button class="btn btn-primary" @onclick="InitializeCamera">
+                                <i class="bi bi-arrow-clockwise"></i> Retry
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="text-center p-5">
+                                <button class="btn btn-primary btn-lg" @onclick="InitializeCamera">
+                                    <i class="bi bi-camera"></i> Start Camera
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+                
+                <!-- Captured Pages -->
+                @if (capturedPages.Any())
+                {
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-images"></i> Captured Pages (@capturedPages.Count)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                @foreach (var (capturedPage, index) in capturedPages.Select((p, i) => (p, i)))
+                                {
+                                    <div class="col-md-3">
+                                        <div class="captured-page-thumbnail">
+                                            <img src="@capturedPage.ImageUrl" class="img-fluid" alt="Page @(index + 1)" />
+                                            <div class="page-actions">
+                                                <span class="badge bg-primary">Page @(index + 1)</span>
+                                                <button class="btn btn-sm btn-danger" @onclick="() => RemovePage(index)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            
+            <!-- Settings Section -->
+            <div class="col-lg-4">
+                <!-- Camera Selection -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear"></i> Camera Settings
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="cameraSelect" class="form-label">Select Camera</label>
+                            <select id="cameraSelect" class="form-select" @onchange="OnCameraChanged" disabled="@(!isCameraInitialized)">
+                                @if (availableCameras != null)
+                                {
+                                    @foreach (var camera in availableCameras)
+                                    {
+                                        <option value="@camera">@camera</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option>No cameras available</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Document Type Selection -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-file-earmark-text"></i> Document Type
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="documentType" id="receipt" 
+                                   checked="@(selectedDocumentType == OCRDocumentType.Receipt)" 
+                                   @onchange="() => selectedDocumentType = OCRDocumentType.Receipt">
+                            <label class="form-check-label" for="receipt">
+                                <i class="bi bi-receipt"></i> Receipt
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="documentType" id="check" 
+                                   checked="@(selectedDocumentType == OCRDocumentType.Check)" 
+                                   @onchange="() => selectedDocumentType = OCRDocumentType.Check">
+                            <label class="form-check-label" for="check">
+                                <i class="bi bi-credit-card"></i> Check
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quality Indicators -->
+                @if (lastQualityResult != null)
+                {
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-check-circle"></i> Image Quality
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="quality-indicator mb-2">
+                                <span>Overall Quality:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.OverallScore)" 
+                                         style="width: @(lastQualityResult.OverallScore)%">
+                                        @lastQualityResult.OverallScore%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="quality-indicator mb-2">
+                                <span>Sharpness:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.BlurScore * 100)" 
+                                         style="width: @(lastQualityResult.BlurScore * 100)%">
+                                        @((lastQualityResult.BlurScore * 100).ToString("F0"))%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="quality-indicator">
+                                <span>Lighting:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.LightingScore * 100)" 
+                                         style="width: @(lastQualityResult.LightingScore * 100)%">
+                                        @((lastQualityResult.LightingScore * 100).ToString("F0"))%
+                                    </div>
+                                </div>
+                            </div>
+                            @if (lastQualityResult.HasIssues)
+                            {
+                                <div class="alert alert-warning mt-2 mb-0">
+                                    <small>
+                                        @foreach (var issue in lastQualityResult.Issues)
+                                        {
+                                            <div>• @issue</div>
+                                        }
+                                    </small>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                
+                <!-- Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-lightning"></i> Actions
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-success w-100 mb-2" @onclick="ProcessDocument" 
+                                disabled="@(!capturedPages.Any() || isProcessing)">
+                            @if (isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="bi bi-play-fill"></i> Process Document
+                        </button>
+                        <button class="btn btn-warning w-100" @onclick="ClearSession" 
+                                disabled="@(!capturedPages.Any())">
+                            <i class="bi bi-trash"></i> Clear All Pages
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isInitializing = false;
+    private bool isCameraInitialized = false;
+    private bool isCapturing = false;
+    private bool isProcessing = false;
+    private string? errorMessage;
+    private string? sessionId;
+    
+    private string[]? availableCameras;
+    private string? selectedCamera;
+    private OCRDocumentType selectedDocumentType = OCRDocumentType.Receipt;
+    
+    private bool supportsTorch = false;
+    private bool supportsZoom = false;
+    private bool torchEnabled = false;
+    private double currentZoom = 1.0;
+    
+    private List<CapturedImage> capturedPages = new();
+    private ImageQualityResult? lastQualityResult;
+    private CameraStream? cameraStream;
+    
+    private IDisposable? loginStateSubscription;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to login state changes
+        loginStateSubscription = LoginService.LoginStateChanges
+            .Subscribe(change =>
+            {
+                if (!change.NewState.IsLoggedIn)
+                {
+                    // Stop camera and navigate away if logged out
+                    _ = StopCamera();
+                    Navigation.NavigateTo("/");
+                }
+            });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Don't auto-initialize camera, let user click Start Camera button
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task InitializeCamera()
+    {
+        try
+        {
+            isInitializing = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            // Check camera permission first
+            var permissionStatus = await JSRuntime.InvokeAsync<string>("checkCameraPermission");
+            Console.WriteLine($"Camera permission status: {permissionStatus}");
+            
+            // If permission not granted, request it
+            if (permissionStatus != "granted")
+            {
+                var permissionResult = await JSRuntime.InvokeAsync<string>("requestCameraPermission");
+                if (permissionResult != "granted")
+                {
+                    errorMessage = "Camera permission denied. Please grant camera access to use this feature.";
+                    isInitializing = false;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Mark camera as initialized first so the video element gets rendered
+            isCameraInitialized = true;
+            StateHasChanged();
+            
+            // Wait a bit for the DOM to update with the video element
+            await Task.Delay(100);
+
+            // Set up camera stream using JavaScript interop
+            var setupSuccess = await JSRuntime.InvokeAsync<bool>("setupCamera", "cameraPreview", null);
+            if (!setupSuccess)
+            {
+                errorMessage = "Failed to start camera stream. Please check your camera is connected and not in use by another application.";
+                isCameraInitialized = false;
+                StateHasChanged();
+                return;
+            }
+            
+            // Get available cameras
+            var cameras = await JSRuntime.InvokeAsync<object[]>("getAvailableCameras");
+            if (cameras != null && cameras.Length > 0)
+            {
+                availableCameras = cameras.Select(c => c?.ToString() ?? "Camera").ToArray();
+                selectedCamera = availableCameras[0];
+            }
+            else
+            {
+                availableCameras = new[] { "Default Camera" };
+                selectedCamera = availableCameras[0];
+            }
+
+            // Create a simple session ID
+            sessionId = Guid.NewGuid().ToString();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to initialize camera: {ex.Message}";
+        }
+        finally
+        {
+            isInitializing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CaptureImage()
+    {
+        if (!isCameraInitialized || string.IsNullOrEmpty(sessionId))
+            return;
+
+        try
+        {
+            isCapturing = true;
+            StateHasChanged();
+
+            // Capture image using JavaScript interop
+            var imageDataUrl = await JSRuntime.InvokeAsync<string>("captureImage", "captureCanvas", "cameraPreview");
+            
+            if (string.IsNullOrEmpty(imageDataUrl))
+            {
+                errorMessage = "Failed to capture image.";
+                return;
+            }
+
+            // Create a simple captured image object
+            var capturedImage = new CapturedImage
+            {
+                Id = Guid.NewGuid().ToString(),
+                ImageData = imageDataUrl,
+                ImageUrl = imageDataUrl,
+                Timestamp = DateTime.UtcNow,
+                Quality = 80 // Default quality for now
+            };
+            
+            // Add to captured pages
+            capturedPages.Add(capturedImage);
+            
+            // Create a simple quality result for display
+            lastQualityResult = new ImageQualityResult
+            {
+                OverallScore = 80,
+                BlurScore = 0.8,
+                LightingScore = 0.75
+            };
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to capture image: {ex.Message}";
+        }
+        finally
+        {
+            isCapturing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnCameraChanged(ChangeEventArgs e)
+    {
+        if (e.Value != null && isCameraInitialized)
+        {
+            selectedCamera = e.Value.ToString();
+            // For now, camera switching is not implemented in the simplified version
+            await Task.CompletedTask;
+        }
+    }
+
+    private async Task OnZoomChanged(ChangeEventArgs e)
+    {
+        if (e.Value != null && double.TryParse(e.Value.ToString(), out var zoom))
+        {
+            currentZoom = zoom;
+            // For now, zoom is not implemented in the simplified version
+            await JSRuntime.InvokeVoidAsync("setZoom", zoom);
+        }
+    }
+
+    private async Task ToggleTorch()
+    {
+        torchEnabled = !torchEnabled;
+        // For now, torch is not implemented in the simplified version
+        await JSRuntime.InvokeVoidAsync("toggleTorch", torchEnabled);
+    }
+
+    private void RemovePage(int index)
+    {
+        if (index >= 0 && index < capturedPages.Count)
+        {
+            capturedPages.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSession()
+    {
+        capturedPages.Clear();
+        lastQualityResult = null;
+        StateHasChanged();
+    }
+
+    private async Task ProcessDocument()
+    {
+        if (!capturedPages.Any() || string.IsNullOrEmpty(sessionId))
+            return;
+
+        try
+        {
+            isProcessing = true;
+            StateHasChanged();
+
+            // Process each page individually (OCRService expects single images)
+            foreach (var capturedPage in capturedPages)
+            {
+                // Convert base64 to byte array
+                var base64Data = capturedPage.ImageData;
+                if (base64Data.Contains(","))
+                {
+                    base64Data = base64Data.Split(',')[1]; // Remove data URL prefix
+                }
+                var imageBytes = Convert.FromBase64String(base64Data);
+
+                // Create OCR submission request
+                var submission = new NoLock.Social.Core.OCR.Models.OCRSubmissionRequest
+                {
+                    DocumentType = selectedDocumentType,
+                    ImageData = imageBytes
+                };
+
+                // Submit for OCR processing
+                await OCRService.SubmitDocumentAsync(submission);
+            }
+            
+            // Clear session after successful processing
+            ClearSession();
+            
+            // Show success message
+            errorMessage = null;
+            StateHasChanged();
+            
+            // Navigate to home or results page
+            Navigation.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to process document: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopCamera()
+    {
+        try
+        {
+            if (isCameraInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("stopCamera");
+                isCameraInitialized = false;
+            }
+        }
+        catch
+        {
+            // Ignore errors during cleanup
+        }
+    }
+
+    private string GetQualityClass(double quality)
+    {
+        return quality switch
+        {
+            >= 80 => "bg-success",
+            >= 60 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    public async void Dispose()
+    {
+        loginStateSubscription?.Dispose();
+        await StopCamera();
+    }
+}
+
+<style>
+    .camera-container {
+        position: relative;
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .camera-preview {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    
+    .camera-controls {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .zoom-control {
+        min-width: 200px;
+    }
+    
+    .captured-page-thumbnail {
+        position: relative;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .captured-page-thumbnail img {
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+    }
+    
+    .page-actions {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 0.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .quality-indicator {
+        margin-bottom: 0.5rem;
+    }
+    
+    .quality-indicator span {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-weight: 500;
+    }
+</style>

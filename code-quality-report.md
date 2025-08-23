@@ -1,0 +1,118 @@
+# Code Quality Analysis Report
+
+Generated: Sat Aug 23 10:41:05 PDT 2025
+
+## Executive Summary
+
+This report identifies code quality issues, anti-patterns, and improvement opportunities in the codebase.
+
+---
+
+## 1. Anti-Patterns Detected
+
+### God Objects
+**Issue**: Classes with too many responsibilities (>15 public methods)
+**Impact**: Violates Single Responsibility Principle, hard to maintain
+- CameraService.cs: 31 public methods
+- CorrectedProcessedDocument.cs: 17 public methods
+- DocumentProcessingQueue.cs: 17 public methods
+- LoginAdapterComponentTests.cs: 19 public methods
+- CameraAccessibilityTests.cs: 21 public methods
+- OfflineStatusIndicatorTests.cs: 17 public methods
+- KeyboardNavigationTests.cs: 18 public methods
+- SignatureVerificationComponentTests.cs: 26 public methods
+- RememberMeServiceTests.cs: 19 public methods
+- LoginAdapterServiceTests.cs: 20 public methods
+- VerificationServiceTests.cs: 24 public methods
+- SigningServiceTests.cs: 17 public methods
+- OCRServiceOptionsTests.cs: 18 public methods
+- WakeLockServiceTests.cs: 29 public methods
+- ConfidenceScoreServiceTests.cs: 18 public methods
+- TypedContentAddressableStorageTests.cs: 20 public methods
+**Solution**: Split into smaller, focused classes
+
+### Long Methods
+**Issue**: Methods exceeding 50 lines
+**Impact**: Hard to understand, test, and maintain
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/Identity/Models/LoginModels.cs: Line 61-134 (73 lines)
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/Identity/Models/LoginModels.cs: Line 149-206 (57 lines)
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/Identity/Models/LoginModels.cs: Line 149-207 (58 lines)
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/Identity/Services/RememberMeService.cs: Line 78-134 (56 lines)
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/Identity/Services/RememberMeService.cs: Line 78-138 (60 lines)
+**Solution**: Extract smaller methods, use method chaining
+
+### Deep Nesting
+**Issue**: Code nested more than 4 levels deep
+**Impact**: Reduced readability, increased complexity
+- LoginAdapterService.cs: Max nesting level 7
+- SecurityService.cs: Max nesting level 8
+- SecureMemoryManager.cs: Max nesting level 8
+- CameraService.cs: Max nesting level 10
+- MistralOCRClient.cs: Max nesting level 8
+**Solution**: Early returns, extract methods, use guard clauses
+
+### Magic Numbers
+**Issue**: Hard-coded numeric literals in code
+**Impact**: Unclear intent, hard to maintain
+**Found**: ~1215 potential magic numbers
+**Solution**: Use named constants or configuration
+
+### Technical Debt Markers
+**Issue**: TODO, FIXME, HACK comments indicating technical debt
+**Found**: 6 technical debt markers
+**Solution**: Create tickets, prioritize and address
+
+### Duplicate Code
+**Issue**: Similar code blocks repeated across files
+**Impact**: Maintenance burden, inconsistent updates
+**Sample duplicates found:**
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Core/OCR/Generated/MistralOCRClient.cs: Line 2869-2870
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Components.Tests/Content/SignatureVerificationComponentTests.cs: Line 81-82
+/Users/alexanderfedin/Projects/nolock.social/Nolock.social.frontend/NoLock.Social.Components.Tests/Content/SignatureVerificationComponentTests.cs: Line 112-113
+**Solution**: Extract common code to utilities or base classes
+
+### Circular Dependencies
+**Issue**: Classes that depend on each other
+**Impact**: Tight coupling, hard to test independently
+**Solution**: Use interfaces, dependency injection
+
+### Missing Null Checks
+**Issue**: Direct usage without null validation
+**Impact**: Potential NullReferenceExceptions
+**Potential issues**: ~0 locations
+**Solution**: Use null-conditional operators (?.), guard clauses
+
+### Async/Await Issues
+**Issue**: async void, .Result, .Wait() usage
+**Impact**: Deadlocks, unhandled exceptions
+- async void methods: 
+- .Result/.Wait() calls: 
+**Solution**: Use async Task, await properly
+
+## Summary Statistics
+
+### Codebase Metrics
+- Total C# Files: 167
+- Total Lines of Code: 30686
+- Test Files: 36
+
+## Priority Recommendations
+
+### High Priority
+1. **Break down God Objects** - Improve maintainability
+2. **Split long methods** - Enhance readability
+3. **Reduce deep nesting** - Improve code flow
+
+### Medium Priority
+1. **Reduce nesting levels** - Improve code flow
+2. **Address TODO/FIXME items** - Reduce technical debt
+3. **Remove duplicate code** - Reduce maintenance burden
+
+### Low Priority
+1. **Remove duplicate code** - Reduce maintenance burden
+2. **Fix circular dependencies** - Improve architecture
+3. **Add null checks** - Prevent runtime errors
+
+---
+
+*Report generated by Code Quality Analyzer*
