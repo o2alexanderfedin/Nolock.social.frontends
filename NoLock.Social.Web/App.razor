@@ -1,4 +1,6 @@
 ﻿@using NoLock.Social.Web.Shared
+@using NoLock.Social.Core.Identity.Interfaces
+@inject ILoginAdapterService LoginService
 
 <SimpleLoginModal ShowModal="@showLoginModal" ShowModalChanged="@((bool val) => showLoginModal = val)" />
 
@@ -16,5 +18,11 @@
 </Router>
 
 @code {
-    private bool showLoginModal = true;
+    private bool showLoginModal = false;
+
+    protected override void OnInitialized()
+    {
+        // Show login modal if not logged in
+        showLoginModal = !LoginService.CurrentLoginState.IsLoggedIn;
+    }
 }

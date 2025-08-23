@@ -1,4 +1,8 @@
 ﻿@inherits LayoutComponentBase
+@using NoLock.Social.Core.Identity.Interfaces
+@inject ILoginAdapterService LoginService
+@inject NavigationManager Navigation
+
 <div class="page">
     <div class="sidebar">
         <NavMenu />
@@ -6,6 +10,15 @@
 
     <main>
         <div class="top-row px-4">
+            @if (LoginService.CurrentLoginState.IsLoggedIn)
+            {
+                <div class="user-info">
+                    <span class="username">@LoginService.CurrentLoginState.Username</span>
+                    <button class="btn btn-outline-danger btn-sm ms-2" @onclick="HandleLogout">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </button>
+                </div>
+            }
             <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
         </div>
 
@@ -14,3 +27,11 @@
         </article>
     </main>
 </div>
+
+@code {
+    private async Task HandleLogout()
+    {
+        await LoginService.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}
