@@ -1,0 +1,86 @@
+@using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Identity.Models
+@using System.Reactive.Linq
+@inject ILoginAdapterService LoginService
+@implements IDisposable
+
+@if (showStatusMessage)
+{
+    <div class="alert @alertClass alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" 
+         style="z-index: 2000; min-width: 300px;" role="alert">
+        <i class="bi @iconClass"></i> @statusMessage
+        <button type="button" class="btn-close" @onclick="() => showStatusMessage = false"></button>
+    </div>
+}
+
+@code {
+    private IDisposable? loginStateSubscription;
+    private bool showStatusMessage = false;
+    private string statusMessage = "";
+    private string alertClass = "alert-info";
+    private string iconClass = "bi-info-circle";
+    private System.Threading.Timer? hideTimer;
+
+    protected override void OnInitialized()
+    {
+        // Use Reactive Extensions with operators for more sophisticated behavior
+        loginStateSubscription = LoginService.LoginStateChanges
+            // Throttle rapid state changes to avoid UI flicker
+            .Throttle(TimeSpan.FromMilliseconds(300))
+            // Filter out duplicate states
+            .DistinctUntilChanged(change => change.NewState.IsLoggedIn)
+            // Transform the state change into a status message
+            .Select(change => CreateStatusMessage(change))
+            // Filter out empty messages
+            .Where(msg => !string.IsNullOrEmpty(msg.Message))
+            // Subscribe on the UI thread
+            .Subscribe(msg =>
+            {
+                statusMessage = msg.Message;
+                alertClass = msg.AlertClass;
+                iconClass = msg.IconClass;
+                showStatusMessage = true;
+                
+                // Auto-hide after 5 seconds
+                hideTimer?.Dispose();
+                hideTimer = new System.Threading.Timer(_ =>
+                {
+                    InvokeAsync(() =>
+                    {
+                        showStatusMessage = false;
+                        StateHasChanged();
+                    });
+                }, null, 5000, System.Threading.Timeout.Infinite);
+                
+                InvokeAsync(StateHasChanged);
+            });
+    }
+
+    private (string Message, string AlertClass, string IconClass) CreateStatusMessage(LoginStateChange change)
+    {
+        if (change.NewState.IsLoggedIn && !change.PreviousState.IsLoggedIn)
+        {
+            return ($"Welcome back, {change.NewState.Username}!", "alert-success", "bi-check-circle-fill");
+        }
+        else if (!change.NewState.IsLoggedIn && change.PreviousState.IsLoggedIn)
+        {
+            return ("You have been logged out successfully.", "alert-info", "bi-info-circle-fill");
+        }
+        else if (change.NewState.IsLocked && !change.PreviousState.IsLocked)
+        {
+            return ("Session locked for security.", "alert-warning", "bi-lock-fill");
+        }
+        else if (!change.NewState.IsLocked && change.PreviousState.IsLocked)
+        {
+            return ("Session unlocked.", "alert-success", "bi-unlock-fill");
+        }
+        
+        return ("", "", "");
+    }
+
+    public void Dispose()
+    {
+        loginStateSubscription?.Dispose();
+        hideTimer?.Dispose();
+    }
+}

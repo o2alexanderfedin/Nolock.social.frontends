@@ -1,6 +1,9 @@
 ﻿@using NoLock.Social.Web.Shared
 @using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Identity.Models
+@using System.Reactive.Linq
 @inject ILoginAdapterService LoginService
+@implements IDisposable
 
 <SimpleLoginModal ShowModal="@showLoginModal" ShowModalChanged="@((bool val) => showLoginModal = val)" />
 
@@ -19,10 +22,25 @@
 
 @code {
     private bool showLoginModal = false;
+    private IDisposable? loginStateSubscription;
 
     protected override void OnInitialized()
     {
         // Show login modal if not logged in
         showLoginModal = !LoginService.CurrentLoginState.IsLoggedIn;
+
+        // Subscribe to login state changes using Reactive Extensions
+        loginStateSubscription = LoginService.LoginStateChanges
+            .Subscribe(change =>
+            {
+                // Show modal when logged out, hide when logged in
+                showLoginModal = !change.NewState.IsLoggedIn;
+                InvokeAsync(StateHasChanged);
+            });
+    }
+
+    public void Dispose()
+    {
+        loginStateSubscription?.Dispose();
     }
 }
