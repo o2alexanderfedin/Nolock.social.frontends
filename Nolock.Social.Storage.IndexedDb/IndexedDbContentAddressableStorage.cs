@@ -14,17 +14,12 @@ public sealed class IndexedDbContentAddressableStorage<T>
     : IContentAddressableStorage<T>
 {
     private readonly IndexedDbCasDatabase _database;
-    private readonly JsonSerializerOptions _jsonOptions;
     private readonly ISerializer<T> _serializer;
 
     public IndexedDbContentAddressableStorage(IJSRuntime jsRuntime, ISerializer<T> serializer)
     {
         _database = new IndexedDbCasDatabase(jsRuntime);
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
     }
 
     public async ValueTask<string> StoreAsync(T entity, CancellationToken cancellation = default)
@@ -36,12 +31,8 @@ public sealed class IndexedDbContentAddressableStorage<T>
         // Generate SHA256 hash
         var hash = ComputeHash(entity);
         
-        // Check if already exists
-        var existing = await _database.CasEntries.GetAsync<string, CasEntry<T>>(hash);
-        if (existing != null)
-        {
+        if (await ExistsAsync(hash, cancellation))
             return hash;
-        }
 
         // Create entry
         var entry = new CasEntry<T>
@@ -99,7 +90,11 @@ public sealed class IndexedDbContentAddressableStorage<T>
     {
         await EnsureInitializedAsync();
 
-        var items = (await _database.CasEntries.GetAllAsync<CasEntry<T>>())
+        var allItems = await _database.CasEntries.GetAllAsync<CasEntry<T>>();
+        if (allItems == null)
+            yield break;
+            
+        var items = allItems
             .ToAsyncEnumerable()
             .Where(e => e.TypeName == typeof(T).FullName);
         await foreach (var item in items)
