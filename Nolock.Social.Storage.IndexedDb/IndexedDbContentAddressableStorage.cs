@@ -118,6 +118,9 @@ public sealed class IndexedDbContentAddressableStorage<T>
         
         await foreach (var entry in EnumerateRawAsync().WithCancellation(cancellation))
         {
+            if (cancellation.IsCancellationRequested)
+                break;
+            
             await DeleteAsync(entry.Hash, cancellation);
         }
     }
