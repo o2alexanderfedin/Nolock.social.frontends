@@ -786,7 +786,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Create a pre-cancelled token
         var cts = new CancellationTokenSource();
-        cts.Cancel(); // Cancel before starting
+        await cts.CancelAsync(); // Cancel before starting
         
         // Setup DeleteAsync mock - shouldn't be called due to early cancellation
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
