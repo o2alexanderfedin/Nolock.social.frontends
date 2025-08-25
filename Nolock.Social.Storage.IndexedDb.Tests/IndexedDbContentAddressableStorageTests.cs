@@ -762,7 +762,7 @@ public class IndexedDbContentAddressableStorageTests
             Times.Never);
     }
     
-    [Fact(Skip = "Implementation doesn't properly respect cancellation token - needs investigation")]
+    [Fact]
     public async Task ClearAsync_ShouldRespectCancellationToken_WhenProvided()
     {
         // Arrange
