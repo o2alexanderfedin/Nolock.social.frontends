@@ -14,12 +14,17 @@ public sealed class IndexedDbContentAddressableStorage<T>
     : IContentAddressableStorage<T>
 {
     private readonly IndexedDbCasDatabase _database;
+    private readonly JsonSerializerOptions _jsonOptions;
     private readonly ISerializer<T> _serializer;
 
     public IndexedDbContentAddressableStorage(IJSRuntime jsRuntime, ISerializer<T> serializer)
     {
         _database = new IndexedDbCasDatabase(jsRuntime);
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
     }
 
     public async ValueTask<string> StoreAsync(T entity, CancellationToken cancellation = default)
@@ -31,8 +36,12 @@ public sealed class IndexedDbContentAddressableStorage<T>
         // Generate SHA256 hash
         var hash = ComputeHash(entity);
         
-        if (await ExistsAsync(hash, cancellation))
+        // Check if already exists
+        var existing = await _database.CasEntries.GetAsync<string, CasEntry<T>>(hash);
+        if (existing != null)
+        {
             return hash;
+        }
 
         // Create entry
         var entry = new CasEntry<T>
@@ -90,11 +99,7 @@ public sealed class IndexedDbContentAddressableStorage<T>
     {
         await EnsureInitializedAsync();
 
-        var allItems = await _database.CasEntries.GetAllAsync<CasEntry<T>>();
-        if (allItems == null)
-            yield break;
-            
-        var items = allItems
+        var items = (await _database.CasEntries.GetAllAsync<CasEntry<T>>())
             .ToAsyncEnumerable()
             .Where(e => e.TypeName == typeof(T).FullName);
         await foreach (var item in items)
@@ -113,7 +118,7 @@ public sealed class IndexedDbContentAddressableStorage<T>
         
         await foreach (var entry in EnumerateRawAsync().WithCancellation(cancellation))
         {
-            await _database.CasEntries.DeleteAsync(entry.Hash);
+            await DeleteAsync(entry.Hash, cancellation);
         }
     }
 
