@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Common.Extensions;
 using NoLock.Social.Core.Common.Interfaces;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 

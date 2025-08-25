@@ -3,7 +3,6 @@ using Microsoft.JSInterop;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Common.Extensions;
-using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Accessibility.Services;
 

@@ -1,7 +1,5 @@
-using System;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Interfaces;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.OCR.Configuration
 {

@@ -39,7 +39,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<HealthCheckResponse> HealthCheckAsync();
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Health check endpoint
         /// </summary>
@@ -48,7 +48,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<HealthCheckResponse> HealthCheckAsync(System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<HealthCheckResponse> HealthCheckAsync(System.Threading.CancellationToken cancellation);
 
         /// <summary>
         /// Process receipt image with OCR and extract structured data
@@ -60,7 +60,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body);
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Process receipt image with OCR and extract structured data
         /// </summary>
@@ -69,7 +69,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellation);
 
         /// <summary>
         /// Process check image with OCR and extract structured data
@@ -81,7 +81,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body);
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Process check image with OCR and extract structured data
         /// </summary>
@@ -90,7 +90,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellation);
 
     }
 
@@ -155,7 +155,7 @@ namespace NoLock.Social.Core.OCR.Generated
             return HealthCheckAsync(System.Threading.CancellationToken.None);
         }
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Health check endpoint
         /// </summary>
@@ -164,7 +164,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual async System.Threading.Tasks.Task<HealthCheckResponse> HealthCheckAsync(System.Threading.CancellationToken cancellationToken)
+        public virtual async System.Threading.Tasks.Task<HealthCheckResponse> HealthCheckAsync(System.Threading.CancellationToken cancellation)
         {
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -187,7 +187,7 @@ namespace NoLock.Social.Core.OCR.Generated
 
                     PrepareRequest(client_, request_, url_);
 
-                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
                     var disposeResponse_ = true;
                     try
                     {
@@ -205,7 +205,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<HealthCheckResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<HealthCheckResponse>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -214,7 +214,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         }
                         else
                         {
-                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellationToken).ConfigureAwait(false);
+                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellation).ConfigureAwait(false);
                             throw new MistralOCRException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
                         }
                     }
@@ -245,7 +245,7 @@ namespace NoLock.Social.Core.OCR.Generated
             return ProcessReceiptOcrAsync(body, System.Threading.CancellationToken.None);
         }
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Process receipt image with OCR and extract structured data
         /// </summary>
@@ -254,7 +254,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual async System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
+        public virtual async System.Threading.Tasks.Task<ReceiptModelOcrResponse> ProcessReceiptOcrAsync(FileParameter body, System.Threading.CancellationToken cancellation)
         {
             if (body == null)
                 throw new System.ArgumentNullException("body");
@@ -266,7 +266,7 @@ namespace NoLock.Social.Core.OCR.Generated
                 using (var request_ = new System.Net.Http.HttpRequestMessage())
                 {
                     var content_ = new System.Net.Http.StreamContent(body.Data);
-                    content_.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(body.ContentType);
+                    content_.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(body.ContentType ?? "application/octet-stream");
                     request_.Content = content_;
                     request_.Method = new System.Net.Http.HttpMethod("POST");
                     request_.Headers.Accept.Add(System.Net.Http.Headers.MediaTypeWithQualityHeaderValue.Parse("application/json"));
@@ -283,7 +283,7 @@ namespace NoLock.Social.Core.OCR.Generated
 
                     PrepareRequest(client_, request_, url_);
 
-                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
                     var disposeResponse_ = true;
                     try
                     {
@@ -301,7 +301,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<ReceiptModelOcrResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<ReceiptModelOcrResponse>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -311,7 +311,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         else
                         if (status_ == 202)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -321,7 +321,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         else
                         if (status_ == 400)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<ProblemDetails>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<ProblemDetails>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -330,7 +330,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         }
                         else
                         {
-                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellationToken).ConfigureAwait(false);
+                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellation).ConfigureAwait(false);
                             throw new MistralOCRException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
                         }
                     }
@@ -361,7 +361,7 @@ namespace NoLock.Social.Core.OCR.Generated
             return ProcessCheckOcrAsync(body, System.Threading.CancellationToken.None);
         }
 
-        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="cancellation">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <summary>
         /// Process check image with OCR and extract structured data
         /// </summary>
@@ -370,7 +370,7 @@ namespace NoLock.Social.Core.OCR.Generated
         /// </remarks>
         /// <returns>OK</returns>
         /// <exception cref="MistralOCRException">A server side error occurred.</exception>
-        public virtual async System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellationToken)
+        public virtual async System.Threading.Tasks.Task<CheckModelOcrResponse> ProcessCheckOcrAsync(FileParameter body, System.Threading.CancellationToken cancellation)
         {
             if (body == null)
                 throw new System.ArgumentNullException("body");
@@ -382,7 +382,7 @@ namespace NoLock.Social.Core.OCR.Generated
                 using (var request_ = new System.Net.Http.HttpRequestMessage())
                 {
                     var content_ = new System.Net.Http.StreamContent(body.Data);
-                    content_.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(body.ContentType);
+                    content_.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(body.ContentType ?? "application/octet-stream");
                     request_.Content = content_;
                     request_.Method = new System.Net.Http.HttpMethod("POST");
                     request_.Headers.Accept.Add(System.Net.Http.Headers.MediaTypeWithQualityHeaderValue.Parse("application/json"));
@@ -399,7 +399,7 @@ namespace NoLock.Social.Core.OCR.Generated
 
                     PrepareRequest(client_, request_, url_);
 
-                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
                     var disposeResponse_ = true;
                     try
                     {
@@ -417,7 +417,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<CheckModelOcrResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<CheckModelOcrResponse>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -427,7 +427,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         else
                         if (status_ == 202)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<AcceptedResult>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -437,7 +437,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         else
                         if (status_ == 400)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<ProblemDetails>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<ProblemDetails>(response_, headers_, cancellation).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new MistralOCRException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -446,7 +446,7 @@ namespace NoLock.Social.Core.OCR.Generated
                         }
                         else
                         {
-                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellationToken).ConfigureAwait(false);
+                            var responseData_ = response_.Content == null ? null : await ReadAsStringAsync(response_.Content, cancellation).ConfigureAwait(false);
                             throw new MistralOCRException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
                         }
                     }
@@ -478,20 +478,20 @@ namespace NoLock.Social.Core.OCR.Generated
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        private static System.Threading.Tasks.Task<string> ReadAsStringAsync(System.Net.Http.HttpContent content, System.Threading.CancellationToken cancellationToken)
+        private static System.Threading.Tasks.Task<string> ReadAsStringAsync(System.Net.Http.HttpContent content, System.Threading.CancellationToken cancellation)
         {
     #if NET5_0_OR_GREATER
-            return content.ReadAsStringAsync(cancellationToken);
+            return content.ReadAsStringAsync(cancellation);
     #else
             return content.ReadAsStringAsync();
     #endif
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        private static System.Threading.Tasks.Task<System.IO.Stream> ReadAsStreamAsync(System.Net.Http.HttpContent content, System.Threading.CancellationToken cancellationToken)
+        private static System.Threading.Tasks.Task<System.IO.Stream> ReadAsStreamAsync(System.Net.Http.HttpContent content, System.Threading.CancellationToken cancellation)
         {
     #if NET5_0_OR_GREATER
-            return content.ReadAsStreamAsync(cancellationToken);
+            return content.ReadAsStreamAsync(cancellation);
     #else
             return content.ReadAsStreamAsync();
     #endif
@@ -499,7 +499,7 @@ namespace NoLock.Social.Core.OCR.Generated
 
         public bool ReadResponseAsString { get; set; }
 
-        protected virtual async System.Threading.Tasks.Task<ObjectResponseResult<T>> ReadObjectResponseAsync<T>(System.Net.Http.HttpResponseMessage response, System.Collections.Generic.IReadOnlyDictionary<string, System.Collections.Generic.IEnumerable<string>> headers, System.Threading.CancellationToken cancellationToken)
+        protected virtual async System.Threading.Tasks.Task<ObjectResponseResult<T>> ReadObjectResponseAsync<T>(System.Net.Http.HttpResponseMessage response, System.Collections.Generic.IReadOnlyDictionary<string, System.Collections.Generic.IEnumerable<string>> headers, System.Threading.CancellationToken cancellation)
         {
             if (response == null || response.Content == null)
             {
@@ -508,7 +508,7 @@ namespace NoLock.Social.Core.OCR.Generated
 
             if (ReadResponseAsString)
             {
-                var responseText = await ReadAsStringAsync(response.Content, cancellationToken).ConfigureAwait(false);
+                var responseText = await ReadAsStringAsync(response.Content, cancellation).ConfigureAwait(false);
                 try
                 {
                     var typedBody = System.Text.Json.JsonSerializer.Deserialize<T>(responseText, JsonSerializerSettings);
@@ -524,9 +524,9 @@ namespace NoLock.Social.Core.OCR.Generated
             {
                 try
                 {
-                    using (var responseStream = await ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
+                    using (var responseStream = await ReadAsStreamAsync(response.Content, cancellation).ConfigureAwait(false))
                     {
-                        var typedBody = await System.Text.Json.JsonSerializer.DeserializeAsync<T>(responseStream, JsonSerializerSettings, cancellationToken).ConfigureAwait(false);
+                        var typedBody = await System.Text.Json.JsonSerializer.DeserializeAsync<T>(responseStream, JsonSerializerSettings, cancellation).ConfigureAwait(false);
                         return new ObjectResponseResult<T>(typedBody!, string.Empty);
                     }
                 }

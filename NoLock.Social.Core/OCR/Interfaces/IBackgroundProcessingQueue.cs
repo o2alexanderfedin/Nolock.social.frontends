@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.OCR.Interfaces
@@ -59,7 +55,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// <param name="request">The OCR submission request for the document.</param>
         /// <param name="priority">Priority level for queue ordering (higher values processed first).</param>
         /// <param name="metadata">Additional metadata associated with the queued document.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous enqueue operation.
         /// The task result contains the unique queue ID for tracking.
@@ -70,120 +66,120 @@ namespace NoLock.Social.Core.OCR.Interfaces
             OCRSubmissionRequest request,
             QueuePriority priority = QueuePriority.Normal,
             Dictionary<string, object> metadata = null,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellation = default);
 
         /// <summary>
         /// Gets all documents currently in the queue with their status information.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains a list of all queued documents.
         /// </returns>
-        Task<IReadOnlyList<QueuedDocument>> GetQueuedDocumentsAsync(CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<QueuedDocument>> GetQueuedDocumentsAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Gets a specific queued document by its queue ID.
         /// </summary>
         /// <param name="queueId">The unique queue identifier for the document.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains the queued document or null if not found.
         /// </returns>
         /// <exception cref="ArgumentNullException">Thrown when queueId is null or empty.</exception>
-        Task<QueuedDocument> GetQueuedDocumentAsync(string queueId, CancellationToken cancellationToken = default);
+        Task<QueuedDocument> GetQueuedDocumentAsync(string queueId, CancellationToken cancellation = default);
 
         /// <summary>
         /// Removes a document from the queue by its queue ID.
         /// If the document is currently processing, it will be cancelled.
         /// </summary>
         /// <param name="queueId">The unique queue identifier for the document to remove.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result indicates whether the document was successfully removed.
         /// </returns>
         /// <exception cref="ArgumentNullException">Thrown when queueId is null or empty.</exception>
-        Task<bool> RemoveDocumentAsync(string queueId, CancellationToken cancellationToken = default);
+        Task<bool> RemoveDocumentAsync(string queueId, CancellationToken cancellation = default);
 
         /// <summary>
         /// Pauses the processing queue. Documents already being processed will continue,
         /// but no new documents will be started until the queue is resumed.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>A task that represents the asynchronous pause operation.</returns>
-        Task PauseProcessingAsync(CancellationToken cancellationToken = default);
+        Task PauseProcessingAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Resumes the processing queue, allowing queued documents to be processed.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>A task that represents the asynchronous resume operation.</returns>
-        Task ResumeProcessingAsync(CancellationToken cancellationToken = default);
+        Task ResumeProcessingAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Cancels processing of a specific document if it's currently being processed.
         /// The document will be marked as cancelled and removed from active processing.
         /// </summary>
         /// <param name="queueId">The unique queue identifier for the document to cancel.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous cancellation operation.
         /// The task result indicates whether the cancellation was successful.
         /// </returns>
         /// <exception cref="ArgumentNullException">Thrown when queueId is null or empty.</exception>
-        Task<bool> CancelDocumentProcessingAsync(string queueId, CancellationToken cancellationToken = default);
+        Task<bool> CancelDocumentProcessingAsync(string queueId, CancellationToken cancellation = default);
 
         /// <summary>
         /// Clears all completed documents from the queue (both successful and failed).
         /// Documents currently queued or processing are not affected.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains the number of documents cleared.
         /// </returns>
-        Task<int> ClearCompletedDocumentsAsync(CancellationToken cancellationToken = default);
+        Task<int> ClearCompletedDocumentsAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Retries processing of a failed document by moving it back to the queue.
         /// </summary>
         /// <param name="queueId">The unique queue identifier for the document to retry.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous retry operation.
         /// The task result indicates whether the retry was successful.
         /// </returns>
         /// <exception cref="ArgumentNullException">Thrown when queueId is null or empty.</exception>
         /// <exception cref="InvalidOperationException">Thrown when document is not in a failed state.</exception>
-        Task<bool> RetryDocumentAsync(string queueId, CancellationToken cancellationToken = default);
+        Task<bool> RetryDocumentAsync(string queueId, CancellationToken cancellation = default);
 
         /// <summary>
         /// Starts the background processing service. This method should be called once
         /// during application startup to begin processing queued documents.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the background service.</param>
+        /// <param name="cancellation">Cancellation token for the background service.</param>
         /// <returns>A task that represents the asynchronous startup operation.</returns>
-        Task StartAsync(CancellationToken cancellationToken = default);
+        Task StartAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Stops the background processing service gracefully. Current processing
         /// operations will be allowed to complete, but no new processing will start.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the shutdown operation.</param>
+        /// <param name="cancellation">Cancellation token for the shutdown operation.</param>
         /// <returns>A task that represents the asynchronous shutdown operation.</returns>
-        Task StopAsync(CancellationToken cancellationToken = default);
+        Task StopAsync(CancellationToken cancellation = default);
 
         /// <summary>
         /// Gets queue processing statistics including throughput and performance metrics.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains queue processing statistics.
         /// </returns>
-        Task<QueueStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default);
+        Task<QueueStatistics> GetStatisticsAsync(CancellationToken cancellation = default);
     }
 
     /// <summary>

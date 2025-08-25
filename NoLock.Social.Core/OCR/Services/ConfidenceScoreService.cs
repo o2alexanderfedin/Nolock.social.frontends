@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.OCR.Services

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.JSInterop;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,9 +5,7 @@ using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Common.Guards;
 using NoLock.Social.Core.Resources;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Common.Extensions;
-using System.Text.Json;
 
 namespace NoLock.Social.Core.Camera.Services
 {

@@ -1,14 +1,9 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Common.Interfaces;
-using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Services;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.OCR.Services
 {

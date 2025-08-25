@@ -1,13 +1,7 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
-using NoLock.Social.Core.OCR.Models;
 using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 using NoLock.Social.Core.OCR.Services;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.OCR.Services
 {

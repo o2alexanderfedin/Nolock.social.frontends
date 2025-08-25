@@ -1,9 +1,3 @@
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Generated;
 using NoLock.Social.Core.OCR.Interfaces;
@@ -49,7 +43,7 @@ namespace NoLock.Social.Core.OCR.Services
 
                 // Create file parameter for the API
                 using var stream = new MemoryStream(request.ImageData);
-                var fileParam = new FileParameter(stream, "document");
+                var fileParam = new FileParameter(stream, "document.jpg", "image/jpeg");
 
                 // Call Mistral OCR API for check processing
                 var checkResult = await _ocrClient.ProcessCheckOcrAsync(fileParam, ct);

@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace NoLock.Social.Core.Common.Results;
 
 /// <summary>

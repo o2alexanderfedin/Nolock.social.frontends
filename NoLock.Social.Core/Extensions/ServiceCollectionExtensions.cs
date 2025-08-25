@@ -11,15 +11,6 @@ using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Accessibility.Services;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Services;
-using NoLock.Social.Core.OCR.Interfaces;
-using NoLock.Social.Core.OCR.Services;
-using NoLock.Social.Core.OCR.Configuration;
-using NoLock.Social.Core.OCR.Models;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Net.Http;
 
 namespace NoLock.Social.Core.Extensions
 {

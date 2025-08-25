@@ -1,12 +1,9 @@
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Identity.Services;
 using NoLock.Social.Core.Identity.Storage;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Identity
 {

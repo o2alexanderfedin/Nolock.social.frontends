@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using NoLock.Social.Core.Cryptography.Interfaces;
 
 namespace NoLock.Social.Core.Identity.Interfaces

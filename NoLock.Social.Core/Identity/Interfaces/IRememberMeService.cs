@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace NoLock.Social.Core.Identity.Interfaces
 {
     /// <summary>

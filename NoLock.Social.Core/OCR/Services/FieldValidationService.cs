@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.OCR.Services

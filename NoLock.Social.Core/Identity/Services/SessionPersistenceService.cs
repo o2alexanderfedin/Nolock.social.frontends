@@ -1,12 +1,9 @@
-using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Common.Extensions;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Identity.Configuration;
 using NoLock.Social.Core.Identity.Interfaces;

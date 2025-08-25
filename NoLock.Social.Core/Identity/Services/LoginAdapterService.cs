@@ -1,11 +1,8 @@
-using System;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Common.Extensions;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
 using NoLock.Social.Core.Identity.Interfaces;

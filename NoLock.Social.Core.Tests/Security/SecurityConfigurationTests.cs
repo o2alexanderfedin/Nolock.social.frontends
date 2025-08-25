@@ -1,5 +1,4 @@
 using NoLock.Social.Core.Security;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Security;
 

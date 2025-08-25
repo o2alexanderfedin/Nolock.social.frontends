@@ -458,14 +458,14 @@ public class CheckOCRServiceFactory
         // Create the service flow with all dependencies
         return new OCRServiceFlow<CheckModelOcrResponse>(
             configuration,
-            async (imageBytes, cancellationToken) =>
+            async (imageBytes, cancellation) =>
             {
                 var fileParam = new FileParameter(
                     new MemoryStream(imageBytes), 
                     "check_document.jpg",
                     "image/jpeg"
                 );
-                return await mistralClient.ProcessCheckOcrAsync(fileParam, cancellationToken);
+                return await mistralClient.ProcessCheckOcrAsync(fileParam, cancellation);
             },
             casService,
             logger,
@@ -766,7 +766,7 @@ public class DocumentController : ControllerBase
     [HttpPost("check/ocr")]
     public async Task<IActionResult> ProcessCheck(
         [FromBody] ProcessDocumentRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellation)
     {
         try
         {
@@ -776,7 +776,7 @@ public class DocumentController : ControllerBase
             var result = await ocrService.ProcessDocumentAsync(
                 request.ImageData,
                 request.UserId,
-                cancellationToken
+                cancellation
             );
             
             if (result.Success)
@@ -807,7 +807,7 @@ public class DocumentController : ControllerBase
     [HttpPost("receipt/ocr")]
     public async Task<IActionResult> ProcessReceipt(
         [FromBody] ProcessDocumentRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellation)
     {
         try
         {
@@ -817,7 +817,7 @@ public class DocumentController : ControllerBase
             var result = await ocrService.ProcessDocumentAsync(
                 request.ImageData,
                 request.UserId,
-                cancellationToken
+                cancellation
             );
             
             if (result.Success)

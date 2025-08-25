@@ -1,5 +1,3 @@
-using System;
-
 namespace NoLock.Social.Core.Cryptography.Interfaces
 {
     /// <summary>
