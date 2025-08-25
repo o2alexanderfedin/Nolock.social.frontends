@@ -41,11 +41,8 @@ public sealed class IndexedDbContentAddressableStorage<T>
             throw new TaskCanceledException();
         
         // Check if already exists
-        var existing = await _database.CasEntries.GetAsync<string, CasEntry<T>>(hash);
-        if (existing != null)
-        {
+        if (await ExistsAsync(hash, cancellation))
             return hash;
-        }
 
         // Create entry
         var entry = new CasEntry<T>
