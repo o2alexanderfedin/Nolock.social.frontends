@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json.Serialization;
 
 namespace NoLock.Social.Core.OCR.Models

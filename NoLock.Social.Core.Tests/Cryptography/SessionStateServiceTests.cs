@@ -1,11 +1,7 @@
 using FluentAssertions;
-using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
-using System;
-using System.Threading.Tasks;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Cryptography
 {

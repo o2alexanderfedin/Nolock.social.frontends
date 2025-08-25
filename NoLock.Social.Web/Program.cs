@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using NoLock.Social.Core.Extensions;
 using NoLock.Social.Web;
 using TG.Blazor.IndexedDB;
-using System.Collections.Generic;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");

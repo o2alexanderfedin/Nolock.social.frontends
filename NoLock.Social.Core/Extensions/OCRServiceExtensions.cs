@@ -1,13 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Http;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Services;
 using NoLock.Social.Core.OCR.Configuration;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Generated;
-using System;
-using System.Net.Http;
 
 namespace NoLock.Social.Core.Extensions
 {

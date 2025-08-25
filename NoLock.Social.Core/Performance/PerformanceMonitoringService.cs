@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Common.Extensions;
 
 namespace NoLock.Social.Core.Performance;

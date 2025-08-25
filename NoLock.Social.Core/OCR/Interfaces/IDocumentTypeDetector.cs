@@ -1,5 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
 using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.OCR.Interfaces
@@ -14,21 +12,21 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// Detects the document type from raw OCR text with confidence scoring.
         /// </summary>
         /// <param name="rawOcrData">The raw OCR text to analyze.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains the detection result with document type and confidence score.
         /// </returns>
         Task<DocumentTypeDetectionResult> DetectDocumentTypeAsync(
             string rawOcrData, 
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellation = default);
 
         /// <summary>
         /// Detects multiple possible document types with their respective confidence scores.
         /// </summary>
         /// <param name="rawOcrData">The raw OCR text to analyze.</param>
         /// <param name="maxResults">Maximum number of results to return.</param>
-        /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+        /// <param name="cancellation">Cancellation token for the async operation.</param>
         /// <returns>
         /// A task that represents the asynchronous operation.
         /// The task result contains multiple detection results ordered by confidence.
@@ -36,7 +34,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         Task<DocumentTypeDetectionResult[]> DetectMultipleDocumentTypesAsync(
             string rawOcrData,
             int maxResults = 3,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellation = default);
 
         /// <summary>
         /// Gets the minimum confidence threshold for automatic detection.

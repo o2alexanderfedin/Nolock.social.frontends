@@ -1,14 +1,10 @@
-using System;
 using System.Reactive.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
 using NoLock.Social.Core.Identity.Interfaces;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Cryptography
 {

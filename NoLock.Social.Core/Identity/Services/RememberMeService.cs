@@ -1,10 +1,7 @@
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Common.Extensions;
-using NoLock.Social.Core.Common.Results;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Storage;
 using NoLock.Social.Core.Identity.Configuration;

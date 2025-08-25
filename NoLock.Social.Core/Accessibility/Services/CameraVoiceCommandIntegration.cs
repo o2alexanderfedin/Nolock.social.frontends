@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Common.Extensions;
-using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Accessibility.Services
 {

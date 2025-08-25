@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
@@ -111,7 +106,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// <inheritdoc />
         public async Task<DocumentTypeDetectionResult> DetectDocumentTypeAsync(
             string rawOcrData,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             if (string.IsNullOrWhiteSpace(rawOcrData))
             {
@@ -130,7 +125,7 @@ namespace NoLock.Social.Core.OCR.Services
                 }
             }
 
-            var results = await DetectMultipleDocumentTypesAsync(rawOcrData, 1, cancellationToken);
+            var results = await DetectMultipleDocumentTypesAsync(rawOcrData, 1, cancellation);
             var result = results.FirstOrDefault() ?? DocumentTypeDetectionResult.Unknown();
 
             // Cache the result
@@ -146,7 +141,7 @@ namespace NoLock.Social.Core.OCR.Services
         public async Task<DocumentTypeDetectionResult[]> DetectMultipleDocumentTypesAsync(
             string rawOcrData,
             int maxResults = 3,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             if (string.IsNullOrWhiteSpace(rawOcrData))
             {
@@ -161,7 +156,7 @@ namespace NoLock.Social.Core.OCR.Services
 
                 foreach (var documentType in _documentKeywords)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    cancellation.ThrowIfCancellationRequested();
 
                     var detectionResult = AnalyzeDocumentType(
                         lowerText,
@@ -214,7 +209,7 @@ namespace NoLock.Social.Core.OCR.Services
                     finalResults[0].ConfidenceScore);
 
                 return finalResults;
-            }, cancellationToken);
+            }, cancellation);
         }
 
         /// <inheritdoc />

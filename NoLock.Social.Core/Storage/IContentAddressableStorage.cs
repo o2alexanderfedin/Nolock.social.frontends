@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
 namespace NoLock.Social.Core.Storage
 {
     /// <summary>
@@ -15,51 +12,44 @@ namespace NoLock.Social.Core.Storage
         /// </summary>
         /// <param name="content">The content to store</param>
         /// <returns>The hash of the stored content</returns>
-        ValueTask<string> StoreAsync(T content);
+        ValueTask<string> StoreAsync(T content, CancellationToken cancellation = default);
 
         /// <summary>
         /// Retrieves content by its hash, returning the deserialized object or null if not found.
         /// </summary>
         /// <param name="hash">The hash of the content to retrieve</param>
         /// <returns>The deserialized content or null if not found</returns>
-        ValueTask<T?> GetAsync(string hash);
+        ValueTask<T?> GetAsync(string hash, CancellationToken cancellation = default);
 
         /// <summary>
         /// Checks if content exists for the given hash.
         /// </summary>
         /// <param name="hash">The hash to check</param>
         /// <returns>True if content exists, false otherwise</returns>
-        ValueTask<bool> ExistsAsync(string hash);
+        ValueTask<bool> ExistsAsync(string hash, CancellationToken cancellation = default);
 
         /// <summary>
         /// Deletes content by its hash.
         /// </summary>
         /// <param name="hash">The hash of the content to delete</param>
         /// <returns>True if content was deleted, false if not found</returns>
-        ValueTask<bool> DeleteAsync(string hash);
+        ValueTask<bool> DeleteAsync(string hash, CancellationToken cancellation = default);
 
         /// <summary>
         /// Gets all stored content hashes.
         /// </summary>
         /// <returns>An async enumerable of all stored hashes</returns>
-        IAsyncEnumerable<string> GetAllHashesAsync();
+        IAsyncEnumerable<string> AllHashes { get; }
 
         /// <summary>
-        /// Gets the size of content by its hash.
+        /// Gets all stored content entities.
         /// </summary>
-        /// <param name="hash">The hash of the content</param>
-        /// <returns>The size in bytes of the serialized content</returns>
-        ValueTask<long> GetSizeAsync(string hash);
-
-        /// <summary>
-        /// Gets the total size of all stored content.
-        /// </summary>
-        /// <returns>The total size in bytes of all stored content</returns>
-        ValueTask<long> GetTotalSizeAsync();
+        /// <returns>An async enumerable of all stored hashes</returns>
+        IAsyncEnumerable<T> All { get; }
 
         /// <summary>
         /// Clears all stored content.
         /// </summary>
-        ValueTask ClearAsync();
+        ValueTask ClearAsync(CancellationToken cancellation = default);
     }
 }

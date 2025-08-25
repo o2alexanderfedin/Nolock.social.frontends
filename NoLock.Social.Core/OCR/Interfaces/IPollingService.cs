@@ -1,7 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace NoLock.Social.Core.OCR.Interfaces
 {
     /// <summary>
@@ -18,7 +14,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// <param name="operation">The async operation to poll.</param>
         /// <param name="isComplete">Predicate to determine if the operation is complete.</param>
         /// <param name="configuration">Polling configuration including intervals and timeout.</param>
-        /// <param name="cancellationToken">Cancellation token for the polling operation.</param>
+        /// <param name="cancellation">Cancellation token for the polling operation.</param>
         /// <returns>
         /// A task that represents the asynchronous polling operation.
         /// The task result contains the final result of the operation.
@@ -30,7 +26,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
             Func<CancellationToken, Task<TResult>> operation,
             Func<TResult, bool> isComplete,
             PollingConfiguration configuration,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellation = default);
 
         /// <summary>
         /// Polls an operation with progress reporting until completion or timeout.
@@ -39,7 +35,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// <param name="isComplete">Predicate to determine if the operation is complete.</param>
         /// <param name="progressCallback">Callback invoked with each polling result.</param>
         /// <param name="configuration">Polling configuration including intervals and timeout.</param>
-        /// <param name="cancellationToken">Cancellation token for the polling operation.</param>
+        /// <param name="cancellation">Cancellation token for the polling operation.</param>
         /// <returns>
         /// A task that represents the asynchronous polling operation.
         /// The task result contains the final result of the operation.
@@ -52,7 +48,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
             Func<TResult, bool> isComplete,
             Action<TResult> progressCallback,
             PollingConfiguration configuration,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellation = default);
     }
 
     /// <summary>

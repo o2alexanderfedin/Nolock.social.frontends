@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Common.Constants;

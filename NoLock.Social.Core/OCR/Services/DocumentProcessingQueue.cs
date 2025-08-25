@@ -1,9 +1,4 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
 
@@ -97,7 +92,7 @@ namespace NoLock.Social.Core.OCR.Services
             OCRSubmissionRequest request,
             QueuePriority priority = QueuePriority.Normal,
             Dictionary<string, object> metadata = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -113,7 +108,7 @@ namespace NoLock.Social.Core.OCR.Services
             // Create queued document
             var queuedDocument = QueuedDocument.CreateFromRequest(request, priority, metadata, "DocumentProcessingQueue");
 
-            await _queueLock.WaitAsync(cancellationToken);
+            await _queueLock.WaitAsync(cancellation);
             try
             {
                 // Add to in-memory queue
@@ -123,7 +118,7 @@ namespace NoLock.Social.Core.OCR.Services
                 UpdateQueuePositions();
                 
                 // Persist to IndexedDB
-                await PersistDocumentAsync(queuedDocument, cancellationToken);
+                await PersistDocumentAsync(queuedDocument, cancellation);
 
                 // Add to processing queue for background processing
                 _processingQueue.Enqueue(queuedDocument.QueueId);
@@ -140,7 +135,7 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<QueuedDocument>> GetQueuedDocumentsAsync(CancellationToken cancellationToken = default)
+        public async Task<IReadOnlyList<QueuedDocument>> GetQueuedDocumentsAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
 
@@ -154,7 +149,7 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task<QueuedDocument> GetQueuedDocumentAsync(string queueId, CancellationToken cancellationToken = default)
+        public async Task<QueuedDocument> GetQueuedDocumentAsync(string queueId, CancellationToken cancellation = default)
         {
             if (string.IsNullOrEmpty(queueId))
                 throw new ArgumentNullException(nameof(queueId));
@@ -166,14 +161,14 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> RemoveDocumentAsync(string queueId, CancellationToken cancellationToken = default)
+        public async Task<bool> RemoveDocumentAsync(string queueId, CancellationToken cancellation = default)
         {
             if (string.IsNullOrEmpty(queueId))
                 throw new ArgumentNullException(nameof(queueId));
 
             ThrowIfDisposed();
 
-            await _queueLock.WaitAsync(cancellationToken);
+            await _queueLock.WaitAsync(cancellation);
             try
             {
                 if (!_queuedDocuments.TryGetValue(queueId, out var document))
@@ -192,7 +187,7 @@ namespace NoLock.Social.Core.OCR.Services
                 UpdateQueuePositions();
 
                 // Remove from persistence
-                await RemoveFromPersistenceAsync(queueId, cancellationToken);
+                await RemoveFromPersistenceAsync(queueId, cancellation);
 
                 // Raise event
                 ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
@@ -206,28 +201,28 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task PauseProcessingAsync(CancellationToken cancellationToken = default)
+        public async Task PauseProcessingAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
-            await ChangeStateAsync(QueueState.Paused, cancellationToken);
+            await ChangeStateAsync(QueueState.Paused, cancellation);
         }
 
         /// <inheritdoc />
-        public async Task ResumeProcessingAsync(CancellationToken cancellationToken = default)
+        public async Task ResumeProcessingAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
-            await ChangeStateAsync(QueueState.Running, cancellationToken);
+            await ChangeStateAsync(QueueState.Running, cancellation);
         }
 
         /// <inheritdoc />
-        public async Task<bool> CancelDocumentProcessingAsync(string queueId, CancellationToken cancellationToken = default)
+        public async Task<bool> CancelDocumentProcessingAsync(string queueId, CancellationToken cancellation = default)
         {
             if (string.IsNullOrEmpty(queueId))
                 throw new ArgumentNullException(nameof(queueId));
 
             ThrowIfDisposed();
 
-            await _queueLock.WaitAsync(cancellationToken);
+            await _queueLock.WaitAsync(cancellation);
             try
             {
                 if (!_queuedDocuments.TryGetValue(queueId, out var document))
@@ -240,7 +235,7 @@ namespace NoLock.Social.Core.OCR.Services
                 document.Cancel();
 
                 // Update persistence
-                await PersistDocumentAsync(document, cancellationToken);
+                await PersistDocumentAsync(document, cancellation);
 
                 // Raise event
                 ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
@@ -255,11 +250,11 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task<int> ClearCompletedDocumentsAsync(CancellationToken cancellationToken = default)
+        public async Task<int> ClearCompletedDocumentsAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
 
-            await _queueLock.WaitAsync(cancellationToken);
+            await _queueLock.WaitAsync(cancellation);
             try
             {
                 var completedDocuments = _queuedDocuments.Values
@@ -272,7 +267,7 @@ namespace NoLock.Social.Core.OCR.Services
                 {
                     if (_queuedDocuments.TryRemove(document.QueueId, out _))
                     {
-                        await RemoveFromPersistenceAsync(document.QueueId, cancellationToken);
+                        await RemoveFromPersistenceAsync(document.QueueId, cancellation);
                         removedCount++;
                     }
                 }
@@ -287,14 +282,14 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> RetryDocumentAsync(string queueId, CancellationToken cancellationToken = default)
+        public async Task<bool> RetryDocumentAsync(string queueId, CancellationToken cancellation = default)
         {
             if (string.IsNullOrEmpty(queueId))
                 throw new ArgumentNullException(nameof(queueId));
 
             ThrowIfDisposed();
 
-            await _queueLock.WaitAsync(cancellationToken);
+            await _queueLock.WaitAsync(cancellation);
             try
             {
                 if (!_queuedDocuments.TryGetValue(queueId, out var document))
@@ -313,7 +308,7 @@ namespace NoLock.Social.Core.OCR.Services
                 UpdateQueuePositions();
 
                 // Update persistence
-                await PersistDocumentAsync(document, cancellationToken);
+                await PersistDocumentAsync(document, cancellation);
 
                 // Raise event
                 ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
@@ -327,33 +322,33 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <inheritdoc />
-        public async Task StartAsync(CancellationToken cancellationToken = default)
+        public async Task StartAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
 
             // Load persisted queue state
-            await LoadPersistedQueueAsync(cancellationToken);
+            await LoadPersistedQueueAsync(cancellation);
 
             // Change to running state
-            await ChangeStateAsync(QueueState.Running, cancellationToken);
+            await ChangeStateAsync(QueueState.Running, cancellation);
         }
 
         /// <inheritdoc />
-        public async Task StopAsync(CancellationToken cancellationToken = default)
+        public async Task StopAsync(CancellationToken cancellation = default)
         {
             if (_disposed)
                 return;
 
-            await ChangeStateAsync(QueueState.Stopping, cancellationToken);
+            await ChangeStateAsync(QueueState.Stopping, cancellation);
 
             // Wait for current processing to complete (implementation would be in background processor)
-            await Task.Delay(100, cancellationToken); // Brief delay for cleanup
+            await Task.Delay(100, cancellation); // Brief delay for cleanup
 
-            await ChangeStateAsync(QueueState.Stopped, cancellationToken);
+            await ChangeStateAsync(QueueState.Stopped, cancellation);
         }
 
         /// <inheritdoc />
-        public async Task<QueueStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
+        public async Task<QueueStatistics> GetStatisticsAsync(CancellationToken cancellation = default)
         {
             ThrowIfDisposed();
 
@@ -388,7 +383,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="ocrStatus">Optional OCR status response.</param>
         /// <param name="errorMessage">Optional error message.</param>
         /// <param name="errorCode">Optional error code.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <param name="cancellation">Cancellation token.</param>
         /// <returns>True if the document was updated successfully.</returns>
         internal async Task<bool> UpdateDocumentStatusAsync(
             string queueId,
@@ -396,7 +391,7 @@ namespace NoLock.Social.Core.OCR.Services
             OCRStatusResponse ocrStatus = null,
             string errorMessage = null,
             string errorCode = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             if (!_queuedDocuments.TryGetValue(queueId, out var document))
                 return false;
@@ -416,7 +411,7 @@ namespace NoLock.Social.Core.OCR.Services
             UpdateStatistics(document, previousStatus);
 
             // Persist changes
-            await PersistDocumentAsync(document, cancellationToken);
+            await PersistDocumentAsync(document, cancellation);
 
             // Raise appropriate events
             ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
@@ -452,19 +447,19 @@ namespace NoLock.Social.Core.OCR.Services
 
         #region Private Methods
 
-        private async Task PersistDocumentAsync(QueuedDocument document, CancellationToken cancellationToken)
+        private async Task PersistDocumentAsync(QueuedDocument document, CancellationToken cancellation)
         {
             // No persistence - documents are kept in memory only
             await Task.CompletedTask;
         }
 
-        private async Task RemoveFromPersistenceAsync(string queueId, CancellationToken cancellationToken)
+        private async Task RemoveFromPersistenceAsync(string queueId, CancellationToken cancellation)
         {
             // No persistence - documents are kept in memory only
             await Task.CompletedTask;
         }
 
-        private async Task LoadPersistedQueueAsync(CancellationToken cancellationToken)
+        private async Task LoadPersistedQueueAsync(CancellationToken cancellation)
         {
             // No persistence - queue starts empty
             UpdateQueuePositions();
@@ -485,7 +480,7 @@ namespace NoLock.Social.Core.OCR.Services
             }
         }
 
-        private async Task ChangeStateAsync(QueueState newState, CancellationToken cancellationToken)
+        private async Task ChangeStateAsync(QueueState newState, CancellationToken cancellation)
         {
             QueueState previousState;
             

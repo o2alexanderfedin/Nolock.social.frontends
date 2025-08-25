@@ -2,7 +2,6 @@ using NoLock.Social.Core.Performance;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
-using Xunit;
 using FluentAssertions;
 
 namespace NoLock.Social.Core.Tests.Performance;

@@ -1,0 +1,151 @@
+using System.Diagnostics;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Microsoft.JSInterop;
+using NoLock.Social.Core.Storage;
+using Nolock.Social.Storage.IndexedDb.Models;
+
+namespace Nolock.Social.Storage.IndexedDb;
+
+public sealed class IndexedDbContentAddressableStorage<T>
+    : IContentAddressableStorage<T>
+{
+    private readonly IndexedDbCasDatabase _database;
+    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ISerializer<T> _serializer;
+
+    public IndexedDbContentAddressableStorage(IJSRuntime jsRuntime, ISerializer<T> serializer)
+    {
+        _database = new IndexedDbCasDatabase(jsRuntime);
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+    }
+
+    public async ValueTask<string> StoreAsync(T entity, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        await EnsureInitializedAsync();
+        
+        // Generate SHA256 hash
+        var hash = ComputeHash(entity);
+        
+        // Check if already exists
+        var existing = await _database.CasEntries.GetAsync<string, CasEntry<T>>(hash);
+        if (existing != null)
+        {
+            return hash;
+        }
+
+        // Create entry
+        var entry = new CasEntry<T>
+        {
+            Hash = hash,
+            Data = entity,
+            TypeName = typeof(T).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+
+        // Store in IndexedDB
+        await _database.CasEntries.AddAsync(entry, hash);
+        
+        return hash;
+    }
+
+    public async ValueTask<T?> GetAsync(string contentHash, CancellationToken cancellation = default)
+    {
+        var entry = await GetRawAsync(contentHash, cancellation);
+        return entry is null || entry.Data is null
+            ? default
+            : entry.Data;
+    }
+
+    public async ValueTask<bool> ExistsAsync(string contentHash, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(contentHash);
+        
+        await EnsureInitializedAsync();
+
+        return await GetRawAsync(contentHash, cancellation) is not null;
+    }
+
+    public async ValueTask<bool> DeleteAsync(string contentHash, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(contentHash);
+
+        await EnsureInitializedAsync();
+        
+        try
+        {
+            await _database.CasEntries.DeleteAsync(contentHash);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public IAsyncEnumerable<T> All
+        => EnumerateRawAsync().Select(x => x.Data);
+
+    private async IAsyncEnumerable<CasEntry<T>> EnumerateRawAsync()
+    {
+        await EnsureInitializedAsync();
+
+        var items = (await _database.CasEntries.GetAllAsync<CasEntry<T>>())
+            .ToAsyncEnumerable()
+            .Where(e => e.TypeName == typeof(T).FullName);
+        await foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    public IAsyncEnumerable<string> AllHashes
+        => EnumerateRawAsync()
+            .Select(x => x.Hash);
+
+    public async ValueTask ClearAsync(CancellationToken cancellation = default)
+    {
+        await EnsureInitializedAsync();
+        
+        await foreach (var entry in EnumerateRawAsync().WithCancellation(cancellation))
+        {
+            await _database.CasEntries.DeleteAsync(entry.Hash);
+        }
+    }
+
+    private async ValueTask<CasEntry<T>?> GetRawAsync(string contentHash, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(contentHash);
+        
+        await EnsureInitializedAsync();
+        
+        return cancellation.IsCancellationRequested
+            ? throw new TaskCanceledException()
+            : await _database.CasEntries.GetAsync<string, CasEntry<T>>(contentHash);
+    }
+
+    private async ValueTask EnsureInitializedAsync()
+        => await _database.EnsureIsOpenAsync();
+
+    private string ComputeHash(T data)
+    {
+        // Serialize the data to bytes for hashing
+        var bytes = _serializer.Serialize(data);
+        
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(bytes);
+        return Convert.ToBase64String(hashBytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
+}

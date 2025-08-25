@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 
@@ -31,20 +28,20 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="operation">The async operation to poll.</param>
         /// <param name="isComplete">Predicate to determine if the operation is complete.</param>
         /// <param name="configuration">Polling configuration including intervals and timeout.</param>
-        /// <param name="cancellationToken">Cancellation token for the polling operation.</param>
+        /// <param name="cancellation">Cancellation token for the polling operation.</param>
         /// <returns>The final result of the operation.</returns>
         public async Task<TResult> PollAsync(
             Func<CancellationToken, Task<TResult>> operation,
             Func<TResult, bool> isComplete,
             PollingConfiguration configuration,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             return await PollWithProgressAsync(
                 operation,
                 isComplete,
                 null, // No progress callback
                 configuration,
-                cancellationToken);
+                cancellation);
         }
 
         /// <summary>
@@ -54,14 +51,14 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="isComplete">Predicate to determine if the operation is complete.</param>
         /// <param name="progressCallback">Callback invoked with each polling result.</param>
         /// <param name="configuration">Polling configuration including intervals and timeout.</param>
-        /// <param name="cancellationToken">Cancellation token for the polling operation.</param>
+        /// <param name="cancellation">Cancellation token for the polling operation.</param>
         /// <returns>The final result of the operation.</returns>
         public async Task<TResult> PollWithProgressAsync(
             Func<CancellationToken, Task<TResult>> operation,
             Func<TResult, bool> isComplete,
             Action<TResult> progressCallback,
             PollingConfiguration configuration,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellation = default)
         {
             // Validate inputs
             if (operation == null)
@@ -88,7 +85,7 @@ namespace NoLock.Social.Core.OCR.Services
             using var timeoutCts = new CancellationTokenSource(
                 TimeSpan.FromSeconds(configuration.MaxPollingDurationSeconds));
             using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken, timeoutCts.Token);
+                cancellation, timeoutCts.Token);
 
             try
             {

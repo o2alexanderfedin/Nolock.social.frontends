@@ -1,4 +1,3 @@
-using System;
 using System.Reactive.Disposables;
 
 namespace NoLock.Social.Core.Cryptography.Extensions

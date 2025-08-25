@@ -1,8 +1,4 @@
 using NoLock.Social.Core.Cryptography.Interfaces;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NoLock.Social.Core.Cryptography.Services
 {

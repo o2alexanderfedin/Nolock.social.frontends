@@ -1,8 +1,5 @@
 using FluentAssertions;
 using NoLock.Social.Core.Cryptography.Services;
-using System;
-using System.Linq;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Cryptography
 {

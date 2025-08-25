@@ -1,5 +1,3 @@
-using System;
-
 namespace NoLock.Social.Core.OCR.Models
 {
     /// <summary>

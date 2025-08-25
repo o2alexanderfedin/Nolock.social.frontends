@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using NoLock.Social.Core.Camera.Models;
 
 namespace NoLock.Social.Core.Camera.Interfaces

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Xunit;
 using NoLock.Social.Core.OCR.Models;
 using NoLock.Social.Core.OCR.Services;
 

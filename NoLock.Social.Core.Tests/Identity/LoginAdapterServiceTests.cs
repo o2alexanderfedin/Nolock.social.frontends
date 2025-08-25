@@ -1,6 +1,3 @@
-using System;
-using System.Reactive.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Moq;
@@ -8,8 +5,6 @@ using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
 using NoLock.Social.Core.Identity.Services;
-using NoLock.Social.Core.Security;
-using Xunit;
 
 namespace NoLock.Social.Core.Tests.Identity
 {

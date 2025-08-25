@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using NoLock.Social.Core.OCR.Interfaces;
 
 namespace NoLock.Social.Core.OCR.Configuration

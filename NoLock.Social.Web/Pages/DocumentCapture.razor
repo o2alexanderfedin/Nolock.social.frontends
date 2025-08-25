@@ -3,7 +3,6 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Core.OCR.Interfaces
 @using NoLock.Social.Core.Identity.Interfaces
-@using System.Reactive.Linq
 @using System
 @using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType
 @inject ICameraService CameraService
@@ -502,18 +501,31 @@
                 };
 
                 // Submit for OCR processing
-                await OCRService.SubmitDocumentAsync(submission);
+                try
+                {
+                    await OCRService.SubmitDocumentAsync(submission);
+                    // If successful, show success message
+                    errorMessage = null;
+                }
+                catch (HttpRequestException httpEx) when (httpEx.Message.Contains("Failed to fetch"))
+                {
+                    errorMessage = "OCR service is not accessible due to CORS policy. This is a known limitation when running locally. The OCR service needs to be configured to allow requests from localhost.";
+                    Console.WriteLine($"CORS error calling OCR API: {httpEx.Message}");
+                }
+                catch (Exception ex)
+                {
+                    errorMessage = $"Error processing document: {ex.Message}";
+                    Console.WriteLine($"Error calling OCR API: {ex}");
+                }
             }
             
-            // Clear session after successful processing
-            ClearSession();
-            
-            // Show success message
-            errorMessage = null;
-            StateHasChanged();
-            
-            // Navigate to home or results page
-            Navigation.NavigateTo("/");
+            // Only clear session and navigate if there was no error
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                ClearSession();
+                // Navigate to home or results page
+                Navigation.NavigateTo("/");
+            }
         }
         catch (Exception ex)
         {

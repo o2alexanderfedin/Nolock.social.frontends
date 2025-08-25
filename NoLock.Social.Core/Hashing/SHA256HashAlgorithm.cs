@@ -1,6 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 
 namespace NoLock.Social.Core.Hashing
 {

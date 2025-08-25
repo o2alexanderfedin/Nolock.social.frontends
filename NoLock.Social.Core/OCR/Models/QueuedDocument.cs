@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using NoLock.Social.Core.OCR.Interfaces;
 
 namespace NoLock.Social.Core.OCR.Models

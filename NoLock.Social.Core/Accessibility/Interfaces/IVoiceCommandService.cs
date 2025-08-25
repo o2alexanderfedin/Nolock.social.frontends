@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
 namespace NoLock.Social.Core.Accessibility.Interfaces
 {
     /// <summary>
