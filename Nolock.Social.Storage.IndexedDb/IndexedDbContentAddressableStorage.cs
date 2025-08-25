@@ -36,6 +36,10 @@ public sealed class IndexedDbContentAddressableStorage<T>
         // Generate SHA256 hash
         var hash = ComputeHash(entity);
         
+        // Check cancellation after computing hash but before database operations
+        if (cancellation.IsCancellationRequested)
+            throw new TaskCanceledException();
+        
         // Check if already exists
         var existing = await _database.CasEntries.GetAsync<string, CasEntry<T>>(hash);
         if (existing != null)
@@ -121,7 +125,8 @@ public sealed class IndexedDbContentAddressableStorage<T>
             if (cancellation.IsCancellationRequested)
                 break;
             
-            await DeleteAsync(entry.Hash, cancellation);
+            // Call database directly to let exceptions propagate
+            await _database.CasEntries.DeleteAsync(entry.Hash);
         }
     }
 
