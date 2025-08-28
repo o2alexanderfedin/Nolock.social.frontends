@@ -214,8 +214,8 @@
     [Parameter] public double OriginalConfidence { get; set; }
     [Parameter] public double UpdatedConfidence { get; set; }
     [Parameter] public FieldType FieldType { get; set; } = FieldType.Text;
-    [Parameter] public bool ShouldHighlight { get; set; } = false;
-    [Parameter] public bool IsRequired { get; set; } = false;
+    [Parameter] public bool ShouldHighlight { get; set; }
+    [Parameter] public bool IsRequired { get; set; }
     [Parameter] public bool ShowConfidence { get; set; } = true;
     [Parameter] public int? MaxLength { get; set; }
     [Parameter] public decimal? MinValue { get; set; }
@@ -226,7 +226,7 @@
     [Parameter] public EventCallback<string> OnFieldCancel { get; set; }
     [Parameter] public EventCallback<string> OnFieldRevert { get; set; }
 
-    private bool IsEditing { get; set; } = false;
+    private bool IsEditing { get; set; }
     private object? EditingValue { get; set; }
     private bool IsValid { get; set; } = true;
     private List<string> ValidationErrors { get; set; } = new();

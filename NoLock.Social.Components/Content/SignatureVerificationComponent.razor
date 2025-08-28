@@ -164,12 +164,12 @@
 
 @code {
     private VerificationModel _verificationModel = new();
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _errorMessage = "";
-    private bool? _verificationResult = null;
+    private bool? _verificationResult;
     private InputMethod _inputMethod = InputMethod.Manual;
     private string _jsonInput = "";
-    private bool _jsonParsed = false;
+    private bool _jsonParsed;
 
     private enum InputMethod
     {

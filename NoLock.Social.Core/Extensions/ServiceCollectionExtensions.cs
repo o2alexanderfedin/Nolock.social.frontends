@@ -19,7 +19,11 @@ namespace NoLock.Social.Core.Extensions
         public static IServiceCollection AddContentAddressableStorage(this IServiceCollection services)
         {
             // Content addressable storage removed - handled externally if needed
+            
+            // Hash services
             services.AddScoped<IHashAlgorithm, SHA256HashAlgorithm>();
+            services.AddScoped<IHashService, SHA256HashService>();
+            
             return services;
         }
 

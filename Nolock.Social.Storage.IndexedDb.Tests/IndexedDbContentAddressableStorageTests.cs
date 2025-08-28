@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CloudNimble.BlazorEssentials.IndexedDb;
 using NoLock.Social.Core.Storage;
+using NoLock.Social.Core.Hashing;
 using Nolock.Social.Storage.IndexedDb.Models;
 using Xunit;
 
@@ -17,6 +18,7 @@ public class IndexedDbContentAddressableStorageTests
     private readonly Mock<IJSRuntime> _jsRuntimeMock;
     private readonly Mock<IJSObjectReference> _jsModuleMock;
     private readonly Mock<ISerializer<TestEntity>> _serializerMock;
+    private readonly Mock<IHashService> _hashServiceMock;
     private readonly IndexedDbContentAddressableStorage<TestEntity> _storage;
     private readonly TestDataFactory _testDataFactory;
     
@@ -78,16 +80,30 @@ public class IndexedDbContentAddressableStorageTests
         _jsRuntimeMock = new Mock<IJSRuntime>();
         _jsModuleMock = new Mock<IJSObjectReference>();
         _serializerMock = new Mock<ISerializer<TestEntity>>();
+        _hashServiceMock = new Mock<IHashService>();
         _testDataFactory = new TestDataFactory();
         
         // Setup default serialization behavior
         _serializerMock.Setup(s => s.Serialize(It.IsAny<TestEntity>()))
             .Returns<TestEntity>(entity => Encoding.UTF8.GetBytes($"{entity.Id}|{entity.Name}|{entity.CreatedAt:O}"));
         
+        // Setup hash service to compute hashes consistently with TestDataFactory
+        _hashServiceMock.Setup(h => h.HashAsync(It.IsAny<byte[]>()))
+            .Returns<byte[]>((data) =>
+            {
+                using var sha256 = System.Security.Cryptography.SHA256.Create();
+                var hashBytes = sha256.ComputeHash(data);
+                var hash = Convert.ToBase64String(hashBytes)
+                    .Replace('+', '-')
+                    .Replace('/', '_')
+                    .TrimEnd('=');
+                return Task.FromResult(hash);
+            });
+        
         // Setup JSRuntime mocking for IndexedDB operations
         SetupIndexedDbMocks();
         
-        _storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object);
+        _storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, _hashServiceMock.Object);
     }
     
     private void SetupIndexedDbMocks()
@@ -137,7 +153,7 @@ public class IndexedDbContentAddressableStorageTests
     public void Constructor_ShouldInitialize_WithValidJSRuntime()
     {
         // Act
-        var storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object);
+        var storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, _hashServiceMock.Object);
         
         // Assert
         Assert.NotNull(storage);
@@ -148,7 +164,15 @@ public class IndexedDbContentAddressableStorageTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => 
-            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, null!));
+            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, null!, _hashServiceMock.Object));
+    }
+    
+    [Fact]
+    public void Constructor_ShouldThrowArgumentNullException_WhenHashServiceIsNull()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => 
+            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, null!));
     }
     
     #endregion

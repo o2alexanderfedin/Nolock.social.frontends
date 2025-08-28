@@ -16,8 +16,8 @@ namespace NoLock.Social.Core.Accessibility.Services
         private readonly ICameraService _cameraService;
         private readonly ILogger<CameraVoiceCommandIntegration> _logger;
         
-        private bool _isInitialized = false;
-        private bool _isDisposed = false;
+        private bool _isInitialized;
+        private bool _isDisposed;
         
         public CameraVoiceCommandIntegration(
             IVoiceCommandService voiceCommandService,

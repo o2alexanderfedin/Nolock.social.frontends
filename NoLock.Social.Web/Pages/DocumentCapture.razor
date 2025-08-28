@@ -266,10 +266,10 @@
 </div>
 
 @code {
-    private bool isInitializing = false;
-    private bool isCameraInitialized = false;
-    private bool isCapturing = false;
-    private bool isProcessing = false;
+    private bool isInitializing;
+    private bool isCameraInitialized;
+    private bool isCapturing;
+    private bool isProcessing;
     private string? errorMessage;
     private string? sessionId;
     
@@ -279,7 +279,7 @@
     
     private bool supportsTorch = false;
     private bool supportsZoom = false;
-    private bool torchEnabled = false;
+    private bool torchEnabled;
     private double currentZoom = 1.0;
     
     private List<CapturedImage> capturedPages = new();

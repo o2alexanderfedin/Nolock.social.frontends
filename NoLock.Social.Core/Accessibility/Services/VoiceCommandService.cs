@@ -13,8 +13,8 @@ namespace NoLock.Social.Core.Accessibility.Services
         private readonly ILogger<VoiceCommandService> _logger;
         
         private Dictionary<string, Func<Task>> _commands = new();
-        private bool _isListening = false;
-        private bool _isDisposed = false;
+        private bool _isListening;
+        private bool _isDisposed;
         private DotNetObjectReference<VoiceCommandService>? _objectReference;
         
         public event EventHandler<VoiceCommandEventArgs>? OnCommandRecognized;

@@ -199,8 +199,8 @@
 @code {
     [Parameter] public CorrectedProcessedDocument? CorrectedDocument { get; set; }
     [Parameter] public string DocumentType { get; set; } = string.Empty;
-    [Parameter] public bool IsLoading { get; set; } = false;
-    [Parameter] public bool IsProcessing { get; set; } = false;
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool IsProcessing { get; set; }
     [Parameter] public double ConfidenceThreshold { get; set; } = 0.7;
     [Parameter] public EventCallback<CorrectedProcessedDocument> OnDocumentChanged { get; set; }
     [Parameter] public EventCallback<List<FieldCorrection>> OnCorrectionsApplied { get; set; }

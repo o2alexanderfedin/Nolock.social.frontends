@@ -20,7 +20,7 @@ namespace NoLock.Social.Core.OCR.Services
         // Queue state management
         private QueueState _currentState;
         private readonly object _stateLock = new object();
-        private bool _disposed = false;
+        private bool _disposed;
         
         // Queue statistics
         private QueueStatistics _statistics;

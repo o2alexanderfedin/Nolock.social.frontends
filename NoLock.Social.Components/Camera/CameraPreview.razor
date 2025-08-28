@@ -175,7 +175,7 @@
 
 @code {
     [Parameter] public EventCallback<CapturedImage> OnImageAccepted { get; set; }
-    [Parameter] public bool EnableAutoCapture { get; set; } = false;
+    [Parameter] public bool EnableAutoCapture { get; set; }
     [Parameter] public string? SessionId { get; set; }
     [Parameter] public EventCallback<CapturedImage> OnPageAdded { get; set; }
     [Parameter] public bool EnableVoiceCommands { get; set; } = true;
@@ -184,9 +184,9 @@
     private string? ErrorMessage;
     private CameraStream? CurrentStream;
     private CapturedImage? CapturedImage;
-    private bool IsCapturing = false;
-    private bool IsDocumentDetected = false;
-    private int AutoCaptureCountdown = 0;
+    private bool IsCapturing;
+    private bool IsDocumentDetected;
+    private int AutoCaptureCountdown;
     private System.Threading.Timer? AutoCaptureTimer;
     private ImageQualityResult? ImageQualityResult;
     
@@ -196,8 +196,8 @@
     private string _screenReaderMessage = "";
     
     // Voice command state
-    private bool _isVoiceCommandEnabled = false;
-    private bool _isVoiceCommandListening = false;
+    private bool _isVoiceCommandEnabled;
+    private bool _isVoiceCommandListening;
     
     protected override async Task OnInitializedAsync()
     {

@@ -14,10 +14,10 @@ namespace NoLock.Social.Core.Camera.Services
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<CameraService> _logger;
         private CameraPermissionState _currentPermissionState = CameraPermissionState.Prompt;
-        private CameraStream _currentStream = null;
+        private CameraStream _currentStream;
         private CameraControlSettings _controlSettings = new CameraControlSettings();
         private readonly Dictionary<string, DocumentSession> _activeSessions = new();
-        private bool _disposed = false;
+        private bool _disposed;
 
         public CameraService(
             IJSRuntime jsRuntime,

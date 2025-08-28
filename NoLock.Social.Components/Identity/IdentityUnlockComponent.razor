@@ -80,7 +80,7 @@
 
 @code {
     private UnlockModel _unlockModel = new();
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _errorMessage = "";
 
     [Parameter] public EventCallback<IdentitySession> OnIdentityUnlocked { get; set; }

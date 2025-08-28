@@ -91,7 +91,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         /// Null means no limit (use MaxPollingDurationSeconds instead).
         /// Default: null.
         /// </summary>
-        public int? MaxAttempts { get; set; } = null;
+        public int? MaxAttempts { get; set; }
 
         /// <summary>
         /// Gets the predefined polling configuration for OCR operations.
@@ -139,19 +139,19 @@ namespace NoLock.Social.Core.OCR.Interfaces
         public void Validate()
         {
             if (InitialIntervalSeconds <= 0)
-                throw new ArgumentException("Initial interval must be greater than 0", nameof(InitialIntervalSeconds));
+                throw new ArgumentOutOfRangeException("Initial interval must be greater than 0", nameof(InitialIntervalSeconds));
 
             if (MaxIntervalSeconds < InitialIntervalSeconds)
-                throw new ArgumentException("Max interval must be greater than or equal to initial interval", nameof(MaxIntervalSeconds));
+                throw new ArgumentOutOfRangeException("Max interval must be greater than or equal to initial interval", nameof(MaxIntervalSeconds));
 
             if (BackoffMultiplier < 1.0)
-                throw new ArgumentException("Backoff multiplier must be at least 1.0", nameof(BackoffMultiplier));
+                throw new ArgumentOutOfRangeException("Backoff multiplier must be at least 1.0", nameof(BackoffMultiplier));
 
             if (MaxPollingDurationSeconds <= 0)
-                throw new ArgumentException("Max polling duration must be greater than 0", nameof(MaxPollingDurationSeconds));
+                throw new ArgumentOutOfRangeException("Max polling duration must be greater than 0", nameof(MaxPollingDurationSeconds));
 
             if (MaxAttempts.HasValue && MaxAttempts.Value <= 0)
-                throw new ArgumentException("Max attempts must be greater than 0 if specified", nameof(MaxAttempts));
+                throw new ArgumentOutOfRangeException("Max attempts must be greater than 0 if specified", nameof(MaxAttempts));
         }
     }
 }

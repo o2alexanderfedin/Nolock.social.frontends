@@ -61,12 +61,9 @@ namespace NoLock.Social.Core.OCR.Services
             CancellationToken cancellation = default)
         {
             // Validate inputs
-            if (operation == null)
-                throw new ArgumentNullException(nameof(operation));
-            if (isComplete == null)
-                throw new ArgumentNullException(nameof(isComplete));
-            if (configuration == null)
-                throw new ArgumentNullException(nameof(configuration));
+            ArgumentNullException.ThrowIfNull(operation);
+            ArgumentNullException.ThrowIfNull(isComplete);
+            ArgumentNullException.ThrowIfNull(configuration);
 
             configuration.Validate();
 
