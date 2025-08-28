@@ -190,8 +190,8 @@ namespace NoLock.Social.Core.Identity.Services
                 _logger.LogDebug("Clearing persisted session");
 
                 var storageType = _useSessionStorage ? "sessionStorage" : "localStorage";
-                await _jsRuntime.InvokeVoidAsync($"{storageType}.removeItem", StorageKey);
-                await _jsRuntime.InvokeVoidAsync($"{storageType}.removeItem", MetadataKey);
+                await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>($"{storageType}.removeItem", StorageKey);
+                await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>($"{storageType}.removeItem", MetadataKey);
 
                 _logger.LogInformation("Persisted session cleared");
             }, "Clear persisted session");
@@ -270,11 +270,11 @@ namespace NoLock.Social.Core.Identity.Services
             var json = JsonSerializer.Serialize(encryptedSession, SessionPersistenceConfiguration.JsonOptions);
             var storageType = _useSessionStorage ? "sessionStorage" : "localStorage";
             
-            await _jsRuntime.InvokeVoidAsync($"{storageType}.setItem", StorageKey, json);
+            await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>($"{storageType}.setItem", StorageKey, json);
             
             // Also store metadata separately for quick access
             var metadataJson = JsonSerializer.Serialize(encryptedSession.Metadata, SessionPersistenceConfiguration.JsonOptions);
-            await _jsRuntime.InvokeVoidAsync($"{storageType}.setItem", MetadataKey, metadataJson);
+            await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>($"{storageType}.setItem", MetadataKey, metadataJson);
         }
 
         private byte[] GenerateRandomBytes(int length)

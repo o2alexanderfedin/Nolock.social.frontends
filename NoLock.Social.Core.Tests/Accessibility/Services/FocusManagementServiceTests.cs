@@ -62,14 +62,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             await _service.StoreFocusAsync(elementRef);
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("setFocus", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("setFocus", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.RestoreFocusAsync();
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "setFocus",
                 It.Is<object[]>(args => args.Contains(elementRef))),
                 Times.Once);
@@ -98,7 +98,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
             
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "setFocus",
                 It.IsAny<object[]>()),
                 Times.Never);
@@ -115,14 +115,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             var elementRef = new ElementReference(Guid.NewGuid().ToString());
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("setFocus", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("setFocus", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.SetFocusAsync(elementRef);
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "setFocus",
                 It.Is<object[]>(args => args.Contains(elementRef))),
                 Times.Once);
@@ -147,14 +147,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             var containerRef = new ElementReference(Guid.NewGuid().ToString());
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("trapFocus", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("trapFocus", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.TrapFocusAsync(containerRef);
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "trapFocus",
                 It.Is<object[]>(args => args.Contains(containerRef))),
                 Times.Once);
@@ -177,14 +177,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("releaseFocusTrap", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("releaseFocusTrap", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.ReleaseFocusTrapAsync();
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "releaseFocusTrap",
                 It.IsAny<object[]>()),
                 Times.Once);
@@ -204,7 +204,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             // Arrange
             var exception = new JSException("Failed to release");
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("releaseFocusTrap", It.IsAny<object[]>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("releaseFocusTrap", It.IsAny<object[]>()))
                 .ThrowsAsync(exception);
 
             // Act
@@ -231,14 +231,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             var containerRef = new ElementReference(Guid.NewGuid().ToString());
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("focusFirstElement", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("focusFirstElement", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.FocusFirstElementAsync(containerRef);
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "focusFirstElement",
                 It.Is<object[]>(args => args.Contains(containerRef))),
                 Times.Once);
@@ -263,14 +263,14 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             var containerRef = new ElementReference(Guid.NewGuid().ToString());
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("focusLastElement", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("focusLastElement", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.FocusLastElementAsync(containerRef);
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "focusLastElement",
                 It.Is<object[]>(args => args.Contains(containerRef))),
                 Times.Once);
@@ -405,8 +405,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             var containerRef = new ElementReference(Guid.NewGuid().ToString());
             
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             await _service.TrapFocusAsync(containerRef);
 
@@ -414,7 +414,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             await _service.DisposeAsync();
 
             // Assert
-            _jsModuleMock.Verify(x => x.InvokeVoidAsync(
+            _jsModuleMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "releaseFocusTrap",
                 It.IsAny<object[]>()),
                 Times.Once);
@@ -426,8 +426,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             // Arrange
             // Force module creation by calling a method
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("setFocus", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("setFocus", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             await _service.SetFocusAsync(new ElementReference());
 
@@ -448,8 +448,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             
             // Force module creation
             _jsModuleMock
-                .Setup(x => x.InvokeVoidAsync("setFocus", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("setFocus", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             await _service.SetFocusAsync(new ElementReference());
 

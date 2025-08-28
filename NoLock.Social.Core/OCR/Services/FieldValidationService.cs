@@ -29,7 +29,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="documentType">The type of document (Receipt, Check, etc.).</param>
         /// <param name="rules">Optional specific validation rules for the field.</param>
         /// <returns>A validation result with any errors or warnings.</returns>
-        public async Task<FieldValidationResult> ValidateFieldAsync(
+        public virtual async Task<FieldValidationResult> ValidateFieldAsync(
             string fieldName, 
             object? value, 
             string documentType,
@@ -71,7 +71,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// <param name="fieldName">The field name.</param>
         /// <param name="documentType">The document type.</param>
         /// <returns>The validation rules for the field.</returns>
-        public async Task<FieldValidationRules> GetFieldValidationRulesAsync(string fieldName, string documentType)
+        public virtual async Task<FieldValidationRules> GetFieldValidationRulesAsync(string fieldName, string documentType)
         {
             var cacheKey = $"{documentType}:{fieldName}";
             

@@ -593,12 +593,12 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             // Arrange
             var rules = new FieldValidationRules
             {
-                FieldName = "Price",
+                FieldName = "Quantity",
                 FieldType = FieldType.Decimal
             };
 
             // Act
-            var result = await _validationService.ValidateFieldAsync("Price", value, "Receipt", rules);
+            var result = await _validationService.ValidateFieldAsync("Quantity", value, "Receipt", rules);
 
             // Assert
             if (!decimal.TryParse(value, out _))

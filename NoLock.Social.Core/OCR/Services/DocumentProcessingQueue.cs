@@ -101,7 +101,7 @@ namespace NoLock.Social.Core.OCR.Services
 
             lock (_stateLock)
             {
-                if (_currentState == QueueState.Stopping)
+                if (_currentState == QueueState.Stopping || _currentState == QueueState.Stopped)
                     throw new InvalidOperationException("Queue is shutting down and cannot accept new documents.");
             }
 
@@ -151,7 +151,7 @@ namespace NoLock.Social.Core.OCR.Services
         /// <inheritdoc />
         public async Task<QueuedDocument> GetQueuedDocumentAsync(string queueId, CancellationToken cancellation = default)
         {
-            if (string.IsNullOrEmpty(queueId))
+            if (string.IsNullOrWhiteSpace(queueId))
                 throw new ArgumentNullException(nameof(queueId));
 
             ThrowIfDisposed();
@@ -431,13 +431,17 @@ namespace NoLock.Social.Core.OCR.Services
         /// <returns>The next queued document or null if queue is empty.</returns>
         internal QueuedDocument GetNextDocumentForProcessing()
         {
-            if (_processingQueue.TryDequeue(out var queueId))
+            // Get all queued documents sorted by priority (highest first)
+            var queuedDocs = _queuedDocuments.Values
+                .Where(d => d.Status == QueuedDocumentStatus.Queued)
+                .OrderByDescending(d => d.Priority)
+                .ThenBy(d => d.QueuedAt)
+                .FirstOrDefault();
+
+            if (queuedDocs != null && _processingQueue.TryDequeue(out var queueId))
             {
-                if (_queuedDocuments.TryGetValue(queueId, out var document) &&
-                    document.Status == QueuedDocumentStatus.Queued)
-                {
-                    return document;
-                }
+                // Return the highest priority document
+                return queuedDocs;
             }
 
             return null;

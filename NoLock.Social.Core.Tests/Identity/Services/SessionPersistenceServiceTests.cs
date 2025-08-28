@@ -148,7 +148,8 @@ namespace NoLock.Social.Core.Tests.Identity.Services
         [InlineData(30, 30)]
         [InlineData(60, 60)]
         [InlineData(120, 120)]
-        [InlineData(500, 240)] // Should cap at max (240 minutes)
+        [InlineData(500, 500)] // Should not cap, as max is 1440 minutes
+        [InlineData(2000, 1440)] // Should cap at max (1440 minutes = 24 hours)
         public async Task PersistSessionAsync_ShouldRespectMaxExpiryTime(int requestedMinutes, int expectedMinutes)
         {
             // Arrange
@@ -156,8 +157,8 @@ namespace NoLock.Social.Core.Tests.Identity.Services
             var encryptionKey = new byte[32];
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             var result = await _service.PersistSessionAsync(sessionData, encryptionKey, requestedMinutes);
@@ -175,8 +176,8 @@ namespace NoLock.Social.Core.Tests.Identity.Services
             var encryptionKey = new byte[32];
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             var result = await _service.PersistSessionAsync(sessionData, encryptionKey);
@@ -185,7 +186,7 @@ namespace NoLock.Social.Core.Tests.Identity.Services
             result.Should().BeTrue();
             
             var storageType = SessionPersistenceConfiguration.UseSessionStorage ? "sessionStorage" : "localStorage";
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 $"{storageType}.setItem",
                 It.IsAny<object?[]?>()),
                 Times.Exactly(2)); // Once for data, once for metadata
@@ -199,8 +200,8 @@ namespace NoLock.Social.Core.Tests.Identity.Services
             var encryptionKey = new byte[32];
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             var result = await _service.PersistSessionAsync(sessionData, encryptionKey);
@@ -221,7 +222,7 @@ namespace NoLock.Social.Core.Tests.Identity.Services
             var encryptionKey = new byte[32];
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
                 .ThrowsAsync(new JSException("Storage error"));
 
             // Act
@@ -273,15 +274,15 @@ namespace NoLock.Social.Core.Tests.Identity.Services
                 .ReturnsAsync(json);
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             var result = await _service.GetPersistedSessionAsync();
 
             // Assert
             result.Should().BeNull();
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 It.Is<string>(s => s.Contains(".removeItem")),
                 It.IsAny<object?[]?>()),
                 Times.Exactly(2)); // Clear both storage keys
@@ -393,20 +394,20 @@ namespace NoLock.Social.Core.Tests.Identity.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.ClearPersistedSessionAsync();
 
             // Assert
             var storageType = SessionPersistenceConfiguration.UseSessionStorage ? "sessionStorage" : "localStorage";
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 $"{storageType}.removeItem",
                 It.Is<object?[]?>(args => args!.Contains(SessionPersistenceConfiguration.SessionStorageKey))),
                 Times.Once);
             
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 $"{storageType}.removeItem",
                 It.Is<object?[]?>(args => args!.Contains(SessionPersistenceConfiguration.SessionMetadataKey))),
                 Times.Once);
@@ -417,7 +418,7 @@ namespace NoLock.Social.Core.Tests.Identity.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
                 .ThrowsAsync(new JSException("Storage error"));
 
             // Act
@@ -509,14 +510,14 @@ namespace NoLock.Social.Core.Tests.Identity.Services
                 .ReturnsAsync(json);
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.ExtendSessionExpiryAsync(30);
 
             // Assert
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 It.Is<string>(s => s.Contains(".setItem")),
                 It.IsAny<object?[]?>()),
                 Times.AtLeastOnce);
@@ -541,8 +542,8 @@ namespace NoLock.Social.Core.Tests.Identity.Services
                 .ReturnsAsync(json);
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.ExtendSessionExpiryAsync(30);

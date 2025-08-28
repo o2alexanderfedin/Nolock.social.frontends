@@ -60,7 +60,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
         var result = await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
-            await module.InvokeVoidAsync("setFocus", element);
+            await module.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("setFocus", element);
             _logger.LogDebug("Focus set to specified element");
         },
         "SetFocusAsync");
@@ -71,7 +71,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
         await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
-            await module.InvokeVoidAsync("trapFocus", container);
+            await module.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("trapFocus", container);
             _focusTrapped = true;
             _logger.LogDebug("Focus trapped within container");
         }, "TrapFocusAsync");
@@ -82,7 +82,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
         try
         {
             var module = await _moduleTask.Value;
-            await module.InvokeVoidAsync("releaseFocusTrap");
+            await module.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("releaseFocusTrap");
             _focusTrapped = false;
             _logger.LogDebug("Focus trap released");
         }
@@ -97,7 +97,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
         await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
-            await module.InvokeVoidAsync("focusFirstElement", container);
+            await module.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("focusFirstElement", container);
             _logger.LogDebug("Focus moved to first element in container");
         }, "FocusFirstElementAsync");
     }
@@ -107,7 +107,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
         await _logger.ExecuteWithLogging(async () =>
         {
             var module = await _moduleTask.Value;
-            await module.InvokeVoidAsync("focusLastElement", container);
+            await module.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("focusLastElement", container);
             _logger.LogDebug("Focus moved to last element in container");
         }, "FocusLastElementAsync");
     }

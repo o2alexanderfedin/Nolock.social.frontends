@@ -58,8 +58,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             // Act
             await _service.StartListeningAsync();
@@ -67,7 +67,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
 
             // Assert
             isListening.Should().BeTrue();
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "speechRecognition.startListening",
                 It.IsAny<object[]>()),
                 Times.Once);
@@ -78,8 +78,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             await _service.StartListeningAsync();
 
@@ -106,7 +106,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             _service.OnSpeechError += (sender, args) => errorEventArgs = args;
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
                 .ThrowsAsync(jsException);
 
             // Act
@@ -144,8 +144,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
 
             await _service.StartListeningAsync();
 
@@ -155,7 +155,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
 
             // Assert
             isListening.Should().BeFalse();
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "speechRecognition.stopListening",
                 It.IsAny<object[]>()),
                 Times.Once);
@@ -187,11 +187,11 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             _service.OnSpeechError += (sender, args) => errorEventArgs = args;
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.stopListening", It.IsAny<object[]>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.stopListening", It.IsAny<object[]>()))
                 .ThrowsAsync(jsException);
 
             await _service.StartListeningAsync();
@@ -490,8 +490,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             _service.OnSpeechError += (sender, args) => errorArgs = args;
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             await _service.StartListeningAsync();
 
@@ -528,8 +528,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync(It.IsAny<string>(), It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(It.IsAny<string>(), It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             await _service.StartListeningAsync();
 
@@ -537,7 +537,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             await _service.DisposeAsync();
 
             // Assert
-            _jsRuntimeMock.Verify(x => x.InvokeVoidAsync(
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
                 "speechRecognition.stopListening",
                 It.IsAny<object[]>()),
                 Times.Once);
@@ -575,11 +575,11 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
         {
             // Arrange
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.startListening", It.IsAny<object[]>()))
-                .Returns(ValueTask.CompletedTask);
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", It.IsAny<object[]>()))
+                .ReturnsAsync(default(Microsoft.JSInterop.Infrastructure.IJSVoidResult));
             
             _jsRuntimeMock
-                .Setup(x => x.InvokeVoidAsync("speechRecognition.stopListening", It.IsAny<object[]>()))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.stopListening", It.IsAny<object[]>()))
                 .ThrowsAsync(new Exception("Stop failed"));
             
             await _service.StartListeningAsync();
