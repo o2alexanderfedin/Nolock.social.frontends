@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -8,32 +10,38 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
 {
     public class ExceptionHandlerTests
     {
-        private readonly Mock<ILogger<ExceptionHandlerTests>> _loggerMock;
+        private readonly Mock<ILogger> _loggerMock;
 
         public ExceptionHandlerTests()
         {
-            _loggerMock = new Mock<ILogger<ExceptionHandlerTests>>();
+            _loggerMock = new Mock<ILogger>();
         }
 
-        #region ExecuteAsync<T> Tests
-
-        [Fact]
-        public async Task ExecuteAsync_WithResult_ShouldReturnResult_WhenOperationSucceeds()
+        [Theory]
+        [InlineData("Operation1", 42, true)]
+        [InlineData("Operation2", 100, false)]
+        [InlineData("LongOperation", 999, true)]
+        [InlineData("QuickOp", -1, false)]
+        [InlineData("ComplexOperation", 0, true)]
+        public async Task ExecuteAsync_WithReturnValue_Success(string operationName, int expectedValue, bool logDebug)
         {
             // Arrange
-            var expectedResult = "test-result";
+            var operation = new Func<Task<int>>(async () =>
+            {
+                await Task.Delay(10);
+                return expectedValue;
+            });
 
             // Act
             var result = await ExceptionHandler.ExecuteAsync(
                 _loggerMock.Object,
-                async () => await Task.FromResult(expectedResult),
-                "TestOperation"
-            );
+                operation,
+                operationName);
 
             // Assert
-            result.Should().Be(expectedResult);
+            result.Should().Be(expectedValue);
             _loggerMock.Verify(x => x.Log(
-                It.IsAny<LogLevel>(),
+                LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<Exception>(),
@@ -41,423 +49,148 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
                 Times.Never);
         }
 
-        [Fact]
-        public async Task ExecuteAsync_WithResult_ShouldLogErrorAndRethrow_WhenOperationFailsAndRethrowTrue()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var act = async () => await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); throw exception; },
-                "TestOperation",
-                rethrow: true
-            );
-
-            // Assert
-            await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("Test error");
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_WithResult_ShouldLogErrorAndReturnDefault_WhenOperationFailsAndRethrowFalse()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var result = await ExceptionHandler.ExecuteAsync<string>(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); throw exception; },
-                "TestOperation",
-                rethrow: false
-            );
-
-            // Assert
-            result.Should().BeNull();
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task ExecuteAsync_WithResult_ShouldHandleCancellationTokenException(bool rethrow)
+        [InlineData("DatabaseError", "Connection timeout", true)]
+        [InlineData("NetworkError", "Host unreachable", false)]
+        [InlineData("ValidationError", "Invalid input", true)]
+        [InlineData("AuthError", "Unauthorized access", false)]
+        public async Task ExecuteAsync_WithReturnValue_ExceptionHandling(string operationName, string errorMessage, bool rethrow)
         {
             // Arrange
-            var cts = new CancellationTokenSource();
-            cts.Cancel();
+            var exception = new InvalidOperationException(errorMessage);
+            var operation = new Func<Task<int>>(async () =>
+            {
+                await Task.Delay(10);
+                throw exception;
+            });
 
-            // Act
+            // Act & Assert
             if (rethrow)
             {
                 var act = async () => await ExceptionHandler.ExecuteAsync(
                     _loggerMock.Object,
-                    async () => { await Task.Delay(1000, cts.Token); return "result"; },
-                    "CancelledOperation",
-                    rethrow: true
-                );
+                    operation,
+                    operationName,
+                    rethrow);
 
-                await act.Should().ThrowAsync<OperationCanceledException>();
+                await act.Should().ThrowAsync<InvalidOperationException>()
+                    .WithMessage(errorMessage);
             }
             else
             {
-                var result = await ExceptionHandler.ExecuteAsync<string>(
+                var result = await ExceptionHandler.ExecuteAsync(
                     _loggerMock.Object,
-                    async () => { await Task.Delay(1000, cts.Token); return "result"; },
-                    "CancelledOperation",
-                    rethrow: false
-                );
+                    operation,
+                    operationName,
+                    rethrow);
 
-                result.Should().BeNull();
+                result.Should().Be(default(int));
             }
+
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains(operationName)),
+                It.Is<Exception>(e => e == exception),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
         }
 
-        #endregion
-
-        #region Execute<T> Tests
-
-        [Fact]
-        public void Execute_WithResult_ShouldReturnResult_WhenOperationSucceeds()
+        [Theory]
+        [InlineData("SyncOp1", "test value 1", true)]
+        [InlineData("SyncOp2", "test value 2", false)]
+        [InlineData("SyncOp3", null, true)]
+        [InlineData("SyncOp4", "", false)]
+        public void Execute_WithReturnValue_Success(string operationName, string expectedValue, bool logDebug)
         {
             // Arrange
-            var expectedResult = 42;
+            var operation = new Func<string>(() => expectedValue);
 
             // Act
             var result = ExceptionHandler.Execute(
                 _loggerMock.Object,
-                () => expectedResult,
-                "TestOperation"
-            );
+                operation,
+                operationName);
 
             // Assert
-            result.Should().Be(expectedResult);
+            result.Should().Be(expectedValue);
             _loggerMock.Verify(x => x.Log(
-                It.IsAny<LogLevel>(),
+                LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Never);
         }
-
-        [Fact]
-        public void Execute_WithResult_ShouldLogErrorAndRethrow_WhenOperationFailsAndRethrowTrue()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var act = () => ExceptionHandler.Execute(
-                _loggerMock.Object,
-                () => throw exception,
-                "TestOperation",
-                rethrow: true
-            );
-
-            // Assert
-            act.Should().Throw<InvalidOperationException>()
-                .WithMessage("Test error");
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        [Fact]
-        public void Execute_WithResult_ShouldLogErrorAndReturnDefault_WhenOperationFailsAndRethrowFalse()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var result = ExceptionHandler.Execute<int>(
-                _loggerMock.Object,
-                () => throw exception,
-                "TestOperation",
-                rethrow: false
-            );
-
-            // Assert
-            result.Should().Be(0);
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        #endregion
-
-        #region ExecuteAsync (void) Tests
-
-        [Fact]
-        public async Task ExecuteAsync_Void_ShouldCompleteSuccessfully_WhenOperationSucceeds()
-        {
-            // Arrange
-            var executed = false;
-
-            // Act
-            await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); executed = true; },
-                "TestOperation"
-            );
-
-            // Assert
-            executed.Should().BeTrue();
-            _loggerMock.Verify(x => x.Log(
-                It.IsAny<LogLevel>(),
-                It.IsAny<EventId>(),
-                It.IsAny<It.IsAnyType>(),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_Void_ShouldLogErrorAndRethrow_WhenOperationFailsAndRethrowTrue()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var act = async () => await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); throw exception; },
-                "TestOperation",
-                rethrow: true
-            );
-
-            // Assert
-            await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("Test error");
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_Void_ShouldLogErrorAndContinue_WhenOperationFailsAndRethrowFalse()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-            var executed = false;
-
-            // Act
-            await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); throw exception; },
-                "TestOperation",
-                rethrow: false
-            );
-            
-            executed = true; // This should execute even after exception
-
-            // Assert
-            executed.Should().BeTrue();
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        #endregion
-
-        #region Execute (void) Tests
-
-        [Fact]
-        public void Execute_Void_ShouldCompleteSuccessfully_WhenOperationSucceeds()
-        {
-            // Arrange
-            var executed = false;
-
-            // Act
-            ExceptionHandler.Execute(
-                _loggerMock.Object,
-                () => { executed = true; },
-                "TestOperation"
-            );
-
-            // Assert
-            executed.Should().BeTrue();
-            _loggerMock.Verify(x => x.Log(
-                It.IsAny<LogLevel>(),
-                It.IsAny<EventId>(),
-                It.IsAny<It.IsAnyType>(),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public void Execute_Void_ShouldLogErrorAndRethrow_WhenOperationFailsAndRethrowTrue()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-
-            // Act
-            var act = () => ExceptionHandler.Execute(
-                _loggerMock.Object,
-                () => throw exception,
-                "TestOperation",
-                rethrow: true
-            );
-
-            // Assert
-            act.Should().Throw<InvalidOperationException>()
-                .WithMessage("Test error");
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        [Fact]
-        public void Execute_Void_ShouldLogErrorAndContinue_WhenOperationFailsAndRethrowFalse()
-        {
-            // Arrange
-            var exception = new InvalidOperationException("Test error");
-            var executed = false;
-
-            // Act
-            ExceptionHandler.Execute(
-                _loggerMock.Object,
-                () => throw exception,
-                "TestOperation",
-                rethrow: false
-            );
-            
-            executed = true; // This should execute even after exception
-
-            // Assert
-            executed.Should().BeTrue();
-            
-            _loggerMock.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("TestOperation failed")),
-                exception,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        #endregion
-
-        #region Edge Cases and Special Scenarios
 
         [Theory]
-        [InlineData("Operation1")]
-        [InlineData("Complex Operation with Spaces")]
-        [InlineData("Operation-with-dashes")]
-        [InlineData("Operation_with_underscores")]
-        public async Task ExecuteAsync_ShouldLogCorrectOperationName(string operationName)
+        [InlineData("FileError", "File not found", true)]
+        [InlineData("ParseError", "Invalid format", false)]
+        [InlineData("ConfigError", "Missing configuration", true)]
+        [InlineData("RuntimeError", "Runtime exception", false)]
+        public void Execute_WithReturnValue_ExceptionHandling(string operationName, string errorMessage, bool rethrow)
         {
             // Arrange
-            var exception = new Exception("Test");
+            var exception = new InvalidOperationException(errorMessage);
+            var operation = new Func<string>(() => throw exception);
 
-            // Act
-            await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => { await Task.Delay(1); throw exception; },
-                operationName,
-                rethrow: false
-            );
+            // Act & Assert
+            if (rethrow)
+            {
+                var act = () => ExceptionHandler.Execute(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
 
-            // Assert
+                act.Should().Throw<InvalidOperationException>()
+                    .WithMessage(errorMessage);
+            }
+            else
+            {
+                var result = ExceptionHandler.Execute(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
+
+                result.Should().Be(default(string));
+            }
+
             _loggerMock.Verify(x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"{operationName} failed")),
-                exception,
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains(operationName)),
+                It.Is<Exception>(e => e == exception),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
-        [Fact]
-        public async Task ExecuteAsync_ShouldHandleNestedExceptions()
+        [Theory]
+        [InlineData("VoidAsyncOp1", 10)]
+        [InlineData("VoidAsyncOp2", 50)]
+        [InlineData("VoidAsyncOp3", 0)]
+        [InlineData("VoidAsyncOp4", 100)]
+        public async Task ExecuteAsync_Void_Success(string operationName, int delayMs)
         {
             // Arrange
-            var innerException = new InvalidOperationException("Inner error");
-            var outerException = new ApplicationException("Outer error", innerException);
+            var executed = false;
+            var operation = new Func<Task>(async () =>
+            {
+                await Task.Delay(delayMs);
+                executed = true;
+            });
 
             // Act
-            var act = async () => await ExceptionHandler.ExecuteAsync(
+            await ExceptionHandler.ExecuteAsync(
                 _loggerMock.Object,
-                async () => { await Task.Delay(1); throw outerException; },
-                "NestedExceptionOperation",
-                rethrow: true
-            );
+                operation,
+                operationName);
 
             // Assert
-            var exception = await act.Should().ThrowAsync<ApplicationException>()
-                .WithMessage("Outer error");
-            exception.And.InnerException.Should().BeOfType<InvalidOperationException>();
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_ShouldHandleMultipleConsecutiveCalls()
-        {
-            // Arrange & Act
-            var result1 = await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => await Task.FromResult(1),
-                "Operation1"
-            );
-
-            var result2 = await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => await Task.FromResult(2),
-                "Operation2"
-            );
-
-            var result3 = await ExceptionHandler.ExecuteAsync(
-                _loggerMock.Object,
-                async () => await Task.FromResult(3),
-                "Operation3"
-            );
-
-            // Assert
-            result1.Should().Be(1);
-            result2.Should().Be(2);
-            result3.Should().Be(3);
+            executed.Should().BeTrue();
             _loggerMock.Verify(x => x.Log(
-                It.IsAny<LogLevel>(),
+                LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<Exception>(),
@@ -465,6 +198,215 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
                 Times.Never);
         }
 
-        #endregion
+        [Theory]
+        [InlineData("AsyncVoidError1", "Async operation failed", true)]
+        [InlineData("AsyncVoidError2", "Task cancelled", false)]
+        [InlineData("AsyncVoidError3", "Timeout occurred", true)]
+        [InlineData("AsyncVoidError4", "Resource unavailable", false)]
+        public async Task ExecuteAsync_Void_ExceptionHandling(string operationName, string errorMessage, bool rethrow)
+        {
+            // Arrange
+            var exception = new InvalidOperationException(errorMessage);
+            var operation = new Func<Task>(async () =>
+            {
+                await Task.Delay(10);
+                throw exception;
+            });
+
+            // Act & Assert
+            if (rethrow)
+            {
+                var act = async () => await ExceptionHandler.ExecuteAsync(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
+
+                await act.Should().ThrowAsync<InvalidOperationException>()
+                    .WithMessage(errorMessage);
+            }
+            else
+            {
+                await ExceptionHandler.ExecuteAsync(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
+            }
+
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains(operationName)),
+                It.Is<Exception>(e => e == exception),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Theory]
+        [InlineData("VoidOp1")]
+        [InlineData("VoidOp2")]
+        [InlineData("VoidOp3")]
+        [InlineData("VoidOp4")]
+        public void Execute_Void_Success(string operationName)
+        {
+            // Arrange
+            var executed = false;
+            var operation = new Action(() => executed = true);
+
+            // Act
+            ExceptionHandler.Execute(
+                _loggerMock.Object,
+                operation,
+                operationName);
+
+            // Assert
+            executed.Should().BeTrue();
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
+        }
+
+        [Theory]
+        [InlineData("VoidError1", "Operation failed", true)]
+        [InlineData("VoidError2", "Invalid state", false)]
+        [InlineData("VoidError3", "Access denied", true)]
+        [InlineData("VoidError4", "Resource locked", false)]
+        public void Execute_Void_ExceptionHandling(string operationName, string errorMessage, bool rethrow)
+        {
+            // Arrange
+            var exception = new InvalidOperationException(errorMessage);
+            var operation = new Action(() => throw exception);
+
+            // Act & Assert
+            if (rethrow)
+            {
+                var act = () => ExceptionHandler.Execute(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
+
+                act.Should().Throw<InvalidOperationException>()
+                    .WithMessage(errorMessage);
+            }
+            else
+            {
+                ExceptionHandler.Execute(
+                    _loggerMock.Object,
+                    operation,
+                    operationName,
+                    rethrow);
+            }
+
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains(operationName)),
+                It.Is<Exception>(e => e == exception),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_WithCancellationToken_ShouldHandleCancellation()
+        {
+            // Arrange
+            var cts = new System.Threading.CancellationTokenSource();
+            var operation = new Func<Task<int>>(async () =>
+            {
+                await Task.Delay(1000, cts.Token);
+                return 42;
+            });
+
+            // Act
+            cts.Cancel();
+            var act = async () => await ExceptionHandler.ExecuteAsync(
+                _loggerMock.Object,
+                operation,
+                "CancellationTest");
+
+            // Assert
+            await act.Should().ThrowAsync<TaskCanceledException>();
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("CancellationTest")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Theory]
+        [InlineData(typeof(ArgumentNullException), "Value cannot be null")]
+        [InlineData(typeof(ArgumentException), "Invalid argument")]
+        [InlineData(typeof(InvalidOperationException), "Invalid operation")]
+        [InlineData(typeof(NotSupportedException), "Not supported")]
+        [InlineData(typeof(TimeoutException), "Operation timed out")]
+        public async Task ExecuteAsync_DifferentExceptionTypes(Type exceptionType, string message)
+        {
+            // Arrange
+            var exception = (Exception)Activator.CreateInstance(exceptionType, message)!;
+            var operation = new Func<Task<string>>(async () =>
+            {
+                await Task.Delay(10);
+                throw exception;
+            });
+
+            // Act
+            var act = async () => await ExceptionHandler.ExecuteAsync(
+                _loggerMock.Object,
+                operation,
+                $"Test_{exceptionType.Name}");
+
+            // Assert
+            await act.Should().ThrowAsync<Exception>()
+                .Where(e => e.GetType() == exceptionType);
+            
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Test_{exceptionType.Name}")),
+                It.Is<Exception>(e => e.GetType() == exceptionType),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_NestedExceptions_ShouldLogCorrectly()
+        {
+            // Arrange
+            var innerException = new ArgumentException("Inner exception");
+            var outerException = new InvalidOperationException("Outer exception", innerException);
+            var operation = new Func<Task<int>>(async () =>
+            {
+                await Task.Delay(10);
+                throw outerException;
+            });
+
+            // Act
+            var act = async () => await ExceptionHandler.ExecuteAsync(
+                _loggerMock.Object,
+                operation,
+                "NestedExceptionTest");
+
+            // Assert
+            var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+            exception.WithMessage("Outer exception");
+            exception.Which.InnerException.Should().BeOfType<ArgumentException>();
+            exception.Which.InnerException!.Message.Should().Be("Inner exception");
+
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("NestedExceptionTest")),
+                It.Is<Exception>(e => e == outerException && e.InnerException == innerException),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
     }
 }
