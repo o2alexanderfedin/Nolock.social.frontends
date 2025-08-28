@@ -42,7 +42,7 @@ namespace NoLock.Social.Core.Accessibility.Services
                 
                 _logger.LogInformation("Starting speech recognition");
                 
-                await _jsRuntime.InvokeVoidAsync("speechRecognition.startListening", _objectReference);
+                await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.startListening", _objectReference);
                 _isListening = true;
                 
                 _logger.LogInformation("Speech recognition started successfully");
@@ -83,7 +83,7 @@ namespace NoLock.Social.Core.Accessibility.Services
                 
                 _logger.LogInformation("Stopping speech recognition");
                 
-                await _jsRuntime.InvokeVoidAsync("speechRecognition.stopListening");
+                await _jsRuntime.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("speechRecognition.stopListening");
                 _isListening = false;
                 
                 _logger.LogInformation("Speech recognition stopped successfully");
@@ -143,7 +143,7 @@ namespace NoLock.Social.Core.Accessibility.Services
             if (_isDisposed)
                 throw new ObjectDisposedException(nameof(VoiceCommandService));
                 
-            return Task.FromResult(new Dictionary<string, Func<Task>>(_commands));
+            return Task.FromResult(new Dictionary<string, Func<Task>>(_commands, StringComparer.OrdinalIgnoreCase));
         }
         
         public async Task<bool> IsSpeechRecognitionSupportedAsync()

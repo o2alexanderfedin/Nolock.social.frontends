@@ -161,9 +161,15 @@ namespace NoLock.Social.Core.OCR.Services
                 DetectedAt = DateTime.UtcNow
             };
 
-            // Cache the result
+            // Cache the result (double-check to handle race conditions)
             lock (_cacheLock)
             {
+                // Check if another thread already cached while we were detecting
+                if (_cache.TryGetValue(cacheKey, out var existingResult))
+                {
+                    _logger.LogDebug("Another thread already cached the result");
+                    return existingResult;
+                }
                 _cache[cacheKey] = result;
             }
 
@@ -315,7 +321,7 @@ namespace NoLock.Social.Core.OCR.Services
 
                 if (ContainsKeyword(lowerText, keyword))
                 {
-                    _logger.LogDebug($"Matched keyword '{keyword}' for {documentType}");
+                    _logger.LogDebug($"Matched keyword '{keyword}' for {documentType} with weight {weight}");
                     matchedKeywords.Add(keyword);
                     
                     // Count occurrences for repeated keywords

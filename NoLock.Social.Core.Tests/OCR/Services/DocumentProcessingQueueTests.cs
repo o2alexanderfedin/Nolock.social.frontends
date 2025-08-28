@@ -30,6 +30,9 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                 DocumentType = DocumentType.Receipt,
                 ImageData = System.Text.Encoding.UTF8.GetBytes("base64imagedata")
             };
+            
+            // Start the queue to allow document enqueuing
+            _queue.StartAsync().GetAwaiter().GetResult();
         }
 
         #region EnqueueDocument Tests
@@ -96,7 +99,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task EnqueueDocumentAsync_WhenQueueStopping_ThrowsInvalidOperationException()
         {
             // Arrange
-            await _queue.StartAsync();
+            // Queue is already started in constructor
             await _queue.StopAsync();
 
             // Act & Assert
@@ -266,18 +269,20 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Fact]
         public async Task StartAsync_ChangesStateToRunning()
         {
+            // Arrange - Create a new queue that hasn't been started
+            var freshQueue = new DocumentProcessingQueue();
+            
             // Act
-            await _queue.StartAsync();
+            await freshQueue.StartAsync();
 
             // Assert
-            _queue.CurrentState.Should().Be(QueueState.Running);
+            freshQueue.CurrentState.Should().Be(QueueState.Running);
         }
 
         [Fact]
         public async Task PauseProcessingAsync_ChangesStateToPaused()
         {
-            // Arrange
-            await _queue.StartAsync();
+            // Arrange - Queue is already started in constructor
 
             // Act
             await _queue.PauseProcessingAsync();
@@ -289,8 +294,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Fact]
         public async Task ResumeProcessingAsync_ChangesStateToRunning()
         {
-            // Arrange
-            await _queue.StartAsync();
+            // Arrange - Queue is already started in constructor
             await _queue.PauseProcessingAsync();
 
             // Act
@@ -303,8 +307,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Fact]
         public async Task StopAsync_ChangesStateToStopped()
         {
-            // Arrange
-            await _queue.StartAsync();
+            // Arrange - Queue is already started in constructor
 
             // Act
             await _queue.StopAsync();
@@ -316,16 +319,17 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Fact]
         public async Task StateChanges_RaiseQueueStateChangedEvent()
         {
-            // Arrange
+            // Arrange - Create fresh queue to track all state changes from beginning
+            var freshQueue = new DocumentProcessingQueue();
             var stateChanges = new List<(QueueState Previous, QueueState New)>();
-            _queue.QueueStateChanged += (sender, args) => 
+            freshQueue.QueueStateChanged += (sender, args) => 
                 stateChanges.Add((args.PreviousState, args.CurrentState));
 
             // Act
-            await _queue.StartAsync();
-            await _queue.PauseProcessingAsync();
-            await _queue.ResumeProcessingAsync();
-            await _queue.StopAsync();
+            await freshQueue.StartAsync();
+            await freshQueue.PauseProcessingAsync();
+            await freshQueue.ResumeProcessingAsync();
+            await freshQueue.StopAsync();
 
             // Assert
             stateChanges.Should().Contain(x => x.Previous == QueueState.Stopped && x.New == QueueState.Running);
@@ -403,7 +407,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             
             // Simulate failed processing using reflection
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId, QueuedDocumentStatus.Failed, null, "Processing failed", null, CancellationToken.None 
             });
@@ -442,7 +446,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         {
             // Arrange
             var updateMethod = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             
             for (int i = 0; i < completedCount; i++)
             {
@@ -472,14 +476,13 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Fact]
         public async Task GetStatisticsAsync_ReturnsValidStatistics()
         {
-            // Arrange
-            await _queue.StartAsync();
+            // Arrange - Queue is already started in constructor
             var queueId1 = await _queue.EnqueueDocumentAsync(_sampleRequest);
             var queueId2 = await _queue.EnqueueDocumentAsync(_sampleRequest);
             
             // Use reflection to update status
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId1, QueuedDocumentStatus.Completed, null, null, null, CancellationToken.None 
             });
@@ -517,7 +520,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             
             // Use reflection to update status
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId1, QueuedDocumentStatus.Completed, null, null, null, CancellationToken.None 
             });
@@ -549,7 +552,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Act
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             var result = await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId, status, null, null, null, CancellationToken.None 
             });
@@ -797,13 +800,15 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         {
             // Arrange
             var queue = new DocumentProcessingQueue();
+            queue.StartAsync().Wait(); // Start the queue first
             queue.EnqueueDocumentAsync(_sampleRequest).Wait();
 
             // Act
             queue.Dispose();
 
             // Assert
-            Assert.Throws<ObjectDisposedException>(() => queue.EnqueueDocumentAsync(_sampleRequest).Wait());
+            var ex = Assert.Throws<AggregateException>(() => queue.EnqueueDocumentAsync(_sampleRequest).Wait());
+            ex.InnerException.Should().BeOfType<ObjectDisposedException>();
         }
 
         [Fact]

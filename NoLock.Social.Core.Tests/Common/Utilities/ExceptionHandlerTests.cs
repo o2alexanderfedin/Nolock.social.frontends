@@ -32,7 +32,13 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
 
             // Assert
             result.Should().Be(expectedResult);
-            _loggerMock.Verify(x => x.LogError(It.IsAny<Exception>(), It.IsAny<string>(), It.IsAny<object[]>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
         }
 
         [Fact]
@@ -141,7 +147,13 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
 
             // Assert
             result.Should().Be(expectedResult);
-            _loggerMock.Verify(x => x.LogError(It.IsAny<Exception>(), It.IsAny<string>(), It.IsAny<object[]>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
         }
 
         [Fact]
@@ -216,7 +228,13 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
 
             // Assert
             executed.Should().BeTrue();
-            _loggerMock.Verify(x => x.LogError(It.IsAny<Exception>(), It.IsAny<string>(), It.IsAny<object[]>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
         }
 
         [Fact]
@@ -294,7 +312,13 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
 
             // Assert
             executed.Should().BeTrue();
-            _loggerMock.Verify(x => x.LogError(It.IsAny<Exception>(), It.IsAny<string>(), It.IsAny<object[]>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
         }
 
         [Fact]
@@ -432,7 +456,13 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
             result1.Should().Be(1);
             result2.Should().Be(2);
             result3.Should().Be(3);
-            _loggerMock.Verify(x => x.LogError(It.IsAny<Exception>(), It.IsAny<string>(), It.IsAny<object[]>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Never);
         }
 
         #endregion
