@@ -349,3 +349,5 @@ FodyWeavers.xsd
 
 # macOS
 .DS_Store
+# Test coverage reports
+CoverageReport/
