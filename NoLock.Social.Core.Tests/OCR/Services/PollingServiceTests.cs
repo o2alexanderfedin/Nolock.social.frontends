@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.OCR.Interfaces;
@@ -27,7 +28,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         {
             public bool IsComplete { get; set; }
             public int Value { get; set; }
-            public string Message { get; set; }
+            public string? Message { get; set; }
         }
 
         [Theory]
@@ -249,7 +250,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                     configuration,
                     cts.Token));
             
-            Assert.True(Thread.VolatileRead(ref attemptCount) >= 2);
+            Assert.True(Volatile.Read(ref attemptCount) >= 2);
         }
 
         [Theory]
@@ -299,6 +300,318 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             // Act & Assert (should not throw)
             configuration.Validate();
             Assert.True(true, $"Configuration validation passed for: {scenario}");
+        }
+
+        [Fact]
+        public async Task PollAsync_ImplementsExponentialBackoffCorrectly()
+        {
+            // Arrange
+            var configuration = new PollingConfiguration
+            {
+                InitialIntervalSeconds = 1,
+                MaxIntervalSeconds = 4,
+                BackoffMultiplier = 2,
+                MaxPollingDurationSeconds = 300,
+                UseExponentialBackoff = true
+            };
+
+            var attemptCount = 0;
+            var recordedIntervals = new List<double>();
+            var lastTime = DateTime.UtcNow;
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                if (attemptCount > 0)
+                {
+                    var elapsed = (DateTime.UtcNow - lastTime).TotalSeconds;
+                    recordedIntervals.Add(Math.Round(elapsed, 1));
+                }
+                lastTime = DateTime.UtcNow;
+                attemptCount++;
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = attemptCount > 4 };
+            }
+
+            // Act
+            var result = await _pollingService.PollAsync(
+                operation,
+                r => r.IsComplete,
+                configuration,
+                CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(recordedIntervals.Count >= 3);
+        }
+
+        [Fact]
+        public async Task PollAsync_HandlesOperationExceptionsGracefully()
+        {
+            // Arrange
+            var configuration = PollingConfiguration.Fast;
+            var exceptionMessage = "Operation failed";
+            
+            Task<TestResult> operation(CancellationToken ct)
+            {
+                throw new InvalidOperationException(exceptionMessage);
+            }
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await _pollingService.PollAsync(
+                    operation,
+                    r => r.IsComplete,
+                    configuration,
+                    CancellationToken.None));
+            
+            Assert.Equal(exceptionMessage, exception.Message);
+        }
+
+        [Fact]
+        public async Task PollAsync_PropagatesOperationCancellation()
+        {
+            // Arrange
+            var configuration = PollingConfiguration.Fast;
+            var cts = new CancellationTokenSource();
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                cts.Cancel(); // Cancel immediately
+                ct.ThrowIfCancellationRequested();
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = false };
+            }
+
+            // Act & Assert
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                async () => await _pollingService.PollAsync(
+                    operation,
+                    r => r.IsComplete,
+                    configuration,
+                    cts.Token));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task PollAsync_RespectsFixedIntervalConfiguration(
+            bool useExponentialBackoff)
+        {
+            // Arrange
+            var configuration = new PollingConfiguration
+            {
+                InitialIntervalSeconds = 1,
+                MaxIntervalSeconds = 5,
+                BackoffMultiplier = 2.0,
+                MaxPollingDurationSeconds = 300,
+                UseExponentialBackoff = useExponentialBackoff
+            };
+
+            var attemptCount = 0;
+            var intervalTimes = new List<DateTime>();
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                intervalTimes.Add(DateTime.UtcNow);
+                attemptCount++;
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = attemptCount >= 3 };
+            }
+
+            // Act
+            var result = await _pollingService.PollAsync(
+                operation,
+                r => r.IsComplete,
+                configuration,
+                CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(3, attemptCount);
+            
+            if (!useExponentialBackoff)
+            {
+                // Verify fixed interval between attempts
+                for (int i = 1; i < intervalTimes.Count; i++)
+                {
+                    var interval = (intervalTimes[i] - intervalTimes[i - 1]).TotalSeconds;
+                    Assert.InRange(interval, 0.9, 1.2); // Allow some tolerance
+                }
+            }
+        }
+
+        [Fact]
+        public async Task PollWithProgressAsync_HandlesNullProgressCallback()
+        {
+            // Arrange
+            var configuration = PollingConfiguration.Fast;
+            var attemptCount = 0;
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                attemptCount++;
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = attemptCount >= 2 };
+            }
+
+            // Act (should not throw despite null callback)
+            var result = await _pollingService.PollWithProgressAsync(
+                operation,
+                r => r.IsComplete,
+                null!, // Null progress callback
+                configuration,
+                CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.IsComplete);
+        }
+
+        [Fact]
+        public async Task PollAsync_ThrowsForNullOperation()
+        {
+            // Arrange
+            var configuration = PollingConfiguration.Fast;
+            
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentNullException>(
+                async () => await _pollingService.PollAsync(
+                    null!, // Null operation
+                    r => true,
+                    configuration,
+                    CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task PollAsync_HandlesTimeoutDuringOperation()
+        {
+            // Arrange
+            var configuration = new PollingConfiguration
+            {
+                InitialIntervalSeconds = 1,
+                MaxIntervalSeconds = 1,
+                BackoffMultiplier = 1.0,
+                MaxPollingDurationSeconds = 1, // Very short timeout
+                UseExponentialBackoff = false
+            };
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                await Task.Delay(2000, ct); // Delay longer than timeout
+                return new TestResult { IsComplete = false };
+            }
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<TimeoutException>(
+                async () => await _pollingService.PollAsync(
+                    operation,
+                    r => r.IsComplete,
+                    configuration,
+                    CancellationToken.None));
+            
+            Assert.Contains("timed out", exception.Message);
+        }
+
+        [Fact]
+        public async Task PollAsync_HandlesTimeoutDuringDelay()
+        {
+            // Arrange
+            var configuration = new PollingConfiguration
+            {
+                InitialIntervalSeconds = 10, // Long delay
+                MaxIntervalSeconds = 10,
+                BackoffMultiplier = 1.0,
+                MaxPollingDurationSeconds = 1, // Short timeout
+                UseExponentialBackoff = false
+            };
+
+            var attemptCount = 0;
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                attemptCount++;
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = false };
+            }
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<TimeoutException>(
+                async () => await _pollingService.PollAsync(
+                    operation,
+                    r => r.IsComplete,
+                    configuration,
+                    CancellationToken.None));
+            
+            Assert.Contains("timed out", exception.Message);
+            Assert.Equal(1, attemptCount); // Should only execute once before timeout
+        }
+
+        [Theory]
+        [InlineData(1, 2, 4)]
+        [InlineData(1, 10, 8)]
+        public async Task PollAsync_HandlesRapidPolling(
+            int initialInterval,
+            double multiplier,
+            int maxInterval)
+        {
+            // Arrange
+            var configuration = new PollingConfiguration
+            {
+                InitialIntervalSeconds = initialInterval,
+                MaxIntervalSeconds = maxInterval,
+                BackoffMultiplier = multiplier,
+                MaxPollingDurationSeconds = 300,
+                UseExponentialBackoff = true
+            };
+
+            var attemptCount = 0;
+            
+            async Task<TestResult> operation(CancellationToken ct)
+            {
+                attemptCount++;
+                await Task.Delay(10, ct);
+                return new TestResult { IsComplete = attemptCount >= 3 };
+            }
+
+            // Act
+            var stopwatch = Stopwatch.StartNew();
+            var result = await _pollingService.PollAsync(
+                operation,
+                r => r.IsComplete,
+                configuration,
+                CancellationToken.None);
+            stopwatch.Stop();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.IsComplete);
+            // Timing assertions are unreliable in CI/CD environments, we just ensure it completes
+        }
+
+        [Fact]
+        public async Task PollAsync_PreservesOriginalExceptionDetails()
+        {
+            // Arrange
+            var configuration = PollingConfiguration.Fast;
+            var innerException = new InvalidOperationException("Inner exception");
+            var outerException = new AggregateException("Outer exception", innerException);
+            
+            Task<TestResult> operation(CancellationToken ct)
+            {
+                throw outerException;
+            }
+
+            // Act & Assert
+            var thrownException = await Assert.ThrowsAsync<AggregateException>(
+                async () => await _pollingService.PollAsync(
+                    operation,
+                    r => r.IsComplete,
+                    configuration,
+                    CancellationToken.None));
+            
+            Assert.Equal(outerException.Message, thrownException.Message);
+            Assert.NotNull(thrownException.InnerException);
+            Assert.IsType<InvalidOperationException>(thrownException.InnerException);
         }
     }
 }

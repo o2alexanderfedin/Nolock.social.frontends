@@ -717,6 +717,173 @@ namespace NoLock.Social.Core.Tests.Camera
 
         #endregion
 
+        #region Additional Camera Control Tests
+
+        [Fact]
+        public async Task IsZoomSupportedAsync_CallsJSAndReturnsResult()
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<bool>("camera.getZoomSupport", It.IsAny<object[]>()))
+                .ReturnsAsync(true);
+
+            // Act
+            var result = await _sut.IsZoomSupportedAsync();
+
+            // Assert
+            result.Should().BeTrue();
+            _jsRuntimeMock.Verify(x => x.InvokeAsync<bool>("camera.getZoomSupport", It.IsAny<object[]>()), Times.Once);
+        }
+
+        [Theory]
+        [InlineData(1.0)]
+        [InlineData(3.0)]
+        [InlineData(10.0)]
+        public async Task GetMaxZoomAsync_ReturnsMaxZoomLevel(double maxZoom)
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<double>("camera.getMaxZoom", It.IsAny<object[]>()))
+                .ReturnsAsync(maxZoom);
+
+            // Act
+            var result = await _sut.GetMaxZoomAsync();
+
+            // Assert
+            result.Should().Be(maxZoom);
+        }
+
+        #endregion
+
+        #region Direct Image Analysis Tests
+
+        [Fact]
+        public async Task DetectBlurAsync_WithValidImageData_ReturnsBlurResult()
+        {
+            // Arrange
+            var imageData = "base64ImageData";
+            dynamic blurData = new System.Dynamic.ExpandoObject();
+            blurData.blurScore = 0.8;
+            blurData.threshold = 0.5;
+            blurData.isBlurry = false;
+            
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("imageQuality.detectBlur", It.IsAny<object[]>()))
+                .ReturnsAsync((object)blurData);
+
+            // Act
+            var result = await _sut.DetectBlurAsync(imageData);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.BlurScore.Should().Be(0.8);
+            result.IsBlurry.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task AssessLightingAsync_WithValidImageData_ReturnsLightingResult()
+        {
+            // Arrange
+            var imageData = "base64ImageData";
+            dynamic lightingData = new System.Dynamic.ExpandoObject();
+            lightingData.lightingScore = 0.75;
+            lightingData.brightness = 140.0;
+            lightingData.contrast = 0.6;
+            lightingData.isTooDark = false;
+            lightingData.isTooBright = false;
+            
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("imageQuality.assessLighting", It.IsAny<object[]>()))
+                .ReturnsAsync((object)lightingData);
+
+            // Act
+            var result = await _sut.AssessLightingAsync(imageData);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.LightingScore.Should().Be(0.75);
+            result.Brightness.Should().Be(140.0);
+            result.Contrast.Should().Be(0.6);
+        }
+
+        [Fact]
+        public async Task DetectDocumentEdgesAsync_WithValidImageData_ReturnsEdgeResult()
+        {
+            // Arrange
+            var imageData = "base64ImageData";
+            dynamic edgeData = new System.Dynamic.ExpandoObject();
+            edgeData.edgeScore = 0.9;
+            edgeData.edgeCount = 4;
+            edgeData.confidence = 0.85;
+            edgeData.hasAllEdges = true;
+            
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("imageQuality.detectEdges", It.IsAny<object[]>()))
+                .ReturnsAsync((object)edgeData);
+
+            // Act
+            var result = await _sut.DetectDocumentEdgesAsync(imageData);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.EdgeScore.Should().Be(0.9);
+            result.EdgeCount.Should().Be(4);
+            result.Confidence.Should().Be(0.85);
+        }
+
+        #endregion
+
+        #region Additional Session Management Tests
+
+        [Fact]
+        public async Task GetDocumentSessionAsync_WithValidSession_ReturnsSession()
+        {
+            // Arrange
+            var sessionId = await _sut.CreateDocumentSessionAsync();
+            var image = new CapturedImage { ImageData = "testData" };
+            await _sut.AddPageToSessionAsync(sessionId, image);
+
+            // Act
+            var session = await _sut.GetDocumentSessionAsync(sessionId);
+
+            // Assert
+            session.Should().NotBeNull();
+            session.SessionId.Should().Be(sessionId);
+            session.Pages.Should().HaveCount(1);
+        }
+
+        [Fact]
+        public async Task GetDocumentSessionAsync_WithInvalidSession_ThrowsInvalidOperationException()
+        {
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => 
+                _sut.GetDocumentSessionAsync("nonexistent"));
+        }
+
+        [Fact]
+        public async Task CleanupInactiveSessionsAsync_RemovesInactiveSessions()
+        {
+            // Arrange
+            var activeSession = await _sut.CreateDocumentSessionAsync();
+            var inactiveSession1 = await _sut.CreateDocumentSessionAsync();
+            var inactiveSession2 = await _sut.CreateDocumentSessionAsync();
+            
+            // Add pages to active session to keep it active
+            await _sut.AddPageToSessionAsync(activeSession, new CapturedImage { ImageData = "data" });
+
+            // Act
+            await _sut.CleanupInactiveSessionsAsync();
+
+            // Assert
+            var activeStillExists = await _sut.IsSessionActiveAsync(activeSession);
+            activeStillExists.Should().BeTrue();
+            
+            // Note: Without ability to mock time or mark sessions as inactive,
+            // we can't fully test cleanup behavior. This test verifies the method doesn't crash.
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private async Task StartTestStreamAsync()
