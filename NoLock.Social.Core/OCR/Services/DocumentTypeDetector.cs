@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.OCR.Interfaces;
 using NoLock.Social.Core.OCR.Models;
+using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -31,45 +32,46 @@ namespace NoLock.Social.Core.OCR.Services
             MinimumConfidenceThreshold = minimumConfidenceThreshold;
             _cache = new Dictionary<string, DocumentTypeDetectionResult>();
 
-            // Initialize document keywords
+            // Initialize document keywords - using enum names as keys
             _documentKeywords = new Dictionary<string, List<string>>
             {
-                ["Receipt"] = new List<string>
+                [CameraDocumentType.Receipt.ToString()] = new List<string>
                 {
-                    "total", "subtotal", "tax", "receipt", "invoice",
-                    "amount due", "payment", "thank you", "items", "qty",
-                    "price", "purchase", "sale", "discount", "cashier"
+                    "total", "subtotal", "tax", "receipt",
+                    "payment", "thank you", "items", "qty",
+                    "price", "purchase", "sale", "discount", "cashier",
+                    "transaction", "change"
                 },
-                ["Check"] = new List<string>
+                [CameraDocumentType.Check.ToString()] = new List<string>
                 {
-                    "pay to", "dollars", "memo", "routing number", "account number",
-                    "check number", "date", "signature", "bank", "void after",
+                    "pay to", "pay to the order", "dollars", "memo", "routing number", "account number",
+                    "check number", "bank", "void after",
                     "endorse", "deposit", "negotiable"
                 },
-                ["W4"] = new List<string>
+                [CameraDocumentType.W4.ToString()] = new List<string>
                 {
-                    "w-4", "employee's withholding", "withholding certificate",
-                    "social security", "marital status", "dependents", "allowances",
+                    "w-4", "w4", "form w-4", "employee's withholding", "withholding certificate",
+                    "withholding", "social security", "marital status", "dependents", "allowances",
                     "single", "married", "head of household", "exemptions",
                     "federal income tax", "employer", "employee"
                 },
-                ["W2"] = new List<string>
+                [CameraDocumentType.W2.ToString()] = new List<string>
                 {
-                    "w-2", "wage and tax statement", "wages tips", "federal income tax",
-                    "social security wages", "medicare wages", "employer identification",
-                    "ein", "employee's ssn", "state wages", "local wages"
+                    "w-2", "w2", "form w-2", "wage and tax statement", "wages tips", 
+                    "federal income tax", "social security wages", "medicare wages", 
+                    "employer identification", "ein", "employee's ssn", "state wages", "local wages"
                 },
-                ["Invoice"] = new List<string>
+                [CameraDocumentType.Form1099.ToString()] = new List<string>
+                {
+                    "1099", "form 1099", "1099-misc", "1099-int", "1099-div",
+                    "nonemployee compensation", "payer", "recipient", "federal income tax withheld",
+                    "rents", "royalties", "other income", "self-employment"
+                },
+                [CameraDocumentType.Invoice.ToString()] = new List<string>
                 {
                     "invoice", "bill to", "ship to", "invoice number", "due date",
                     "terms", "net 30", "purchase order", "quantity", "unit price",
-                    "line total", "balance due", "remit to", "amount due"
-                },
-                ["PayStub"] = new List<string>
-                {
-                    "pay stub", "earnings statement", "gross pay", "net pay",
-                    "deductions", "ytd", "pay period", "hourly rate", "overtime",
-                    "federal tax", "state tax", "fica", "401k"
+                    "line total", "balance due", "remit to", "amount due", "payment terms"
                 }
             };
 
@@ -78,11 +80,20 @@ namespace NoLock.Social.Core.OCR.Services
             {
                 // Document type specific identifiers (highest weight)
                 ["w-4"] = 3.0,
+                ["w4"] = 3.0,
+                ["form w-4"] = 3.0,
                 ["w-2"] = 3.0,
+                ["w2"] = 3.0,
+                ["form w-2"] = 3.0,
+                ["form 1099"] = 3.0,
+                ["1099"] = 3.0,
                 ["employee's withholding"] = 2.5,
                 ["wage and tax statement"] = 2.5,
+                ["withholding"] = 1.8,
                 
                 // Strong indicators
+                ["receipt"] = 2.2,
+                ["invoice"] = 2.2,
                 ["routing number"] = 2.0,
                 ["account number"] = 2.0,
                 ["pay to"] = 2.0,
@@ -111,7 +122,18 @@ namespace NoLock.Social.Core.OCR.Services
             if (string.IsNullOrWhiteSpace(rawOcrData))
             {
                 _logger.LogWarning("Empty OCR data provided for document type detection");
-                return DocumentTypeDetectionResult.Unknown();
+                return new DocumentTypeDetectionResult
+                {
+                    DocumentType = CameraDocumentType.Other.ToString(),
+                    ConfidenceScore = 0.0,
+                    MatchedKeywords = new List<string>(),
+                    KeywordMatchCount = 0,
+                    DetectionMethod = "None",
+                    IsConfident = false,
+                    RequiresManualConfirmation = true,
+                    ManualConfirmationReason = "No OCR data provided",
+                    DetectedAt = DateTime.UtcNow
+                };
             }
 
             // Check cache
@@ -126,7 +148,18 @@ namespace NoLock.Social.Core.OCR.Services
             }
 
             var results = await DetectMultipleDocumentTypesAsync(rawOcrData, 1, cancellation);
-            var result = results.FirstOrDefault() ?? DocumentTypeDetectionResult.Unknown();
+            var result = results.FirstOrDefault() ?? new DocumentTypeDetectionResult
+            {
+                DocumentType = CameraDocumentType.Other.ToString(),
+                ConfidenceScore = 0.0,
+                MatchedKeywords = new List<string>(),
+                KeywordMatchCount = 0,
+                DetectionMethod = "None",
+                IsConfident = false,
+                RequiresManualConfirmation = true,
+                ManualConfirmationReason = "Unable to detect document type",
+                DetectedAt = DateTime.UtcNow
+            };
 
             // Cache the result
             lock (_cacheLock)
@@ -146,8 +179,23 @@ namespace NoLock.Social.Core.OCR.Services
             if (string.IsNullOrWhiteSpace(rawOcrData))
             {
                 _logger.LogWarning("Empty OCR data provided for document type detection");
-                return new[] { DocumentTypeDetectionResult.Unknown() };
+                return new[] { new DocumentTypeDetectionResult
+                {
+                    DocumentType = CameraDocumentType.Other.ToString(),
+                    ConfidenceScore = 0.0,
+                    MatchedKeywords = new List<string>(),
+                    KeywordMatchCount = 0,
+                    DetectionMethod = "None",
+                    IsConfident = false,
+                    RequiresManualConfirmation = true,
+                    ManualConfirmationReason = "No OCR data provided",
+                    DetectedAt = DateTime.UtcNow
+                } };
             }
+
+            // Ensure maxResults is at least 1
+            if (maxResults <= 0)
+                maxResults = 1;
 
             return await Task.Run(() =>
             {
@@ -166,6 +214,11 @@ namespace NoLock.Social.Core.OCR.Services
                     if (detectionResult.ConfidenceScore > 0)
                     {
                         results.Add(detectionResult);
+                        _logger.LogDebug($"Added result: {detectionResult.DocumentType} with confidence {detectionResult.ConfidenceScore}");
+                    }
+                    else
+                    {
+                        _logger.LogDebug($"Skipped result: {detectionResult.DocumentType} with confidence {detectionResult.ConfidenceScore}");
                     }
                 }
 
@@ -198,9 +251,20 @@ namespace NoLock.Social.Core.OCR.Services
                 var finalResults = results.Take(maxResults).ToArray();
 
                 // If no results or very low confidence, return unknown
-                if (finalResults.Length == 0 || finalResults[0].ConfidenceScore < 0.2)
+                if (finalResults.Length == 0 || finalResults[0].ConfidenceScore < 0.1)
                 {
-                    return new[] { DocumentTypeDetectionResult.Unknown() };
+                    return new[] { new DocumentTypeDetectionResult
+                    {
+                        DocumentType = CameraDocumentType.Other.ToString(),
+                        ConfidenceScore = 0.0,
+                        MatchedKeywords = new List<string>(),
+                        KeywordMatchCount = 0,
+                        DetectionMethod = "None",
+                        IsConfident = false,
+                        RequiresManualConfirmation = true,
+                        ManualConfirmationReason = "Unable to detect document type with sufficient confidence",
+                        DetectedAt = DateTime.UtcNow
+                    } };
                 }
 
                 _logger.LogInformation("Detected {Count} document type(s) with top match: {Type} ({Confidence:P})",
@@ -232,7 +296,11 @@ namespace NoLock.Social.Core.OCR.Services
         {
             var matchedKeywords = new List<string>();
             double totalWeight = 0;
-            double maxPossibleWeight = 0;
+            double maxSingleWeight = 0;
+            int strongMatches = 0;
+            int totalOccurrences = 0;
+            
+            _logger.LogDebug($"Analyzing document type: {documentType} with text: {lowerText.Substring(0, Math.Min(50, lowerText.Length))}...");
 
             foreach (var keyword in keywords)
             {
@@ -240,24 +308,107 @@ namespace NoLock.Social.Core.OCR.Services
                     ? _keywordWeights[keyword] 
                     : 1.0;
 
-                maxPossibleWeight += weight;
+                // Track the maximum single keyword weight for this document type
+                maxSingleWeight = Math.Max(maxSingleWeight, weight);
+                
+                _logger.LogDebug($"Checking keyword '{keyword}' against text...");
 
-                if (lowerText.Contains(keyword))
+                if (ContainsKeyword(lowerText, keyword))
                 {
+                    _logger.LogDebug($"Matched keyword '{keyword}' for {documentType}");
                     matchedKeywords.Add(keyword);
-                    totalWeight += weight;
+                    
+                    // Count occurrences for repeated keywords
+                    int occurrences = CountOccurrences(lowerText, keyword);
+                    totalOccurrences += occurrences;
+                    
+                    // Weight increases with occurrences but with diminishing returns
+                    double occurrenceMultiplier = 1.0 + Math.Log10(Math.Max(1, occurrences)) * 0.3;
+                    totalWeight += weight * occurrenceMultiplier;
+                    
+                    // Count strong matches (weight >= 2.0)
+                    if (weight >= 2.0)
+                    {
+                        strongMatches++;
+                    }
                 }
             }
 
-            // Calculate confidence score based on weighted matches
-            var confidenceScore = maxPossibleWeight > 0 
-                ? totalWeight / maxPossibleWeight 
-                : 0;
+            // Calculate confidence score with a more balanced approach:
+            // - Base score from total weight (normalized by a reasonable expectation, not all keywords)
+            // - Consider that matching 3-4 keywords with good weights should give high confidence
+            // - Strong document identifiers (weight >= 3) should give immediate high confidence
+            double confidenceScore = 0;
+            
+            // Check if any matched keyword has very high weight (>= 3.0)
+            bool hasVeryStrongMatch = false;
+            double maxMatchedWeight = 0;
+            foreach (var keyword in matchedKeywords)
+            {
+                var weight = _keywordWeights.ContainsKey(keyword) ? _keywordWeights[keyword] : 1.0;
+                maxMatchedWeight = Math.Max(maxMatchedWeight, weight);
+                if (weight >= 3.0)
+                {
+                    hasVeryStrongMatch = true;
+                    break;
+                }
+            }
+
+            if (matchedKeywords.Count == 0)
+            {
+                confidenceScore = 0;
+            }
+            else if (hasVeryStrongMatch)
+            {
+                // Has very strong identifier(s) like "w-4", "w-2", "form 1099"
+                confidenceScore = Math.Min(1.0, 0.85 + (matchedKeywords.Count - 1) * 0.05);
+            }
+            else if (strongMatches >= 2)
+            {
+                // Multiple strong matches (weight >= 2.0)
+                confidenceScore = Math.Min(1.0, 0.7 + (strongMatches * 0.1));
+            }
+            else if (strongMatches >= 1)
+            {
+                // At least one strong match
+                confidenceScore = Math.Min(1.0, 0.5 + (totalWeight * 0.1) + (matchedKeywords.Count * 0.05));
+            }
+            else if (matchedKeywords.Count >= 3)
+            {
+                // Multiple regular matches
+                confidenceScore = Math.Min(1.0, 0.4 + (totalWeight * 0.12));
+            }
+            else if (matchedKeywords.Count >= 2)
+            {
+                // Two matches
+                confidenceScore = Math.Min(0.7, 0.3 + (totalWeight * 0.15));
+            }
+            else if (matchedKeywords.Count == 1)
+            {
+                // Single match, scale based on weight and repetitions
+                // Give higher confidence for strong single matches like "invoice"
+                if (maxMatchedWeight >= 2.0)
+                {
+                    // If repeated multiple times (like "invoice invoice invoice"), boost confidence
+                    if (totalOccurrences >= 3)
+                    {
+                        confidenceScore = Math.Min(0.8, 0.5 + (totalWeight * 0.12));
+                    }
+                    else
+                    {
+                        confidenceScore = Math.Min(0.7, 0.4 + (totalWeight * 0.15));
+                    }
+                }
+                else
+                {
+                    confidenceScore = Math.Min(0.6, 0.2 + (totalWeight * 0.2));
+                }
+            }
 
             // Apply bonus for high match count
             if (matchedKeywords.Count >= 5)
             {
-                confidenceScore = Math.Min(1.0, confidenceScore * 1.1);
+                confidenceScore = Math.Min(1.0, confidenceScore * 1.15);
             }
 
             var result = new DocumentTypeDetectionResult
@@ -271,6 +422,8 @@ namespace NoLock.Social.Core.OCR.Services
                 RequiresManualConfirmation = confidenceScore < MinimumConfidenceThreshold,
                 DetectedAt = DateTime.UtcNow
             };
+            
+            _logger.LogDebug($"Result for {documentType}: Confidence={confidenceScore}, Matches={matchedKeywords.Count}");
 
             if (result.RequiresManualConfirmation)
             {
@@ -281,15 +434,41 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <summary>
+        /// Counts the number of occurrences of a keyword in the text.
+        /// </summary>
+        private int CountOccurrences(string text, string keyword)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword))
+                return 0;
+                
+            int count = 0;
+            int index = 0;
+            
+            while ((index = text.IndexOf(keyword, index, StringComparison.OrdinalIgnoreCase)) != -1)
+            {
+                count++;
+                index += keyword.Length;
+            }
+            
+            return count;
+        }
+        
+        /// <summary>
+        /// Checks if the text contains the keyword.
+        /// </summary>
+        private bool ContainsKeyword(string text, string keyword)
+        {
+            // Both text and keywords are already lowercase, so we can do a simple contains check
+            return text.Contains(keyword);
+        }
+        
+        /// <summary>
         /// Generates a cache key for the given OCR text.
         /// </summary>
         private string GetCacheKey(string rawOcrData)
         {
-            // Use first 100 chars and length as simple cache key
-            var prefix = rawOcrData.Length > 100 
-                ? rawOcrData.Substring(0, 100) 
-                : rawOcrData;
-            return $"{prefix.GetHashCode()}_{rawOcrData.Length}";
+            // Use full string hash for better accuracy in cache keys
+            return $"{rawOcrData.GetHashCode()}_{rawOcrData.Length}";
         }
     }
 }

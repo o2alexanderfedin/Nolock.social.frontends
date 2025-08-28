@@ -1,3 +1,5 @@
+using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
+
 namespace NoLock.Social.Core.OCR.Models
 {
     /// <summary>
@@ -64,7 +66,7 @@ namespace NoLock.Social.Core.OCR.Models
         {
             return new DocumentTypeDetectionResult
             {
-                DocumentType = "Other",
+                DocumentType = CameraDocumentType.Other.ToString(),
                 ConfidenceScore = 0.0,
                 IsConfident = false,
                 RequiresManualConfirmation = true,
@@ -82,7 +84,7 @@ namespace NoLock.Social.Core.OCR.Models
         {
             return new DocumentTypeDetectionResult
             {
-                DocumentType = "Ambiguous",
+                DocumentType = CameraDocumentType.Other.ToString(), // Using Other for ambiguous cases
                 ConfidenceScore = 0.0,
                 IsConfident = false,
                 RequiresManualConfirmation = true,

@@ -1,0 +1,190 @@
+Summary
+  Generated on: 8/28/2025 - 1:58:37 AM
+  Coverage date: 8/28/2025 - 1:58:15 AM
+  Parser: Cobertura
+  Assemblies: 2
+  Classes: 166
+  Files: 92
+  Line coverage: 62.9%
+  Covered lines: 5363
+  Uncovered lines: 3150
+  Coverable lines: 8513
+  Total lines: 18537
+  Branch coverage: 57.1% (1357 of 2373)
+  Covered branches: 1357
+  Total branches: 2373
+  Method coverage: 53.5% (856 of 1598)
+  Full method coverage: 46% (736 of 1598)
+  Covered methods: 856
+  Fully covered methods: 736
+  Total methods: 1598
+
+NoLock.Social.Components                                                         0%
+  NoLock.Social.Components.ExampleJsInterop                                      0%
+
+NoLock.Social.Core                                                            63.1%
+  NoLock.Social.Core.Accessibility.Interfaces.AnnouncementEventArgs            100%
+  NoLock.Social.Core.Accessibility.Interfaces.SpeechErrorEventArgs               0%
+  NoLock.Social.Core.Accessibility.Interfaces.VoiceCommandEventArgs              0%
+  NoLock.Social.Core.Accessibility.Services.AnnouncementService                 92%
+  NoLock.Social.Core.Accessibility.Services.CameraVoiceCommandIntegration        0%
+  NoLock.Social.Core.Accessibility.Services.FocusManagementService             6.3%
+  NoLock.Social.Core.Accessibility.Services.VoiceCommandService                3.3%
+  NoLock.Social.Core.Camera.Models.BlurDetectionResult                         100%
+  NoLock.Social.Core.Camera.Models.CameraControlSettings                        80%
+  NoLock.Social.Core.Camera.Models.CameraOptions                                 0%
+  NoLock.Social.Core.Camera.Models.CameraStream                               71.4%
+  NoLock.Social.Core.Camera.Models.CapturedImage                              87.5%
+  NoLock.Social.Core.Camera.Models.DocumentSession                            61.1%
+  NoLock.Social.Core.Camera.Models.EdgeDetectionResult                         100%
+  NoLock.Social.Core.Camera.Models.ImageQualityResult                           75%
+  NoLock.Social.Core.Camera.Models.LightingQualityResult                       100%
+  NoLock.Social.Core.Camera.Services.CameraService                            86.7%
+  NoLock.Social.Core.Common.Extensions.ResultExtensions                         60%
+  NoLock.Social.Core.Common.Guards.Guard                                      69.4%
+  NoLock.Social.Core.Common.Results.Result                                    62.5%
+  NoLock.Social.Core.Common.Results.Result<T>                                 52.6%
+  NoLock.Social.Core.Common.Services.JSRuntimeWrapper                          100%
+  NoLock.Social.Core.Common.Utilities.ExceptionHandler                           0%
+  NoLock.Social.Core.Cryptography.Extensions.DisposableExtensions                0%
+  NoLock.Social.Core.Cryptography.Extensions.ReactiveExtensions                  0%
+  NoLock.Social.Core.Cryptography.Interfaces.Argon2idParameters                100%
+  NoLock.Social.Core.Cryptography.Interfaces.BrowserCompatibilityInfo          100%
+  NoLock.Social.Core.Cryptography.Interfaces.CryptoException                   100%
+  NoLock.Social.Core.Cryptography.Interfaces.ECDSAKeyPair                      100%
+  NoLock.Social.Core.Cryptography.Interfaces.Ed25519KeyPair                    100%
+  NoLock.Social.Core.Cryptography.Interfaces.ErrorContext                      100%
+  NoLock.Social.Core.Cryptography.Interfaces.ErrorInfo                         100%
+  NoLock.Social.Core.Cryptography.Interfaces.IdentitySession                   100%
+  NoLock.Social.Core.Cryptography.Interfaces.KeyDerivationProgressEventArgs    100%
+  NoLock.Social.Core.Cryptography.Interfaces.SessionStateChangedEventArgs      100%
+  NoLock.Social.Core.Cryptography.Interfaces.SignedTarget                      100%
+  NoLock.Social.Core.Cryptography.Interfaces.SignedTargetBase64                100%
+  NoLock.Social.Core.Cryptography.Services.BrowserCompatibilityService          50%
+  NoLock.Social.Core.Cryptography.Services.CryptoErrorHandlingService           76%
+  NoLock.Social.Core.Cryptography.Services.KeyDerivationService               83.3%
+  NoLock.Social.Core.Cryptography.Services.ReactiveSessionStateService        77.8%
+  NoLock.Social.Core.Cryptography.Services.SecureMemoryManager                95.3%
+  NoLock.Social.Core.Cryptography.Services.SessionStateService                81.6%
+  NoLock.Social.Core.Cryptography.Services.SigningService                     85.7%
+  NoLock.Social.Core.Cryptography.Services.VerificationService                82.4%
+  NoLock.Social.Core.Cryptography.Services.WebCryptoService                    5.2%
+  NoLock.Social.Core.Extensions.OCRServiceExtensions                             0%
+  NoLock.Social.Core.Extensions.ServiceCollectionExtensions                    100%
+  NoLock.Social.Core.Hashing.SHA256HashAlgorithm                               100%
+  NoLock.Social.Core.Hashing.SHA256HashService                                 100%
+  NoLock.Social.Core.Identity.Configuration.LoginConfiguration                 100%
+  NoLock.Social.Core.Identity.Configuration.SessionPersistenceConfiguration    100%
+  NoLock.Social.Core.Identity.Interfaces.EncryptedSessionData                  100%
+  NoLock.Social.Core.Identity.Interfaces.PersistedSessionData                 90.9%
+  NoLock.Social.Core.Identity.Interfaces.SessionMetadata                       100%
+  NoLock.Social.Core.Identity.Models.LoginResult                               100%
+  NoLock.Social.Core.Identity.Models.LoginState                                100%
+  NoLock.Social.Core.Identity.Models.LoginStateChange                          100%
+  NoLock.Social.Core.Identity.Models.UserActivitySummary                         0%
+  NoLock.Social.Core.Identity.Models.UserTrackingInfo                          100%
+  NoLock.Social.Core.Identity.Services.LoginAdapterService                    91.2%
+  NoLock.Social.Core.Identity.Services.RememberMeService                      96.8%
+  NoLock.Social.Core.Identity.Services.SecureSessionMetadata                   100%
+  NoLock.Social.Core.Identity.Services.SecureSessionPersistenceService        88.2%
+  NoLock.Social.Core.Identity.Services.SessionPersistenceService                 0%
+  NoLock.Social.Core.Identity.Services.UserTrackingService                     6.3%
+  NoLock.Social.Core.Identity.Storage.RememberedUserData                       100%
+  NoLock.Social.Core.OCR.Configuration.OCRServiceConfiguration                 100%
+  NoLock.Social.Core.OCR.Configuration.OCRServiceOptions                      98.9%
+  NoLock.Social.Core.OCR.Generated.AcceptedResult                                0%
+  NoLock.Social.Core.OCR.Generated.Assembly                                      0%
+  NoLock.Social.Core.OCR.Generated.Check                                       100%
+  NoLock.Social.Core.OCR.Generated.CheckMetadata                                 0%
+  NoLock.Social.Core.OCR.Generated.CheckModelOcrResponse                       100%
+  NoLock.Social.Core.OCR.Generated.ConstructorInfo                               0%
+  NoLock.Social.Core.OCR.Generated.CustomAttributeData                           0%
+  NoLock.Social.Core.OCR.Generated.CustomAttributeNamedArgument                  0%
+  NoLock.Social.Core.OCR.Generated.CustomAttributeTypedArgument                  0%
+  NoLock.Social.Core.OCR.Generated.EventInfo                                     0%
+  NoLock.Social.Core.OCR.Generated.FieldInfo                                     0%
+  NoLock.Social.Core.OCR.Generated.FileParameter                                60%
+  NoLock.Social.Core.OCR.Generated.HealthCheckResponse                           0%
+  NoLock.Social.Core.OCR.Generated.MemberInfo                                    0%
+  NoLock.Social.Core.OCR.Generated.MerchantInfo                                100%
+  NoLock.Social.Core.OCR.Generated.MethodBase                                    0%
+  NoLock.Social.Core.OCR.Generated.MethodInfo                                    0%
+  NoLock.Social.Core.OCR.Generated.MistralOCRClient                              0%
+  NoLock.Social.Core.OCR.Generated.MistralOCRException                         100%
+  NoLock.Social.Core.OCR.Generated.MistralOCRException<T>                        0%
+  NoLock.Social.Core.OCR.Generated.Module                                        0%
+  NoLock.Social.Core.OCR.Generated.ModuleHandle                                  0%
+  NoLock.Social.Core.OCR.Generated.ParameterInfo                                 0%
+  NoLock.Social.Core.OCR.Generated.ProblemDetails                                0%
+  NoLock.Social.Core.OCR.Generated.PropertyInfo                                  0%
+  NoLock.Social.Core.OCR.Generated.Receipt                                     100%
+  NoLock.Social.Core.OCR.Generated.ReceiptLineItem                               0%
+  NoLock.Social.Core.OCR.Generated.ReceiptMetadata                               0%
+  NoLock.Social.Core.OCR.Generated.ReceiptModelOcrResponse                      75%
+  NoLock.Social.Core.OCR.Generated.ReceiptPaymentMethod                          0%
+  NoLock.Social.Core.OCR.Generated.ReceiptTaxItem                                0%
+  NoLock.Social.Core.OCR.Generated.ReceiptTotals                               100%
+  NoLock.Social.Core.OCR.Generated.RuntimeFieldHandle                            0%
+  NoLock.Social.Core.OCR.Generated.RuntimeMethodHandle                           0%
+  NoLock.Social.Core.OCR.Generated.RuntimeTypeHandle                             0%
+  NoLock.Social.Core.OCR.Generated.StructLayoutAttribute                         0%
+  NoLock.Social.Core.OCR.Generated.Type                                          0%
+  NoLock.Social.Core.OCR.Generated.TypeInfo                                      0%
+  NoLock.Social.Core.OCR.Interfaces.PollingConfiguration                      52.3%
+  NoLock.Social.Core.OCR.Interfaces.QueuedDocumentEventArgs                    100%
+  NoLock.Social.Core.OCR.Interfaces.QueueStateChangedEventArgs                88.8%
+  NoLock.Social.Core.OCR.Interfaces.QueueStatistics                           63.6%
+  NoLock.Social.Core.OCR.Models.BoundingBox                                      0%
+  NoLock.Social.Core.OCR.Models.CachedOCRResult                                  0%
+  NoLock.Social.Core.OCR.Models.CacheMetadata                                    0%
+  NoLock.Social.Core.OCR.Models.CheckData                                     25.4%
+  NoLock.Social.Core.OCR.Models.ConfidenceHelper                              73.6%
+  NoLock.Social.Core.OCR.Models.CorrectedProcessedDocument                    32.8%
+  NoLock.Social.Core.OCR.Models.DocumentTypeDetectionResult                   45.8%
+  NoLock.Social.Core.OCR.Models.ExtractedField                                   0%
+  NoLock.Social.Core.OCR.Models.FieldCorrection                               57.1%
+  NoLock.Social.Core.OCR.Models.FieldValidationResult                         63.6%
+  NoLock.Social.Core.OCR.Models.FieldValidationRules                           100%
+  NoLock.Social.Core.OCR.Models.OCRResultData                                 42.8%
+  NoLock.Social.Core.OCR.Models.OCRStatusResponse                             29.4%
+  NoLock.Social.Core.OCR.Models.OCRSubmissionRequest                           100%
+  NoLock.Social.Core.OCR.Models.ProcessedCheck                                16.1%
+  NoLock.Social.Core.OCR.Models.ProcessedDocument                               40%
+  NoLock.Social.Core.OCR.Models.ProcessedReceipt                              15.6%
+  NoLock.Social.Core.OCR.Models.ProcessingMetrics                               20%
+  NoLock.Social.Core.OCR.Models.QueuedDocument                                64.3%
+  NoLock.Social.Core.OCR.Models.ReceiptData                                   93.3%
+  NoLock.Social.Core.OCR.Models.ReceiptItem                                      0%
+  NoLock.Social.Core.OCR.Models.VisibilityChangedEventArgs                    84.6%
+  NoLock.Social.Core.OCR.Models.WakeLockResult                                 100%
+  NoLock.Social.Core.OCR.Models.WakeLockStatusChangedEventArgs                86.9%
+  NoLock.Social.Core.OCR.Services.CheckOCRService                              100%
+  NoLock.Social.Core.OCR.Services.ConfidenceScoreService                      81.6%
+  NoLock.Social.Core.OCR.Services.ConfidenceStatistics                         100%
+  NoLock.Social.Core.OCR.Services.ContentAddressableStorageEntryService<T>       0%
+  NoLock.Social.Core.OCR.Services.CorrectionService                             50%
+  NoLock.Social.Core.OCR.Services.DocumentProcessingQueue                     97.5%
+  NoLock.Social.Core.OCR.Services.DocumentTypeDetector                        93.2%
+  NoLock.Social.Core.OCR.Services.FieldValidationService                      95.7%
+  NoLock.Social.Core.OCR.Services.OCRServiceFlow<T>                              0%
+  NoLock.Social.Core.OCR.Services.OCRServiceRouter                               0%
+  NoLock.Social.Core.OCR.Services.PollingService<T>                            100%
+  NoLock.Social.Core.OCR.Services.ReceiptOCRService                            100%
+  NoLock.Social.Core.OCR.Services.ValidationResult                             100%
+  NoLock.Social.Core.OCR.Services.WakeLockService                             96.6%
+  NoLock.Social.Core.Performance.BrowserPerformanceMetrics                       0%
+  NoLock.Social.Core.Performance.PerformanceAlert                             83.3%
+  NoLock.Social.Core.Performance.PerformanceMetrics                            100%
+  NoLock.Social.Core.Performance.PerformanceMonitoringService                 67.2%
+  NoLock.Social.Core.Performance.PerformanceStatistics                         100%
+  NoLock.Social.Core.Performance.PerformanceThresholds                        47.3%
+  NoLock.Social.Core.Performance.PerformanceTimer                              100%
+  NoLock.Social.Core.Security.ContentSecurityPolicyConfig                      100%
+  NoLock.Social.Core.Security.CookieSecurityConfig                             100%
+  NoLock.Social.Core.Security.HstsConfig                                       100%
+  NoLock.Social.Core.Security.SecurityConfiguration                            100%
+  NoLock.Social.Core.Security.SecurityService                                  100%
+  NoLock.Social.Core.Security.SubresourceIntegrityConfig                       100%
+  NoLock.Social.Core.Storage.ContentMetadata                                     0%
+  NoLock.Social.Core.Storage.ContentReference                                    0%
+  NoLock.Social.Core.Storage.JsonSerializer<T>                                42.2%

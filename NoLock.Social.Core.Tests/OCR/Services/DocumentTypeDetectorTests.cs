@@ -279,7 +279,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         [Theory]
         [InlineData("W-2 Wage and Tax Statement\nFederal Income Tax: $5000\nSocial Security Wages: $50000", CameraDocumentType.W2, true, 5, "W2 with multiple strong indicators")]
-        [InlineData("Form 1099\nPayer: Company\nRecipient: Individual\nIncome: $10000", CameraDocumentType.Form1099, false, 1, "Form1099 with basic keywords")]
+        [InlineData("Form 1099\nPayer: Company\nRecipient: Individual\nIncome: $10000", CameraDocumentType.Form1099, true, 1, "Form1099 with basic keywords")]
         [InlineData("Bill To: Customer\nShip To: Address\nInvoice Number: INV-001", CameraDocumentType.Invoice, true, 3, "Invoice with shipping information")]
         [InlineData("random text with date and signature", CameraDocumentType.Other, false, 0, "Text with only weak indicators")]
         public async Task DetectDocumentTypeAsync_VariousDocumentTypes_DataDriven(
