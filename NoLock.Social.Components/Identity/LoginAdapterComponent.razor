@@ -169,19 +169,19 @@
 
 @code {
     private LoginModel _loginModel = new();
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _errorMessage = "";
     private string _successMessage = "";
-    private bool _showSuccessMessage = false;
+    private bool _showSuccessMessage;
     private bool _isNewUserFlow = false;
-    private bool _hasRememberedUsername = false;
+    private bool _hasRememberedUsername;
     private IDisposable? _stateChangeSubscription;
     
     [Parameter] public EventCallback<LoginResult> OnLogin { get; set; }
     [Parameter] public EventCallback OnLogout { get; set; }
     [Parameter] public EventCallback OnLock { get; set; }
     [Parameter] public bool ShowNewUserWelcome { get; set; } = true;
-    [Parameter] public bool RememberUsernameDefault { get; set; } = false;
+    [Parameter] public bool RememberUsernameDefault { get; set; }
     
     protected override async Task OnInitializedAsync()
     {
@@ -352,6 +352,6 @@
                      ErrorMessage = "Passphrase must be at least 12 characters")]
         public string Passphrase { get; set; } = "";
         
-        public bool RememberUsername { get; set; } = false;
+        public bool RememberUsername { get; set; }
     }
 }

@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.JSInterop;
+using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.Storage;
 using Nolock.Social.Storage.IndexedDb.Models;
 
@@ -16,11 +17,16 @@ public sealed class IndexedDbContentAddressableStorage<T>
     private readonly IndexedDbCasDatabase _database;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ISerializer<T> _serializer;
+    private readonly IHashService _hashService;
 
-    public IndexedDbContentAddressableStorage(IJSRuntime jsRuntime, ISerializer<T> serializer)
+    public IndexedDbContentAddressableStorage(
+        IJSRuntime jsRuntime, 
+        ISerializer<T> serializer,
+        IHashService hashService)
     {
         _database = new IndexedDbCasDatabase(jsRuntime);
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _hashService = hashService ?? throw new ArgumentNullException(nameof(hashService));
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -34,7 +40,7 @@ public sealed class IndexedDbContentAddressableStorage<T>
         await EnsureInitializedAsync();
         
         // Generate SHA256 hash
-        var hash = ComputeHash(entity);
+        var hash = await ComputeHash(entity);
         
         // Check cancellation after computing hash but before database operations
         if (cancellation.IsCancellationRequested)
@@ -141,16 +147,12 @@ public sealed class IndexedDbContentAddressableStorage<T>
     private async ValueTask EnsureInitializedAsync()
         => await _database.EnsureIsOpenAsync();
 
-    private string ComputeHash(T data)
+    private async Task<string> ComputeHash(T data)
     {
         // Serialize the data to bytes for hashing
         var bytes = _serializer.Serialize(data);
         
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(bytes);
-        return Convert.ToBase64String(hashBytes)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
+        // Use the injected hash service (now always returns Base64Url encoding)
+        return await _hashService.HashAsync(bytes);
     }
 }

@@ -217,8 +217,8 @@
     private SignedTarget? retrievedContent;
     private List<StorageMetadata> storedContentList = new();
     
-    private bool isProcessing = false;
-    private bool isSessionActive = false;
+    private bool isProcessing;
+    private bool isSessionActive;
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
     private IReadOnlyList<string>? recoverySuggestions;

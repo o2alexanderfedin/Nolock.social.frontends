@@ -112,7 +112,7 @@
     private OfflineQueueStatus? _queueStatus;
     private SyncStatus? _syncStatus;
     private string _lastSyncMessage = string.Empty;
-    private bool _lastSyncSuccess = false;
+    private bool _lastSyncSuccess;
     private Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()

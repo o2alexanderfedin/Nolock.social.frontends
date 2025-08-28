@@ -118,8 +118,8 @@
     private const string SETTINGS_KEY = "nolock_camera_settings";
     
     // Voice command state
-    private bool _isVoiceCommandEnabled = false;
-    private bool _isVoiceCommandListening = false;
+    private bool _isVoiceCommandEnabled;
+    private bool _isVoiceCommandListening;
     
     protected override async Task OnInitializedAsync()
     {

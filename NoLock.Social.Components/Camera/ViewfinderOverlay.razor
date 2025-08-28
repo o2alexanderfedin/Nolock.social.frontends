@@ -114,10 +114,10 @@
     public DocumentType DocumentType { get; set; } = DocumentType.Generic;
     
     [Parameter]
-    public bool IsDetecting { get; set; } = false;
+    public bool IsDetecting { get; set; }
     
     [Parameter]
-    public bool IsValid { get; set; } = false;
+    public bool IsValid { get; set; }
     
     private string GetStrokeColor()
     {

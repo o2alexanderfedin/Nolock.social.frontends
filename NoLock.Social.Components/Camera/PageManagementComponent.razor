@@ -121,7 +121,7 @@
     [Parameter] public DocumentSession? DocumentSession { get; set; }
     [Parameter] public EventCallback<DocumentSession> OnSessionUpdated { get; set; }
     
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _errorMessage = "";
     
     private async Task MovePageUp(int fromIndex)

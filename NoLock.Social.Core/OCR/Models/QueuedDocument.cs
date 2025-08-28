@@ -63,7 +63,7 @@ namespace NoLock.Social.Core.OCR.Models
         /// OCR processing progress percentage (0-100).
         /// Updated during polling operations.
         /// </summary>
-        public int ProgressPercentage { get; set; } = 0;
+        public int ProgressPercentage { get; set; }
 
         /// <summary>
         /// Final OCR processing result when completed successfully.
@@ -93,7 +93,7 @@ namespace NoLock.Social.Core.OCR.Models
         /// Number of retry attempts made for this document.
         /// Incremented each time processing is retried after failure.
         /// </summary>
-        public int RetryAttempts { get; set; } = 0;
+        public int RetryAttempts { get; set; }
 
         /// <summary>
         /// Maximum number of retry attempts allowed for this document.

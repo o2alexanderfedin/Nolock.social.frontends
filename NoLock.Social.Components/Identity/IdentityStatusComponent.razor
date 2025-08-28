@@ -92,7 +92,7 @@
     private TimeSpan _timeRemaining = TimeSpan.Zero;
     private string _truncatedPublicKey = "";
     private string _fullPublicKey = "";
-    private bool _showCopySuccess = false;
+    private bool _showCopySuccess;
 
     [Parameter] public EventCallback OnUnlockRequested { get; set; }
 

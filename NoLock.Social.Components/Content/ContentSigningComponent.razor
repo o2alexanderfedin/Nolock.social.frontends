@@ -139,13 +139,13 @@
 
 @code {
     private SigningModel _signingModel = new();
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _errorMessage = "";
-    private SignedTarget? _signatureResult = null;
+    private SignedTarget? _signatureResult;
     private string _signatureBase64 = "";
     private string _contentHashBase64 = "";
     private string _publicKeyBase64 = "";
-    private bool _copySuccess = false;
+    private bool _copySuccess;
 
     [Parameter] public EventCallback<SignedTarget> OnContentSigned { get; set; }
 

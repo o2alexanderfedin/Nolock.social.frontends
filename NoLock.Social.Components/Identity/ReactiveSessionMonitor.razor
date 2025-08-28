@@ -97,18 +97,18 @@
     private CompositeDisposable _disposables = new();
     
     private SessionState currentState = SessionState.Locked;
-    private bool isUnlocked = false;
+    private bool isUnlocked;
     private string username = string.Empty;
     private TimeSpan remainingTime = TimeSpan.Zero;
-    private bool showTimeoutWarning = false;
+    private bool showTimeoutWarning;
     private DateTime lastActivityTime = DateTime.Now;
     
     private List<StateTransition> stateHistory = new();
-    private int stateChangeCount = 0;
-    private int timeoutWarningCount = 0;
-    private double updatesPerMinute = 0;
+    private int stateChangeCount;
+    private int timeoutWarningCount;
+    private double updatesPerMinute;
     private DateTime startTime = DateTime.Now;
-    private int totalUpdates = 0;
+    private int totalUpdates;
 
     protected override void OnInitialized()
     {

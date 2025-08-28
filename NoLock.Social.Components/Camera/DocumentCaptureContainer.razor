@@ -289,10 +289,10 @@
     private CaptureMode _currentMode = CaptureMode.Capture;
     private string? _sessionId;
     private DocumentSession? _documentSession;
-    private bool _isProcessing = false;
+    private bool _isProcessing;
     private string _processingMessage = "";
     private string _errorMessage = "";
-    private bool _showKeyboardHelp = false;
+    private bool _showKeyboardHelp;
     
     // Enhancement mode state
     private CapturedImage? _imageToEnhance;
@@ -303,8 +303,8 @@
     private string _assertiveAnnouncement = "";
     
     // Voice command state
-    private bool _isVoiceCommandEnabled = false;
-    private bool _isVoiceCommandListening = false;
+    private bool _isVoiceCommandEnabled;
+    private bool _isVoiceCommandListening;
     
     // Element references for focus management
     private ElementReference containerRef;

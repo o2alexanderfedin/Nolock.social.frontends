@@ -62,7 +62,7 @@
     [Parameter] public EventCallback<bool> ShowModalChanged { get; set; }
     
     private LoginModel loginModel = new LoginModel();
-    private bool isLoading = false;
+    private bool isLoading;
     private string errorMessage = "";
     
     private class LoginModel

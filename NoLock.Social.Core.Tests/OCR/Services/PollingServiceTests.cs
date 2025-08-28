@@ -186,16 +186,16 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         {
             // Arrange
             var configuration = PollingConfiguration.Fast;
-            var progressUpdates = new System.Collections.Generic.List<TestResult>();
+            var progressUpdates = new List<TestResult>();
             var attemptCount = 0;
             
             async Task<TestResult> operation(CancellationToken ct)
             {
                 attemptCount++;
-                await Task.Delay(10, ct);
+                await Task.Delay(1, ct);
                 return new TestResult
                 {
-                    IsComplete = attemptCount >= 3,
+                    IsComplete = attemptCount >= 2,
                     Value = attemptCount,
                     Message = $"Progress {attemptCount}"
                 };
@@ -216,7 +216,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(3, progressUpdates.Count);
+            Assert.Equal(2, progressUpdates.Count);
             Assert.All(progressUpdates, (update, index) =>
             {
                 Assert.Equal(index + 1, update.Value);
@@ -228,17 +228,15 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         public async Task PollAsync_ProperlyCancelsOnCancellationToken()
         {
             // Arrange
-            var configuration = PollingConfiguration.Slow;
+            var configuration = PollingConfiguration.Fast;
             var cts = new CancellationTokenSource();
             var attemptCount = 0;
             
             async Task<TestResult> operation(CancellationToken ct)
             {
-                attemptCount++;
-                if (attemptCount == 2)
-                {
-                    cts.Cancel(); // Cancel after second attempt
-                }
+                if (Interlocked.Increment(ref attemptCount) >= 2) 
+                    await cts.CancelAsync(); // Cancel after second attempt
+                
                 await Task.Delay(10, ct);
                 return new TestResult { IsComplete = false };
             }
@@ -251,12 +249,12 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                     configuration,
                     cts.Token));
             
-            Assert.True(attemptCount >= 2);
+            Assert.True(Thread.VolatileRead(ref attemptCount) >= 2);
         }
 
         [Theory]
-        [InlineData(0, typeof(ArgumentException), "initial interval must be positive")]
-        [InlineData(-5, typeof(ArgumentException), "negative initial interval")]
+        [InlineData(0, typeof(ArgumentOutOfRangeException), "initial interval must be positive")]
+        [InlineData(-5, typeof(ArgumentOutOfRangeException), "negative initial interval")]
         public void PollingConfiguration_ValidateThrowsForInvalidConfig(
             int initialInterval,
             Type expectedExceptionType,

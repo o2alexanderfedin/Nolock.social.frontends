@@ -15,7 +15,7 @@ public class FocusManagementService : IFocusManagementService, IAsyncDisposable
     private readonly ILogger<FocusManagementService> _logger;
     private readonly Lazy<Task<IJSObjectReference>> _moduleTask;
     private ElementReference? _storedFocusElement;
-    private bool _focusTrapped = false;
+    private bool _focusTrapped;
 
     public FocusManagementService(IJSRuntime jsRuntime, ILogger<FocusManagementService> logger)
     {
