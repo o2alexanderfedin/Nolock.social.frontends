@@ -10,11 +10,11 @@ namespace NoLock.Social.Core.OCR.Services
     /// </summary>
     public class ReceiptOCRService : IOCRService
     {
-        private readonly MistralOCRClient _ocrClient;
+        private readonly IMistralOCRClient _ocrClient;
         private readonly ILogger<ReceiptOCRService> _logger;
 
         public ReceiptOCRService(
-            MistralOCRClient ocrClient,
+            IMistralOCRClient ocrClient,
             ILogger<ReceiptOCRService> logger)
         {
             _ocrClient = ocrClient ?? throw new ArgumentNullException(nameof(ocrClient));

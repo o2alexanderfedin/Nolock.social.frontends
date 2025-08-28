@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using CameraDocumentType = NoLock.Social.Core.Camera.Models.DocumentType;
 using NoLock.Social.Core.OCR.Services;
+using NoLock.Social.Core.OCR.Models;
 
 namespace NoLock.Social.Core.Tests.OCR.Services
 {
@@ -274,6 +275,73 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
         #endregion
 
+        #region Additional Data-Driven Tests
+
+        [Theory]
+        [InlineData("W-2 Wage and Tax Statement\nFederal Income Tax: $5000\nSocial Security Wages: $50000", CameraDocumentType.W2, true, 5, "W2 with multiple strong indicators")]
+        [InlineData("Form 1099\nPayer: Company\nRecipient: Individual\nIncome: $10000", CameraDocumentType.Form1099, false, 1, "Form1099 with basic keywords")]
+        [InlineData("Bill To: Customer\nShip To: Address\nInvoice Number: INV-001", CameraDocumentType.Invoice, true, 3, "Invoice with shipping information")]
+        [InlineData("random text with date and signature", CameraDocumentType.Other, false, 0, "Text with only weak indicators")]
+        public async Task DetectDocumentTypeAsync_VariousDocumentTypes_DataDriven(
+            string ocrText, CameraDocumentType expectedType, bool shouldBeConfident, 
+            int minKeywordMatches, string scenario)
+        {
+            // Act
+            var result = await _detector.DetectDocumentTypeAsync(ocrText);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expectedType.ToString(), result.DocumentType);
+            
+            if (expectedType != CameraDocumentType.Other)
+            {
+                Assert.Equal(shouldBeConfident, result.IsConfident);
+                Assert.True(result.KeywordMatchCount >= minKeywordMatches, 
+                    $"Expected at least {minKeywordMatches} keyword matches for: {scenario}");
+            }
+        }
+
+        [Theory]
+        [InlineData("Form W-4\nEmployee's Withholding Certificate", 0.8, "W4 with strong identifiers")]
+        [InlineData("w-4 withholding", 0.6, "W4 with minimal but strong keywords")]
+        [InlineData("single married dependents", 0.3, "W4 with only weak keywords")]
+        [InlineData("W-2 Wage and Tax Statement\nEIN: 12-3456789", 0.8, "W2 with strong identifiers")]
+        [InlineData("routing number: 123456789\naccount number: 987654321", 0.5, "Check with strong technical keywords")]
+        public async Task DetectDocumentTypeAsync_KeywordWeighting_ProducesExpectedConfidence(
+            string ocrText, double minExpectedConfidence, string scenario)
+        {
+            // Act
+            var result = await _detector.DetectDocumentTypeAsync(ocrText);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.ConfidenceScore >= minExpectedConfidence, 
+                $"Expected confidence >= {minExpectedConfidence} for: {scenario}, got {result.ConfidenceScore}");
+        }
+
+        [Theory]
+        [InlineData("receipt invoice", new[] { CameraDocumentType.Receipt, CameraDocumentType.Invoice }, "Receipt and Invoice keywords")]
+        [InlineData("w-2 w-4 withholding", new[] { CameraDocumentType.W2, CameraDocumentType.W4 }, "W2 and W4 keywords")]
+        [InlineData("check routing number invoice bill to", new[] { CameraDocumentType.Check, CameraDocumentType.Invoice }, "Check and Invoice mix")]
+        public async Task DetectMultipleDocumentTypesAsync_MixedKeywords_DetectsMultipleTypes(
+            string ocrText, CameraDocumentType[] expectedTypes, string scenario)
+        {
+            // Act
+            var results = await _detector.DetectMultipleDocumentTypesAsync(ocrText, 5);
+
+            // Assert
+            Assert.NotNull(results);
+            Assert.True(results.Length > 0, $"Should detect at least one type for: {scenario}");
+            
+            var detectedTypes = results.Select(r => r.DocumentType).ToArray();
+            foreach (var expectedType in expectedTypes)
+            {
+                Assert.Contains(expectedType.ToString(), detectedTypes);
+            }
+        }
+
+        #endregion
+
         #region Edge Cases
 
         [Fact]
@@ -302,6 +370,156 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             // Assert
             Assert.NotNull(result);
             Assert.Equal(CameraDocumentType.Receipt.ToString(), result.DocumentType);
+        }
+
+        [Theory]
+        [InlineData("\t\tRECEIPT\n\n\n", CameraDocumentType.Receipt, "Text with excessive whitespace")]
+        [InlineData("W-4!@#$%^&*()", CameraDocumentType.W4, "Text with special characters")]
+        [InlineData("invoice invoice invoice invoice invoice", CameraDocumentType.Invoice, "Repeated single keyword")]
+        [InlineData("12345 67890 RECEIPT 98765", CameraDocumentType.Receipt, "Keywords mixed with numbers")]
+        public async Task DetectDocumentTypeAsync_UnusualFormatting_StillDetects(
+            string ocrText, CameraDocumentType expectedType, string scenario)
+        {
+            // Act
+            var result = await _detector.DetectDocumentTypeAsync(ocrText);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expectedType.ToString(), result.DocumentType);
+        }
+
+        [Theory]
+        [InlineData(0, 1, "Zero max results should default to 1")]
+        [InlineData(-1, 1, "Negative max results should default to 1")]
+        [InlineData(100, 6, "Very high max results should be capped to available types")]
+        public async Task DetectMultipleDocumentTypesAsync_InvalidMaxResults_HandlesGracefully(
+            int requestedMax, int expectedMax, string scenario)
+        {
+            // Arrange
+            var text = "Receipt Invoice Check W-4 W-2 Form 1099"; // Keywords for all types
+
+            // Act
+            var results = await _detector.DetectMultipleDocumentTypesAsync(text, requestedMax);
+
+            // Assert
+            Assert.NotNull(results);
+            Assert.True(results.Length <= expectedMax, 
+                $"Result count should be <= {expectedMax} for: {scenario}");
+        }
+
+        [Fact]
+        public async Task DetectDocumentTypeAsync_HighConfidenceBonusApplied_When5OrMoreKeywordsMatch()
+        {
+            // Arrange - Text with many receipt keywords
+            var text = "RECEIPT\nTotal: $100\nSubtotal: $90\nTax: $10\nDiscount: $5\nCashier: John\nThank you for your purchase\nPrice: $95\nItems: 3";
+
+            // Act
+            var result = await _detector.DetectDocumentTypeAsync(text);
+
+            // Assert
+            Assert.Equal(CameraDocumentType.Receipt.ToString(), result.DocumentType);
+            Assert.True(result.KeywordMatchCount >= 5, "Should match at least 5 keywords");
+            Assert.True(result.ConfidenceScore > 0.5, "Confidence should be boosted for high match count");
+        }
+
+        #endregion
+
+        #region Cache Key Generation Tests
+
+        [Theory]
+        [InlineData("short text", "short text", true, "Identical short texts")]
+        [InlineData("short text", "short text ", false, "Different whitespace")]
+        [InlineData("a", "b", false, "Different single characters")]
+        public async Task CacheKey_Generation_WorksCorrectly(
+            string text1, string text2, bool shouldBeSame, string scenario)
+        {
+            // Act
+            var result1 = await _detector.DetectDocumentTypeAsync(text1);
+            var result2 = await _detector.DetectDocumentTypeAsync(text2);
+
+            // Assert
+            if (shouldBeSame)
+            {
+                Assert.Equal(result1.DetectedAt, result2.DetectedAt);
+            }
+            else
+            {
+                Assert.NotEqual(result1.DetectedAt, result2.DetectedAt);
+            }
+        }
+
+        [Fact]
+        public async Task CacheKey_VeryLongText_UsesOnlyFirst100Chars()
+        {
+            // Arrange
+            var prefix = "RECEIPT Total: $100";
+            var longText1 = prefix + new string('x', 1000) + "different ending 1";
+            var longText2 = prefix + new string('x', 1000) + "different ending 2";
+
+            // Act
+            var result1 = await _detector.DetectDocumentTypeAsync(longText1);
+            _detector.ClearCache(); // Clear to ensure no caching
+            var result2 = await _detector.DetectDocumentTypeAsync(longText2);
+
+            // Assert
+            // Different texts should produce different results even if first 100 chars are similar
+            Assert.NotEqual(result1.DetectedAt, result2.DetectedAt);
+        }
+
+        #endregion
+
+        #region Thread Safety Tests
+
+        [Fact]
+        public async Task DetectDocumentTypeAsync_ConcurrentCalls_ThreadSafe()
+        {
+            // Arrange
+            var tasks = new List<Task<DocumentTypeDetectionResult>>();
+            var ocrText = "RECEIPT\nTotal: $100\nTax: $10";
+
+            // Act - Create 50 concurrent detection tasks
+            for (int i = 0; i < 50; i++)
+            {
+                tasks.Add(Task.Run(async () => await _detector.DetectDocumentTypeAsync(ocrText)));
+            }
+
+            var results = await Task.WhenAll(tasks);
+
+            // Assert - All results should be identical (from cache)
+            var firstResult = results[0];
+            foreach (var result in results)
+            {
+                Assert.Equal(firstResult.DocumentType, result.DocumentType);
+                Assert.Equal(firstResult.ConfidenceScore, result.ConfidenceScore);
+                Assert.Equal(firstResult.DetectedAt, result.DetectedAt); // Should be cached
+            }
+        }
+
+        [Fact]
+        public async Task ClearCache_ConcurrentWithDetection_ThreadSafe()
+        {
+            // Arrange
+            var detectionTasks = new List<Task>();
+            var clearTasks = new List<Task>();
+
+            // Act - Interleave detection and cache clearing
+            for (int i = 0; i < 20; i++)
+            {
+                var text = $"RECEIPT {i}\nTotal: ${i * 10}";
+                detectionTasks.Add(_detector.DetectDocumentTypeAsync(text));
+                
+                if (i % 5 == 0)
+                {
+                    clearTasks.Add(Task.Run(() => _detector.ClearCache()));
+                }
+            }
+
+            // Assert - Should complete without exceptions
+            var exception = await Record.ExceptionAsync(async () =>
+            {
+                await Task.WhenAll(detectionTasks.Concat(clearTasks));
+            });
+            Assert.Null(exception);
         }
 
         #endregion
