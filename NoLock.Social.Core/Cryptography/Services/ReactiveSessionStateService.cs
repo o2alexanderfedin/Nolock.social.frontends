@@ -70,6 +70,11 @@ namespace NoLock.Social.Core.Cryptography.Services
         {
             get
             {
+                if (_disposed)
+                {
+                    return SessionState.Expired;
+                }
+
                 _stateLock.EnterReadLock();
                 try
                 {
@@ -86,6 +91,11 @@ namespace NoLock.Social.Core.Cryptography.Services
         {
             get
             {
+                if (_disposed)
+                {
+                    return null;
+                }
+
                 _stateLock.EnterReadLock();
                 try
                 {
@@ -102,6 +112,11 @@ namespace NoLock.Social.Core.Cryptography.Services
         {
             get
             {
+                if (_disposed)
+                {
+                    return false;
+                }
+
                 _stateLock.EnterReadLock();
                 try
                 {
@@ -403,6 +418,11 @@ namespace NoLock.Social.Core.Cryptography.Services
 
         public TimeSpan GetRemainingTime()
         {
+            if (_disposed)
+            {
+                return TimeSpan.Zero;
+            }
+
             _stateLock.EnterReadLock();
             try
             {

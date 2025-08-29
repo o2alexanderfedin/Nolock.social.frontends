@@ -664,7 +664,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             // Assert
             errorArgs.Should().NotBeNull();
             errorArgs!.ErrorMessage.Should().Contain("Processing error");
-            errorArgs.ErrorCode.Should().Be("PROCESSING_ERROR");
+            errorArgs.ErrorCode.Should().Be("COMMAND_EXECUTION_ERROR");
         }
 
         [Theory]

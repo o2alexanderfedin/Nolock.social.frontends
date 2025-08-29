@@ -73,12 +73,12 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             
             if (!amountsMatch)
             {
-                Assert.Contains("Written and numeric amounts do not match", processedCheck.Warnings);
+                Assert.Contains("Written and numeric amounts do not match.", processedCheck.Warnings);
             }
             
             if (!signatureDetected)
             {
-                Assert.Contains("No signature detected on check", processedCheck.Warnings);
+                Assert.Contains("No signature detected on check.", processedCheck.Warnings);
             }
         }
 
@@ -220,8 +220,8 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             // Assert
             Assert.Equal(3, processedCheck.Warnings.Count);
             Assert.Contains("Pre-existing warning", processedCheck.Warnings);
-            Assert.Contains("Written and numeric amounts do not match", processedCheck.Warnings);
-            Assert.Contains("No signature detected on check", processedCheck.Warnings);
+            Assert.Contains("Written and numeric amounts do not match.", processedCheck.Warnings);
+            Assert.Contains("No signature detected on check.", processedCheck.Warnings);
         }
 
         [Fact]

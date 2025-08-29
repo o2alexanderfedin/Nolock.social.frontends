@@ -71,7 +71,7 @@ public class DocumentSession
     /// <summary>
     /// Checks if the session has expired based on last activity
     /// </summary>
-    public bool IsExpired => DateTime.UtcNow.Subtract(LastActivityAt).TotalMinutes > TimeoutMinutes;
+    public bool IsExpired => DateTime.UtcNow.Subtract(LastActivityAt).TotalMinutes >= TimeoutMinutes;
     
     /// <summary>
     /// Updates the last activity timestamp to current time

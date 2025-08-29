@@ -36,7 +36,14 @@ namespace NoLock.Social.Core.Common.Guards
         {
             if (value is null)
             {
-                throw new ArgumentNullException(parameterName, message);
+                if (string.IsNullOrEmpty(message))
+                {
+                    throw new ArgumentNullException(parameterName);
+                }
+                else
+                {
+                    throw new ArgumentNullException(parameterName, message);
+                }
             }
             return value;
         }
@@ -66,7 +73,14 @@ namespace NoLock.Social.Core.Common.Guards
         {
             if (string.IsNullOrEmpty(value))
             {
-                throw new ArgumentException(message, parameterName);
+                if (string.IsNullOrEmpty(message))
+                {
+                    throw new ArgumentException("Value cannot be null or empty", parameterName);
+                }
+                else
+                {
+                    throw new ArgumentException(message, parameterName);
+                }
             }
             return value;
         }
@@ -92,7 +106,14 @@ namespace NoLock.Social.Core.Common.Guards
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new ArgumentException(message, parameterName);
+                if (string.IsNullOrEmpty(message))
+                {
+                    throw new ArgumentException("Value cannot be null, empty, or whitespace", parameterName);
+                }
+                else
+                {
+                    throw new ArgumentException(message, parameterName);
+                }
             }
             return value;
         }

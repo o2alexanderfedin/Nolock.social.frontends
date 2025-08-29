@@ -363,3 +363,7 @@ test-output.txt
 .runsettings
 coverage.runsettings
 *.md
+
+# Code Analytics Reports
+.coverage/
+.complexity/

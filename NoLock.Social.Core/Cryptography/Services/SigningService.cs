@@ -24,10 +24,16 @@ namespace NoLock.Social.Core.Cryptography.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <inheritdoc />
-        public async Task<SignedTarget> SignAsync(string targetHash, byte[] privateKey, byte[] publicKey)
+        /// <summary>
+        /// Validates input parameters for content signing
+        /// </summary>
+        /// <param name="targetHash">The target hash to validate</param>
+        /// <param name="privateKey">The private key to validate</param>
+        /// <param name="publicKey">The public key to validate</param>
+        /// <exception cref="ArgumentNullException">Thrown when any parameter is null</exception>
+        /// <exception cref="ArgumentException">Thrown when parameters are invalid</exception>
+        private void ValidateSigningInputs(string targetHash, byte[] privateKey, byte[] publicKey)
         {
-            // Validate inputs
             if (targetHash == null)
             {
                 throw new ArgumentNullException(nameof(targetHash));
@@ -57,6 +63,12 @@ namespace NoLock.Social.Core.Cryptography.Services
             {
                 throw new ArgumentException($"Public key must be at least {ECDSA_MIN_PUBLIC_KEY_SIZE} bytes for ECDSA P-256 SPKI format", nameof(publicKey));
             }
+        }
+
+        /// <inheritdoc />
+        public async Task<SignedTarget> SignAsync(string targetHash, byte[] privateKey, byte[] publicKey)
+        {
+            ValidateSigningInputs(targetHash, privateKey, publicKey);
 
             try
             {

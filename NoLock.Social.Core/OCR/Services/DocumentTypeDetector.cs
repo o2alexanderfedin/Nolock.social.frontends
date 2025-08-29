@@ -293,20 +293,23 @@ namespace NoLock.Social.Core.OCR.Services
         }
 
         /// <summary>
-        /// Analyzes text for a specific document type and returns detection result.
+        /// Represents the result of keyword analysis for document type detection.
         /// </summary>
-        private DocumentTypeDetectionResult AnalyzeDocumentType(
-            string lowerText,
-            string documentType,
-            List<string> keywords)
+        private class KeywordAnalysisResult
         {
-            var matchedKeywords = new List<string>();
-            double totalWeight = 0;
-            double maxSingleWeight = 0;
-            int strongMatches = 0;
-            int totalOccurrences = 0;
-            
-            _logger.LogDebug($"Analyzing document type: {documentType} with text: {lowerText.Substring(0, Math.Min(50, lowerText.Length))}...");
+            public List<string> MatchedKeywords { get; set; } = new List<string>();
+            public double TotalWeight { get; set; }
+            public double MaxSingleWeight { get; set; }
+            public int StrongMatches { get; set; }
+            public int TotalOccurrences { get; set; }
+        }
+
+        /// <summary>
+        /// Analyzes keywords in the text for a specific document type.
+        /// </summary>
+        private KeywordAnalysisResult AnalyzeKeywords(string lowerText, string documentType, List<string> keywords)
+        {
+            var result = new KeywordAnalysisResult();
 
             foreach (var keyword in keywords)
             {
@@ -315,31 +318,75 @@ namespace NoLock.Social.Core.OCR.Services
                     : 1.0;
 
                 // Track the maximum single keyword weight for this document type
-                maxSingleWeight = Math.Max(maxSingleWeight, weight);
+                result.MaxSingleWeight = Math.Max(result.MaxSingleWeight, weight);
                 
                 _logger.LogDebug($"Checking keyword '{keyword}' against text...");
 
                 if (ContainsKeyword(lowerText, keyword))
                 {
                     _logger.LogDebug($"Matched keyword '{keyword}' for {documentType} with weight {weight}");
-                    matchedKeywords.Add(keyword);
+                    result.MatchedKeywords.Add(keyword);
                     
                     // Count occurrences for repeated keywords
                     int occurrences = CountOccurrences(lowerText, keyword);
-                    totalOccurrences += occurrences;
+                    result.TotalOccurrences += occurrences;
                     
                     // Weight increases with occurrences but with diminishing returns
                     double occurrenceMultiplier = 1.0 + Math.Log10(Math.Max(1, occurrences)) * 0.3;
-                    totalWeight += weight * occurrenceMultiplier;
+                    result.TotalWeight += weight * occurrenceMultiplier;
                     
                     // Count strong matches (weight >= 2.0)
                     if (weight >= 2.0)
                     {
-                        strongMatches++;
+                        result.StrongMatches++;
                     }
                 }
             }
 
+            return result;
+        }
+
+        /// <summary>
+        /// Analyzes text for a specific document type and returns detection result.
+        /// </summary>
+        private DocumentTypeDetectionResult AnalyzeDocumentType(
+            string lowerText,
+            string documentType,
+            List<string> keywords)
+        {
+            _logger.LogDebug($"Analyzing document type: {documentType} with text: {lowerText.Substring(0, Math.Min(50, lowerText.Length))}...");
+
+            var keywordAnalysis = AnalyzeKeywords(lowerText, documentType, keywords);
+
+            var confidenceScore = CalculateConfidenceScore(keywordAnalysis);
+
+            var result = new DocumentTypeDetectionResult
+            {
+                DocumentType = documentType,
+                ConfidenceScore = Math.Round(confidenceScore, 3),
+                MatchedKeywords = keywordAnalysis.MatchedKeywords,
+                KeywordMatchCount = keywordAnalysis.MatchedKeywords.Count,
+                DetectionMethod = "Keyword",
+                IsConfident = confidenceScore >= MinimumConfidenceThreshold,
+                RequiresManualConfirmation = confidenceScore < MinimumConfidenceThreshold,
+                DetectedAt = DateTime.UtcNow
+            };
+            
+            _logger.LogDebug($"Result for {documentType}: Confidence={confidenceScore}, Matches={keywordAnalysis.MatchedKeywords.Count}");
+
+            if (result.RequiresManualConfirmation)
+            {
+                result.ManualConfirmationReason = $"Confidence score {confidenceScore:P} is below threshold {MinimumConfidenceThreshold:P}";
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Calculates confidence score based on keyword analysis results.
+        /// </summary>
+        private double CalculateConfidenceScore(KeywordAnalysisResult keywordAnalysis)
+        {
             // Calculate confidence score with a more balanced approach:
             // - Base score from total weight (normalized by a reasonable expectation, not all keywords)
             // - Consider that matching 3-4 keywords with good weights should give high confidence
@@ -349,7 +396,7 @@ namespace NoLock.Social.Core.OCR.Services
             // Check if any matched keyword has very high weight (>= 3.0)
             bool hasVeryStrongMatch = false;
             double maxMatchedWeight = 0;
-            foreach (var keyword in matchedKeywords)
+            foreach (var keyword in keywordAnalysis.MatchedKeywords)
             {
                 var weight = _keywordWeights.ContainsKey(keyword) ? _keywordWeights[keyword] : 1.0;
                 maxMatchedWeight = Math.Max(maxMatchedWeight, weight);
@@ -360,83 +407,64 @@ namespace NoLock.Social.Core.OCR.Services
                 }
             }
 
-            if (matchedKeywords.Count == 0)
+            if (keywordAnalysis.MatchedKeywords.Count == 0)
             {
                 confidenceScore = 0;
             }
             else if (hasVeryStrongMatch)
             {
                 // Has very strong identifier(s) like "w-4", "w-2", "form 1099"
-                confidenceScore = Math.Min(1.0, 0.85 + (matchedKeywords.Count - 1) * 0.05);
+                confidenceScore = Math.Min(1.0, 0.85 + (keywordAnalysis.MatchedKeywords.Count - 1) * 0.05);
             }
-            else if (strongMatches >= 2)
+            else if (keywordAnalysis.StrongMatches >= 2)
             {
                 // Multiple strong matches (weight >= 2.0)
-                confidenceScore = Math.Min(1.0, 0.7 + (strongMatches * 0.1));
+                confidenceScore = Math.Min(1.0, 0.7 + (keywordAnalysis.StrongMatches * 0.1));
             }
-            else if (strongMatches >= 1)
+            else if (keywordAnalysis.StrongMatches >= 1)
             {
                 // At least one strong match
-                confidenceScore = Math.Min(1.0, 0.5 + (totalWeight * 0.1) + (matchedKeywords.Count * 0.05));
+                confidenceScore = Math.Min(1.0, 0.5 + (keywordAnalysis.TotalWeight * 0.1) + (keywordAnalysis.MatchedKeywords.Count * 0.05));
             }
-            else if (matchedKeywords.Count >= 3)
+            else if (keywordAnalysis.MatchedKeywords.Count >= 3)
             {
                 // Multiple regular matches
-                confidenceScore = Math.Min(1.0, 0.4 + (totalWeight * 0.12));
+                confidenceScore = Math.Min(1.0, 0.4 + (keywordAnalysis.TotalWeight * 0.12));
             }
-            else if (matchedKeywords.Count >= 2)
+            else if (keywordAnalysis.MatchedKeywords.Count >= 2)
             {
                 // Two matches
-                confidenceScore = Math.Min(0.7, 0.3 + (totalWeight * 0.15));
+                confidenceScore = Math.Min(0.7, 0.3 + (keywordAnalysis.TotalWeight * 0.15));
             }
-            else if (matchedKeywords.Count == 1)
+            else if (keywordAnalysis.MatchedKeywords.Count == 1)
             {
                 // Single match, scale based on weight and repetitions
                 // Give higher confidence for strong single matches like "invoice"
                 if (maxMatchedWeight >= 2.0)
                 {
                     // If repeated multiple times (like "invoice invoice invoice"), boost confidence
-                    if (totalOccurrences >= 3)
+                    if (keywordAnalysis.TotalOccurrences >= 3)
                     {
-                        confidenceScore = Math.Min(0.8, 0.5 + (totalWeight * 0.12));
+                        confidenceScore = Math.Min(0.8, 0.5 + (keywordAnalysis.TotalWeight * 0.12));
                     }
                     else
                     {
-                        confidenceScore = Math.Min(0.7, 0.4 + (totalWeight * 0.15));
+                        confidenceScore = Math.Min(0.7, 0.4 + (keywordAnalysis.TotalWeight * 0.15));
                     }
                 }
                 else
                 {
-                    confidenceScore = Math.Min(0.6, 0.2 + (totalWeight * 0.2));
+                    confidenceScore = Math.Min(0.6, 0.2 + (keywordAnalysis.TotalWeight * 0.2));
                 }
             }
 
             // Apply bonus for high match count
-            if (matchedKeywords.Count >= 5)
+            if (keywordAnalysis.MatchedKeywords.Count >= 5)
             {
                 confidenceScore = Math.Min(1.0, confidenceScore * 1.15);
             }
 
-            var result = new DocumentTypeDetectionResult
-            {
-                DocumentType = documentType,
-                ConfidenceScore = Math.Round(confidenceScore, 3),
-                MatchedKeywords = matchedKeywords,
-                KeywordMatchCount = matchedKeywords.Count,
-                DetectionMethod = "Keyword",
-                IsConfident = confidenceScore >= MinimumConfidenceThreshold,
-                RequiresManualConfirmation = confidenceScore < MinimumConfidenceThreshold,
-                DetectedAt = DateTime.UtcNow
-            };
-            
-            _logger.LogDebug($"Result for {documentType}: Confidence={confidenceScore}, Matches={matchedKeywords.Count}");
-
-            if (result.RequiresManualConfirmation)
-            {
-                result.ManualConfirmationReason = $"Confidence score {confidenceScore:P} is below threshold {MinimumConfidenceThreshold:P}";
-            }
-
-            return result;
+            return confidenceScore;
         }
 
         /// <summary>

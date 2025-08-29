@@ -100,22 +100,49 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             Assert.Contains("Check number is missing", checkData.ValidationErrors);
         }
 
-        [Theory]
-        [InlineData(null, "Numeric amount is missing or invalid")]
-        [InlineData(0, "Numeric amount is missing or invalid")]
-        [InlineData(-100, "Numeric amount is missing or invalid")]
-        public void Validate_InvalidAmountNumeric(decimal? amount, string expectedError)
+        [Fact]
+        public void Validate_InvalidAmountNumeric_Null()
         {
             // Arrange
             var checkData = CreateValidCheckData();
-            checkData.AmountNumeric = amount;
+            checkData.AmountNumeric = null;
 
             // Act
             var isValid = checkData.Validate();
 
             // Assert
             Assert.False(isValid);
-            Assert.Contains(expectedError, checkData.ValidationErrors);
+            Assert.Contains("Numeric amount is missing or invalid", checkData.ValidationErrors);
+        }
+
+        [Fact]
+        public void Validate_InvalidAmountNumeric_Zero()
+        {
+            // Arrange
+            var checkData = CreateValidCheckData();
+            checkData.AmountNumeric = 0m;
+
+            // Act
+            var isValid = checkData.Validate();
+
+            // Assert
+            Assert.False(isValid);
+            Assert.Contains("Numeric amount is missing or invalid", checkData.ValidationErrors);
+        }
+
+        [Fact]
+        public void Validate_InvalidAmountNumeric_Negative()
+        {
+            // Arrange
+            var checkData = CreateValidCheckData();
+            checkData.AmountNumeric = -100m;
+
+            // Act
+            var isValid = checkData.Validate();
+
+            // Assert
+            Assert.False(isValid);
+            Assert.Contains("Numeric amount is missing or invalid", checkData.ValidationErrors);
         }
 
         [Fact]
