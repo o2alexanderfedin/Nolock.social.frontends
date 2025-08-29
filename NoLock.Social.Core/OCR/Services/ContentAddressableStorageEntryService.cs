@@ -18,10 +18,14 @@ public sealed class ContentAddressableStorageEntryService<T>(
             throw new SecurityException();
         
         var session = sessionState.CurrentSession;
+        
+        if (session.PrivateKeyBuffer?.Data == null || session.PrivateKeyBuffer.Data.Length == 0)
+            throw new SecurityException();
+            
         var keyPair = new Ed25519KeyPair
         {
             PublicKey = session.PublicKey,
-            PrivateKey = session.PrivateKeyBuffer?.Data ?? throw new SecurityException()
+            PrivateKey = session.PrivateKeyBuffer.Data
         };
         
         var valueHash = await bytesCas.StoreAsync(value);

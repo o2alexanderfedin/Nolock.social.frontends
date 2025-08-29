@@ -24,7 +24,7 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             _sessionServiceMock.Setup(x => x.StateStream).Returns(_stateSubject.AsObservable());
         }
 
-        [Theory(Skip = "Requires WithLatestFrom behavior investigation")]
+        [Theory]
         [InlineData(SessionState.Unlocked, true, "Should emit when unlocked")]
         [InlineData(SessionState.Locked, false, "Should not emit when locked")]
         [InlineData(SessionState.Expired, false, "Should not emit when expired")]
@@ -33,18 +33,28 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
         {
             // Arrange
             var result = new List<int>();
+            var tcs = new TaskCompletionSource<bool>();
             
-            // Set initial state first
+            // Create a subject that we control for the source
+            var sourceSubject = new Subject<int>();
+            var whenUnlocked = sourceSubject.WhenUnlocked(_sessionServiceMock.Object);
+            
+            // Subscribe and set up completion
+            whenUnlocked.Subscribe(
+                value => { result.Add(value); tcs.TrySetResult(true); },
+                error => tcs.TrySetException(error),
+                () => tcs.TrySetResult(false));
+            
+            // Act - Set the state first
             _stateSubject.OnNext(state);
-            await Task.Delay(50); // Allow state to propagate
+            await Task.Delay(10); // Small delay to ensure state propagates
             
-            // Now create the source and subscribe
-            var source = Observable.Return(42);
-            var whenUnlocked = source.WhenUnlocked(_sessionServiceMock.Object);
-            whenUnlocked.Subscribe(result.Add);
+            // Then emit value from source
+            sourceSubject.OnNext(42);
+            sourceSubject.OnCompleted();
             
-            // Give time for the observable to process
-            await Task.Delay(50);
+            // Wait for completion or timeout
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(100)) == tcs.Task;
 
             // Assert
             if (shouldEmit)
@@ -140,19 +150,38 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             receivedProgress.Last().PercentComplete.Should().Be(100, "Completion should always be emitted");
         }
 
-        [Fact(Skip = "Progress reporter async behavior needs investigation")]
-        public void CreateProgressObservable_ShouldCreateWorkingProgressReporter()
+        [Fact]
+        public async Task CreateProgressObservable_ShouldCreateWorkingProgressReporter()
         {
             // Arrange & Act
             var (progress, observable) = ReactiveExtensions.CreateProgressObservable<int>();
             var results = new List<int>();
-            observable.Subscribe(results.Add);
+            var tcs = new TaskCompletionSource<bool>();
+            var expectedCount = 4;
+            
+            observable.Subscribe(value =>
+            {
+                results.Add(value);
+                if (results.Count >= expectedCount)
+                {
+                    tcs.TrySetResult(true);
+                }
+            });
 
-            // Report progress
-            progress.Report(25);
-            progress.Report(50);
-            progress.Report(75);
-            progress.Report(100);
+            // Report progress - use Task.Run to ensure async execution
+            await Task.Run(async () =>
+            {
+                progress.Report(25);
+                await Task.Yield(); // Allow processing
+                progress.Report(50);
+                await Task.Yield();
+                progress.Report(75);
+                await Task.Yield();
+                progress.Report(100);
+            });
+
+            // Wait for all reports to be processed
+            await Task.WhenAny(tcs.Task, Task.Delay(500));
 
             // Assert
             results.Should().BeEquivalentTo(new[] { 25, 50, 75, 100 });
@@ -190,10 +219,12 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             results.Should().BeEquivalentTo(Enumerable.Range(0, itemCount), scenario);
         }
 
-        [Theory(Skip = "Test data needs correction for weighted progress calculation")]
-        [InlineData(new[] { 0.5, 0.3, 0.2 }, new[] { 100.0, 100.0, 100.0 }, 100.0)]
-        [InlineData(new[] { 1.0, 1.0, 1.0 }, new[] { 100.0, 100.0, 100.0 }, 100.0)]
-        [InlineData(new[] { 0.25, 0.25, 0.25, 0.25 }, new[] { 100.0, 100.0, 100.0, 100.0 }, 100.0)]
+        [Theory]
+        [InlineData(new[] { 0.5, 0.3, 0.2 }, new[] { 100.0, 50.0, 25.0 }, 70.0)]
+        [InlineData(new[] { 1.0, 1.0, 1.0 }, new[] { 100.0, 50.0, 0.0 }, 50.0)]
+        [InlineData(new[] { 0.25, 0.25, 0.25, 0.25 }, new[] { 100.0, 75.0, 50.0, 25.0 }, 62.5)]
+        [InlineData(new[] { 0.8, 0.2 }, new[] { 100.0, 0.0 }, 80.0)]
+        [InlineData(new[] { 0.5, 0.5 }, new[] { 100.0, 100.0 }, 100.0)]
         public async Task CombineProgress_ShouldWeightProgressCorrectly(double[] weights, double[] progresses, double expectedTotal)
         {
             // Arrange
@@ -208,7 +239,7 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             var result = await combined.FirstOrDefaultAsync();
 
             // Assert
-            result.Should().BeApproximately(expectedTotal, 1.0); // Allow for floating point rounding
+            result.Should().BeApproximately(expectedTotal, 0.01); // Allow for floating point rounding
         }
 
         [Fact]
@@ -222,11 +253,11 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             result.Should().Be(0.0);
         }
 
-        [Theory(Skip = "CompleteOnTimeout logic needs review")]
-        [InlineData(5000, 1000, true, "Should complete before timeout")]
-        [InlineData(1000, 5000, false, "Should timeout before completion")]
-        [InlineData(3000, 3001, false, "Equal timeout and warning")]
-        public async Task CompleteOnTimeout_ShouldCompleteAtWarningThreshold(int remainingMs, int warningMs, bool shouldComplete, string scenario)
+        [Theory]
+        [InlineData(5000, 1000, false, "Should not timeout when remaining time is above threshold")]
+        [InlineData(500, 1000, true, "Should timeout when remaining time drops below threshold")]
+        [InlineData(1000, 1000, true, "Should timeout when remaining time equals threshold")]
+        public async Task CompleteOnTimeout_ShouldCompleteAtWarningThreshold(int remainingMs, int warningMs, bool shouldTimeout, string scenario)
         {
             // Arrange
             var remainingTimeSubject = new Subject<TimeSpan>();
@@ -235,36 +266,50 @@ namespace NoLock.Social.Core.Tests.Cryptography.Extensions
             var source = new Subject<int>();
             var results = new List<int>();
             var completed = false;
+            var tcs = new TaskCompletionSource<bool>();
 
             source
                 .CompleteOnTimeout(_sessionServiceMock.Object, TimeSpan.FromMilliseconds(warningMs))
-                .Subscribe(results.Add, () => completed = true);
+                .Subscribe(
+                    value => results.Add(value),
+                    error => tcs.TrySetException(error),
+                    () => { completed = true; tcs.TrySetResult(true); });
 
-            // Act
+            // Act - emit initial values
             source.OnNext(1);
-            remainingTimeSubject.OnNext(TimeSpan.FromMilliseconds(remainingMs));
             source.OnNext(2);
+            await Task.Delay(10);
             
-            if (!shouldComplete)
+            // Trigger the remaining time update
+            remainingTimeSubject.OnNext(TimeSpan.FromMilliseconds(remainingMs));
+            await Task.Delay(50);
+            
+            // Try to emit more values after potential timeout
+            if (!shouldTimeout)
             {
-                // Trigger the timeout by going below the warning threshold
-                remainingTimeSubject.OnNext(TimeSpan.FromMilliseconds(warningMs).Subtract(TimeSpan.FromMilliseconds(1)));
-                await Task.Delay(50);
-                source.OnNext(3); // This should not be received
+                source.OnNext(3);
+                source.OnNext(4);
+            }
+            
+            // Complete the source if not timed out
+            if (!shouldTimeout)
+            {
+                source.OnCompleted();
             }
 
-            await Task.Delay(50);
+            // Wait for completion or timeout
+            await Task.WhenAny(tcs.Task, Task.Delay(200));
 
             // Assert
-            if (shouldComplete)
+            if (shouldTimeout)
             {
-                results.Should().BeEquivalentTo(new[] { 1, 2 }, scenario);
-                completed.Should().BeFalse(scenario);
+                results.Should().BeEquivalentTo(new[] { 1, 2 }, $"Should only have values before timeout - {scenario}");
+                completed.Should().BeTrue($"Should complete on timeout - {scenario}");
             }
             else
             {
-                results.Should().BeEquivalentTo(new[] { 1, 2 }, scenario);
-                completed.Should().BeTrue($"Should complete on timeout - {scenario}");
+                results.Should().BeEquivalentTo(new[] { 1, 2, 3, 4 }, $"Should have all values - {scenario}");
+                completed.Should().BeTrue($"Should complete normally - {scenario}");
             }
         }
 
