@@ -40,57 +40,27 @@ namespace NoLock.Social.Core.Identity.Services
         /// <inheritdoc />
         public async Task<bool> PersistSessionAsync(PersistedSessionData sessionData, byte[] encryptionKey, int expiryMinutes = 30)
         {
-            if (sessionData == null)
-                throw new ArgumentNullException(nameof(sessionData));
-            if (encryptionKey == null || encryptionKey.Length == 0)
-                throw new ArgumentException("Encryption key cannot be null or empty", nameof(encryptionKey));
+            ValidateSessionPersistenceParameters(sessionData, encryptionKey);
 
             var result = await _logger.ExecuteWithLogging(async () =>
             {
                 _logger.LogDebug("Persisting session for user: {Username}", sessionData.Username);
 
-                // Validate expiry time
-                expiryMinutes = Math.Min(expiryMinutes, SessionPersistenceConfiguration.MaxSessionExpiryMinutes);
-                sessionData.ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes);
-
-                // Generate salt and IV for this session
-                sessionData.Salt = GenerateRandomBytes(SessionPersistenceConfiguration.SaltSize);
-                sessionData.IV = GenerateRandomBytes(SessionPersistenceConfiguration.IVSize);
-
-                // Derive encryption key from the provided key and salt
+                PrepareSessionData(sessionData, expiryMinutes);
                 var derivedKey = await DeriveKeyAsync(encryptionKey, sessionData.Salt);
 
-                // Serialize session data
-                var sessionJson = JsonSerializer.Serialize(sessionData, SessionPersistenceConfiguration.JsonOptions);
-                var sessionBytes = Encoding.UTF8.GetBytes(sessionJson);
-
-                // Encrypt the session data
-                var encryptedData = await EncryptDataAsync(sessionBytes, derivedKey, sessionData.IV);
-
-                // Create HMAC for integrity verification
-                var hmac = ComputeHMAC(encryptedData, derivedKey);
-
-                // Create the encrypted session container
-                var encryptedSession = new EncryptedSessionData
+                try
                 {
-                    EncryptedPayload = Convert.ToBase64String(encryptedData),
-                    IntegrityCheck = Convert.ToBase64String(hmac),
-                    Metadata = new SessionMetadata
-                    {
-                        SessionId = sessionData.SessionId,
-                        ExpiresAt = sessionData.ExpiresAt,
-                        Version = sessionData.Version
-                    }
-                };
+                    var encryptedSession = await CreateEncryptedSessionAsync(sessionData, derivedKey);
+                    await StoreSessionDataAsync(encryptedSession);
 
-                // Store in browser storage
-                await StoreSessionDataAsync(encryptedSession);
-
-                // Clear the derived key from memory
-                ClearByteArray(derivedKey);
-
-                _logger.LogInformation("Session persisted successfully with {Minutes} minute expiry", expiryMinutes);
-                return true;
+                    _logger.LogInformation("Session persisted successfully with {Minutes} minute expiry", expiryMinutes);
+                    return true;
+                }
+                finally
+                {
+                    ClearByteArray(derivedKey);
+                }
             }, "Persist session");
 
             return result.Match(
@@ -105,30 +75,22 @@ namespace NoLock.Social.Core.Identity.Services
             {
                 _logger.LogDebug("Retrieving persisted session");
 
-                // Get session data from storage
-                var storageType = _useSessionStorage ? "sessionStorage" : "localStorage";
-                var encryptedJson = await _jsRuntime.InvokeAsync<string?>($"{storageType}.getItem", StorageKey);
-
+                var encryptedJson = await RetrieveStoredSessionAsync();
                 if (string.IsNullOrEmpty(encryptedJson))
                 {
                     _logger.LogDebug("No persisted session found");
                     return null;
                 }
 
-                var encryptedSession = JsonSerializer.Deserialize<EncryptedSessionData>(
-                    encryptedJson, SessionPersistenceConfiguration.JsonOptions);
-
+                var encryptedSession = DeserializeEncryptedSession(encryptedJson);
                 if (encryptedSession == null)
                 {
                     _logger.LogWarning("Failed to deserialize persisted session");
                     return null;
                 }
 
-                // Check if session has expired
-                if (encryptedSession.Metadata.ExpiresAt <= DateTime.UtcNow)
+                if (await IsSessionExpiredAsync(encryptedSession))
                 {
-                    _logger.LogInformation("Persisted session has expired");
-                    await ClearPersistedSessionAsync();
                     return null;
                 }
 
@@ -225,17 +187,7 @@ namespace NoLock.Social.Core.Identity.Services
                 if (session == null)
                     return;
 
-                // Update expiry time
-                session.Metadata.ExpiresAt = session.Metadata.ExpiresAt.AddMinutes(additionalMinutes);
-
-                // Ensure we don't exceed max expiry
-                var maxExpiry = DateTime.UtcNow.AddMinutes(SessionPersistenceConfiguration.MaxSessionExpiryMinutes);
-                if (session.Metadata.ExpiresAt > maxExpiry)
-                {
-                    session.Metadata.ExpiresAt = maxExpiry;
-                }
-
-                // Re-store the session with updated metadata
+                UpdateSessionExpiry(session.Metadata, additionalMinutes);
                 await StoreSessionDataAsync(session);
 
                 _logger.LogInformation("Session extended until {ExpiryTime}", session.Metadata.ExpiresAt);
@@ -264,6 +216,93 @@ namespace NoLock.Social.Core.Identity.Services
         }
 
         #region Private Helper Methods
+
+        private static void ValidateSessionPersistenceParameters(PersistedSessionData sessionData, byte[] encryptionKey)
+        {
+            if (sessionData == null)
+                throw new ArgumentNullException(nameof(sessionData));
+            if (encryptionKey == null || encryptionKey.Length == 0)
+                throw new ArgumentException("Encryption key cannot be null or empty", nameof(encryptionKey));
+        }
+
+        private void PrepareSessionData(PersistedSessionData sessionData, int expiryMinutes)
+        {
+            // Validate and cap expiry time
+            var cappedExpiryMinutes = Math.Min(expiryMinutes, SessionPersistenceConfiguration.MaxSessionExpiryMinutes);
+            sessionData.ExpiresAt = DateTime.UtcNow.AddMinutes(cappedExpiryMinutes);
+
+            // Generate cryptographic material
+            sessionData.Salt = GenerateRandomBytes(SessionPersistenceConfiguration.SaltSize);
+            sessionData.IV = GenerateRandomBytes(SessionPersistenceConfiguration.IVSize);
+        }
+
+        private async Task<EncryptedSessionData> CreateEncryptedSessionAsync(PersistedSessionData sessionData, byte[] derivedKey)
+        {
+            // Serialize session data
+            var sessionJson = JsonSerializer.Serialize(sessionData, SessionPersistenceConfiguration.JsonOptions);
+            var sessionBytes = Encoding.UTF8.GetBytes(sessionJson);
+
+            // Encrypt the session data
+            var encryptedData = await EncryptDataAsync(sessionBytes, derivedKey, sessionData.IV);
+
+            // Create HMAC for integrity verification
+            var hmac = ComputeHMAC(encryptedData, derivedKey);
+
+            // Create the encrypted session container
+            return new EncryptedSessionData
+            {
+                EncryptedPayload = Convert.ToBase64String(encryptedData),
+                IntegrityCheck = Convert.ToBase64String(hmac),
+                Metadata = new SessionMetadata
+                {
+                    SessionId = sessionData.SessionId,
+                    ExpiresAt = sessionData.ExpiresAt,
+                    Version = sessionData.Version
+                }
+            };
+        }
+
+        private async Task<string?> RetrieveStoredSessionAsync()
+        {
+            var storageType = _useSessionStorage ? "sessionStorage" : "localStorage";
+            return await _jsRuntime.InvokeAsync<string?>($"{storageType}.getItem", StorageKey);
+        }
+
+        private static EncryptedSessionData? DeserializeEncryptedSession(string encryptedJson)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<EncryptedSessionData>(
+                    encryptedJson, SessionPersistenceConfiguration.JsonOptions);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<bool> IsSessionExpiredAsync(EncryptedSessionData encryptedSession)
+        {
+            if (encryptedSession.Metadata.ExpiresAt <= DateTime.UtcNow)
+            {
+                _logger.LogInformation("Persisted session has expired");
+                await ClearPersistedSessionAsync();
+                return true;
+            }
+            return false;
+        }
+
+        private static void UpdateSessionExpiry(SessionMetadata metadata, int additionalMinutes)
+        {
+            metadata.ExpiresAt = metadata.ExpiresAt.AddMinutes(additionalMinutes);
+
+            // Ensure we don't exceed max expiry
+            var maxExpiry = DateTime.UtcNow.AddMinutes(SessionPersistenceConfiguration.MaxSessionExpiryMinutes);
+            if (metadata.ExpiresAt > maxExpiry)
+            {
+                metadata.ExpiresAt = maxExpiry;
+            }
+        }
 
         private async Task StoreSessionDataAsync(EncryptedSessionData encryptedSession)
         {
