@@ -113,6 +113,16 @@ namespace NoLock.Social.Core.Cryptography.Services
         /// <inheritdoc />
         public async Task<bool> VerifySignatureAsync(string content, string signatureBase64, string publicKeyBase64)
         {
+            if (content == null)
+            {
+                throw new ArgumentNullException(nameof(content));
+            }
+            
+            if (string.IsNullOrEmpty(content))
+            {
+                throw new ArgumentException("Content cannot be empty", nameof(content));
+            }
+
             if (string.IsNullOrEmpty(signatureBase64))
             {
                 throw new ArgumentException("Signature base64 cannot be empty", nameof(signatureBase64));

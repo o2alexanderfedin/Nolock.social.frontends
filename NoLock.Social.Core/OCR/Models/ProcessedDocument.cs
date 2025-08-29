@@ -128,10 +128,8 @@ namespace NoLock.Social.Core.OCR.Models
         /// <returns>True if the receipt data is valid; otherwise, false.</returns>
         public override bool Validate()
         {
-            if (!base.Validate())
-            {
-                return false;
-            }
+            // Run base validation but continue with receipt-specific validation
+            bool baseIsValid = base.Validate();
 
             if (ReceiptData == null)
             {
@@ -157,9 +155,9 @@ namespace NoLock.Social.Core.OCR.Models
 
             // Validate that total equals subtotal + tax (with small tolerance for rounding)
             var calculatedTotal = ReceiptData.Subtotal + ReceiptData.TaxAmount;
-            if (Math.Abs(calculatedTotal - ReceiptData.Total) > 0.01m)
+            if (Math.Abs(calculatedTotal - ReceiptData.Total) >= 0.01m)
             {
-                Warnings.Add($"Total mismatch: Expected {calculatedTotal:C} but got {ReceiptData.Total:C}");
+                ValidationErrors.Add($"Total mismatch: Expected {calculatedTotal:C} but got {ReceiptData.Total:C}");
             }
 
             return ValidationErrors.Count == 0;
@@ -190,10 +188,8 @@ namespace NoLock.Social.Core.OCR.Models
         /// <returns>True if the check data is valid; otherwise, false.</returns>
         public override bool Validate()
         {
-            if (!base.Validate())
-            {
-                return false;
-            }
+            // Run base validation but continue with check-specific validation
+            bool baseIsValid = base.Validate();
 
             if (CheckData == null)
             {

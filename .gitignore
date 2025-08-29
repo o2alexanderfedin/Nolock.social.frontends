@@ -351,3 +351,15 @@ FodyWeavers.xsd
 .DS_Store
 # Test coverage reports
 CoverageReport/
+
+# Coverage Reports
+CoverageReport*/
+coverage-*/
+CoverageExclusions.proj
+*.cobertura.xml
+merged-coverage.cobertura.xml
+test_results.txt
+test-output.txt
+.runsettings
+coverage.runsettings
+*.md

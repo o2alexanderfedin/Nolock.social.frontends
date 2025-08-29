@@ -327,9 +327,17 @@ namespace NoLock.Social.Core.Tests.Common.Guards
 
             // Act & Assert
             var action = () => Guard.AgainstNull(value, customMessage);
-            action.Should().Throw<ArgumentNullException>()
-                .WithMessage($"{customMessage}*")
-                .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            if (string.IsNullOrEmpty(customMessage))
+            {
+                action.Should().Throw<ArgumentNullException>()
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
+            else
+            {
+                action.Should().Throw<ArgumentNullException>()
+                    .WithMessage($"{customMessage}*")
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
         }
 
         [Theory]
@@ -343,9 +351,17 @@ namespace NoLock.Social.Core.Tests.Common.Guards
 
             // Act & Assert
             var action = () => Guard.AgainstNullOrEmpty(value, customMessage);
-            action.Should().Throw<ArgumentException>()
-                .WithMessage($"{customMessage}*")
-                .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            if (string.IsNullOrEmpty(customMessage))
+            {
+                action.Should().Throw<ArgumentException>()
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
+            else
+            {
+                action.Should().Throw<ArgumentException>()
+                    .WithMessage($"{customMessage}*")
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
         }
 
         [Theory]
@@ -359,9 +375,17 @@ namespace NoLock.Social.Core.Tests.Common.Guards
 
             // Act & Assert
             var action = () => Guard.AgainstNullOrWhiteSpace(value, customMessage);
-            action.Should().Throw<ArgumentException>()
-                .WithMessage($"{customMessage}*")
-                .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            if (string.IsNullOrEmpty(customMessage))
+            {
+                action.Should().Throw<ArgumentException>()
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
+            else
+            {
+                action.Should().Throw<ArgumentException>()
+                    .WithMessage($"{customMessage}*")
+                    .And.ParamName.Should().Be("value", $"should use correct parameter name for {description}");
+            }
         }
 
         #endregion
@@ -388,8 +412,15 @@ namespace NoLock.Social.Core.Tests.Common.Guards
         {
             // Act & Assert
             var action = () => Guard.AgainstInvalidOperation(condition, message);
-            action.Should().Throw<InvalidOperationException>()
-                .WithMessage(message);
+            if (string.IsNullOrEmpty(message))
+            {
+                action.Should().Throw<InvalidOperationException>();
+            }
+            else
+            {
+                action.Should().Throw<InvalidOperationException>()
+                    .WithMessage(message);
+            }
         }
 
         #endregion

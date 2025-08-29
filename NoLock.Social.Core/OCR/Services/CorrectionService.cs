@@ -62,21 +62,44 @@ namespace NoLock.Social.Core.OCR.Services
             object originalValue, 
             double originalConfidence)
         {
+            ValidateInputParameters(documentId, fieldName);
+            var correctedDocument = GetCorrectionSession(documentId);
+            
+            var validationResult = await ValidateFieldAsync(fieldName, newValue, correctedDocument.OriginalDocument.DocumentType);
+            var correction = CreateFieldCorrection(fieldName, newValue, originalValue, originalConfidence, validationResult, correctedDocument.OriginalDocument.DocumentType);
+            
+            UpdateCorrectionSession(correctedDocument, fieldName, correction);
+            UpdatePendingCorrections(documentId, correction);
+            
+            return validationResult;
+        }
+
+        private void ValidateInputParameters(string documentId, string fieldName)
+        {
             if (string.IsNullOrWhiteSpace(documentId))
                 throw new ArgumentException("Document ID is required", nameof(documentId));
 
             if (string.IsNullOrWhiteSpace(fieldName))
                 throw new ArgumentException("Field name is required", nameof(fieldName));
+        }
 
+        private CorrectedProcessedDocument GetCorrectionSession(string documentId)
+        {
             if (!_correctionSessions.TryGetValue(documentId, out var correctedDocument))
                 throw new InvalidOperationException($"No correction session found for document {documentId}");
+                
+            return correctedDocument;
+        }
 
-            // Validate the corrected value
-            var documentType = correctedDocument.OriginalDocument.DocumentType;
-            var validationResult = await ValidateFieldAsync(fieldName, newValue, documentType);
-
-            // Create or update the field correction
-            var correction = new FieldCorrection
+        private FieldCorrection CreateFieldCorrection(
+            string fieldName, 
+            object newValue, 
+            object originalValue, 
+            double originalConfidence, 
+            FieldValidationResult validationResult, 
+            string documentType)
+        {
+            return new FieldCorrection
             {
                 FieldName = fieldName,
                 OriginalValue = originalValue,
@@ -89,24 +112,35 @@ namespace NoLock.Social.Core.OCR.Services
                 ValidationWarnings = validationResult.Warnings,
                 FieldType = DetermineFieldType(fieldName, documentType)
             };
+        }
 
-            // Update the correction session
+        private static void UpdateCorrectionSession(CorrectedProcessedDocument correctedDocument, string fieldName, FieldCorrection correction)
+        {
             correctedDocument.FieldCorrections[fieldName] = correction;
             correctedDocument.HasUnsavedChanges = true;
             correctedDocument.LastModifiedAt = DateTime.UtcNow;
+        }
 
-            // Update pending corrections
+        private void UpdatePendingCorrections(string documentId, FieldCorrection correction)
+        {
+            EnsurePendingCorrectionsListExists(documentId);
+            RemoveExistingPendingCorrection(documentId, correction.FieldName);
+            _pendingCorrections[documentId].Add(correction);
+        }
+
+        private void EnsurePendingCorrectionsListExists(string documentId)
+        {
             if (!_pendingCorrections.ContainsKey(documentId))
                 _pendingCorrections[documentId] = new List<FieldCorrection>();
+        }
 
+        private void RemoveExistingPendingCorrection(string documentId, string fieldName)
+        {
             var existingCorrection = _pendingCorrections[documentId].FirstOrDefault(c => c.FieldName == fieldName);
             if (existingCorrection != null)
             {
                 _pendingCorrections[documentId].Remove(existingCorrection);
             }
-            _pendingCorrections[documentId].Add(correction);
-
-            return validationResult;
         }
 
         /// <summary>

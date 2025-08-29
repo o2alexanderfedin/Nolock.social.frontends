@@ -24,8 +24,8 @@ namespace NoLock.Social.Core.Tests.OCR.Models
         }
 
         [Theory]
-        [InlineData("TRACK-123", "Complete", 95.5, 1500)]
-        [InlineData("TRACK-456", "Processing", 0.0, 0)]
+        [InlineData("TRACK-123", "Complete", 95.5, 1500L)]
+        [InlineData("TRACK-456", "Processing", 0.0, 0L)]
         [InlineData(null, null, null, null)]
         public void CacheMetadata_PropertiesSetCorrectly(
             string trackingId, 
@@ -105,9 +105,9 @@ namespace NoLock.Social.Core.Tests.OCR.Models
         }
 
         [Theory]
-        [InlineData(0, "Instant processing")]
-        [InlineData(1500, "Fast processing")]
-        [InlineData(10000, "Slow processing")]
+        [InlineData(0L, "Instant processing")]
+        [InlineData(1500L, "Fast processing")]
+        [InlineData(10000L, "Slow processing")]
         [InlineData(long.MaxValue, "Maximum time")]
         [InlineData(null, "Null time")]
         public void ProcessingTimeMs_VariousValues(long? processingTime, string scenario)
@@ -283,8 +283,8 @@ namespace NoLock.Social.Core.Tests.OCR.Models
         }
 
         [Theory]
-        [InlineData(85.5, 1500, true, "High confidence, fast processing")]
-        [InlineData(45.0, 5000, false, "Low confidence, slow processing")]
+        [InlineData(85.5, 1500L, true, "High confidence, fast processing")]
+        [InlineData(45.0, 5000L, false, "Low confidence, slow processing")]
         [InlineData(null, null, false, "No metrics available")]
         public void PerformanceMetrics_Evaluation(
             double? confidence, 
