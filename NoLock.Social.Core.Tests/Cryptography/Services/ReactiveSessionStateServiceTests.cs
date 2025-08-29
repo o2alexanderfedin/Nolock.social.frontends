@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -340,10 +341,12 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
             // Arrange
             var mockPrivateKeyBuffer = new Mock<ISecureBuffer>();
             var keyPair = new Ed25519KeyPair { PublicKey = new byte[32], PrivateKey = new byte[32] };
+            
+            // Set up subscription before starting session to capture all events
+            var receivedEvents = new List<SessionStateChangedEventArgs>();
+            using var subscription = _service.SessionStateChanges.Subscribe(args => receivedEvents.Add(args));
+            
             await _service.StartSessionAsync("testuser", keyPair, mockPrivateKeyBuffer.Object);
-
-            SessionStateChangedEventArgs receivedArgs = null;
-            _service.SessionStateChanges.Skip(1).Take(1).Subscribe(args => receivedArgs = args);
 
             // Act
             await _service.LockSessionAsync();
@@ -351,11 +354,13 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
             // Wait for the event to be processed
             await Task.Delay(100);
 
-            // Assert
-            receivedArgs.Should().NotBeNull();
-            receivedArgs.OldState.Should().Be(SessionState.Unlocked);
-            receivedArgs.NewState.Should().Be(SessionState.Locked);
-            receivedArgs.Reason.Should().Be("Session locked");
+            // Assert - the second event should be the lock event
+            receivedEvents.Should().HaveCountGreaterThanOrEqualTo(2);
+            var lockEvent = receivedEvents.Last();
+            lockEvent.Should().NotBeNull();
+            lockEvent.OldState.Should().Be(SessionState.Unlocked);
+            lockEvent.NewState.Should().Be(SessionState.Locked);
+            lockEvent.Reason.Should().Be("Session locked");
         }
 
         #endregion

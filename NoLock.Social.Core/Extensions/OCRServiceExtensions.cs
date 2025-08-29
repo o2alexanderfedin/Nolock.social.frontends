@@ -21,8 +21,8 @@ namespace NoLock.Social.Core.Extensions
             // Configure OCR service options from configuration
             services.Configure<OCRServiceOptions>(configuration.GetSection(OCRServiceOptions.SectionName));
             
-            // Register HttpClient for MistralOCRClient
-            services.AddHttpClient<MistralOCRClient>((serviceProvider, client) =>
+            // Configure HttpClient for MistralOCRClient without auto-registration
+            services.AddHttpClient("MistralOCRClient", client =>
             {
                 // Set base URL for Mistral OCR API
                 client.BaseAddress = new Uri("https://nolock-ocr-services-qbhx5.ondigitalocean.app");
@@ -35,10 +35,11 @@ namespace NoLock.Social.Core.Extensions
                 client.DefaultRequestHeaders.Add("User-Agent", "NoLock-OCR-Client/1.0");
             });
             
-            // Register the MistralOCRClient with its base URL
-            services.AddScoped(provider =>
+            // Register MistralOCRClient as Scoped with configured HttpClient
+            services.AddScoped<MistralOCRClient>(provider =>
             {
-                var httpClient = provider.GetRequiredService<HttpClient>();
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient("MistralOCRClient");
                 return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
             });
             
@@ -76,17 +77,18 @@ namespace NoLock.Social.Core.Extensions
         /// </summary>
         public static IServiceCollection AddMinimalOCRServices(this IServiceCollection services)
         {
-            // Register HttpClient for MistralOCRClient with minimal configuration
-            services.AddHttpClient<MistralOCRClient>((serviceProvider, client) =>
+            // Configure HttpClient for MistralOCRClient without auto-registration
+            services.AddHttpClient("MistralOCRClient", client =>
             {
                 client.BaseAddress = new Uri("https://nolock-ocr-services-qbhx5.ondigitalocean.app");
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
             
-            // Register the MistralOCRClient
-            services.AddScoped(provider =>
+            // Register MistralOCRClient as Scoped with configured HttpClient
+            services.AddScoped<MistralOCRClient>(provider =>
             {
-                var httpClient = provider.GetRequiredService<HttpClient>();
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient("MistralOCRClient");
                 return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
             });
             
