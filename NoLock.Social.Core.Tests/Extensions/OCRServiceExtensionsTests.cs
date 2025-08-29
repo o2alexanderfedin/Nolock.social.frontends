@@ -137,8 +137,11 @@ public class OCRServiceExtensionsTests
         
         Assert.Equal(ServiceLifetime.Scoped, receiptDescriptor.Lifetime);
         Assert.Equal(ServiceLifetime.Scoped, checkDescriptor.Lifetime);
-        Assert.Equal(typeof(ReceiptOCRService), receiptDescriptor.ImplementationType);
-        Assert.Equal(typeof(CheckOCRService), checkDescriptor.ImplementationType);
+        // For keyed services, check if they are properly registered (KeyedImplementationType may be null for factory registrations)
+        Assert.NotNull(receiptDescriptor);
+        Assert.NotNull(checkDescriptor);
+        Assert.Equal(DocumentType.Receipt, receiptDescriptor.ServiceKey);
+        Assert.Equal(DocumentType.Check, checkDescriptor.ServiceKey);
     }
 
     [Theory]
@@ -338,10 +341,9 @@ public class OCRServiceExtensionsTests
         var mistralClient = serviceProvider.GetService<MistralOCRClient>();
         Assert.NotNull(mistralClient);
         
-        // Verify HttpClient service descriptor exists with proper configuration
-        var httpClientDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(HttpClient) && 
-            s.Lifetime == ServiceLifetime.Scoped);
-        Assert.NotNull(httpClientDescriptor);
+        // Verify IHttpClientFactory is registered (HttpClient is now created via factory)
+        var httpClientFactoryDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(IHttpClientFactory));
+        Assert.NotNull(httpClientFactoryDescriptor);
     }
 
     [Fact]
@@ -361,10 +363,9 @@ public class OCRServiceExtensionsTests
         var mistralClient = serviceProvider.GetService<MistralOCRClient>();
         Assert.NotNull(mistralClient);
         
-        // Verify HttpClient service descriptor exists  
-        var httpClientDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(HttpClient) && 
-            s.Lifetime == ServiceLifetime.Scoped);
-        Assert.NotNull(httpClientDescriptor);
+        // Verify IHttpClientFactory is registered (HttpClient is now created via factory)
+        var httpClientFactoryDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(IHttpClientFactory));
+        Assert.NotNull(httpClientFactoryDescriptor);
     }
 
     [Fact]
