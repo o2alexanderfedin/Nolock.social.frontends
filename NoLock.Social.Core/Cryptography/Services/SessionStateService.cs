@@ -390,6 +390,11 @@ namespace NoLock.Social.Core.Cryptography.Services
 
         public TimeSpan GetRemainingTime()
         {
+            if (_disposed)
+            {
+                return TimeSpan.Zero;
+            }
+
             _lock.EnterReadLock();
             try
             {

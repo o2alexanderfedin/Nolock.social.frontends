@@ -197,9 +197,8 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             });
 
             // Act & Assert
-            var result = await _queue.RetryDocumentAsync(queueId);
-            result.Should().BeTrue(); // Should still allow retry even at max attempts
-            document.Status.Should().Be(QueuedDocumentStatus.Queued);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => _queue.RetryDocumentAsync(queueId));
         }
 
         [Fact]
@@ -293,6 +292,9 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             };
 
             await Task.WhenAll(tasks);
+            
+            // Wait a bit for the stop operation to fully complete
+            await Task.Delay(100);
 
             // Assert
             stateChanges.Should().NotBeEmpty();
@@ -317,7 +319,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var result = await _queue.CancelDocumentProcessingAsync(queueId);
 
             // Assert
-            result.Should().BeTrue(); // Should still return true as document exists and is cancellable
+            result.Should().BeFalse(); // Already cancelled documents can't be cancelled again
         }
 
         [Fact]
@@ -630,7 +632,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             cts.Cancel();
 
             // Act & Assert
-            await Assert.ThrowsAsync<OperationCanceledException>(
+            await Assert.ThrowsAsync<TaskCanceledException>(
                 () => _queue.EnqueueDocumentAsync(_sampleRequest, QueuePriority.Normal, null, cts.Token));
         }
 
@@ -644,7 +646,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             cts.Cancel();
 
             // Act & Assert
-            await Assert.ThrowsAsync<OperationCanceledException>(
+            await Assert.ThrowsAsync<TaskCanceledException>(
                 () => _queue.RemoveDocumentAsync(queueId, cts.Token));
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -797,6 +798,361 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception, string>>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task VerifySignedContentAsync_WhenFailed_ShouldLogDebugAndWarning()
+        {
+            // Arrange
+            var signedTarget = new SignedTarget
+            {
+                Algorithm = "ECDSA-P256",
+                Version = "1.0",
+                TargetHash = new byte[32],
+                Signature = new byte[64],
+                PublicKey = new byte[91]
+            };
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(false);
+
+            // Act
+            await _service.VerifySignedContentAsync(signedTarget);
+
+            // Assert
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Debug,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Verifying signed content with algorithm")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Signature verification failed")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task VerifySignatureAsync_ShouldLogDebugMessages()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(expectedHash);
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            // Act
+            await _service.VerifySignatureAsync(content, signature, publicKey);
+
+            // Assert
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Debug,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Starting signature verification")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Debug,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Computing SHA-256 hash")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Debug,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Verifying ECDSA P-256 signature")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task VerifySignedContentAsync_ShouldLogDetailedDebugForSignedTarget()
+        {
+            // Arrange
+            var signedTarget = new SignedTarget
+            {
+                Algorithm = "ECDSA-P256",
+                Version = "1.0",
+                TargetHash = new byte[32],
+                Signature = new byte[64],
+                PublicKey = new byte[91]
+            };
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            // Act
+            await _service.VerifySignedContentAsync(signedTarget);
+
+            // Assert
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Debug,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Verifying ECDSA P-256 signature against target hash")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+        }
+
+        #endregion
+
+        #region Timeout and Cancellation Tests
+
+        [Fact]
+        public async Task VerifySignatureAsync_WhenCryptoServiceDelays_ShouldNotTimeout()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .Returns(async () =>
+                {
+                    await Task.Delay(100); // Simulate small delay
+                    return expectedHash;
+                });
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Returns(async () =>
+                {
+                    await Task.Delay(100); // Simulate small delay
+                    return true;
+                });
+
+            // Act
+            var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+
+            // Assert
+            result.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task VerifySignatureAsync_WithSlowCryptoOperations_ShouldEventuallyComplete()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+            var expectedHash = new byte[32];
+
+            // Setup slower operations
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .Returns(async () =>
+                {
+                    await Task.Delay(50);
+                    return expectedHash;
+                });
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Returns(async () =>
+                {
+                    await Task.Delay(50);
+                    return false;
+                });
+
+            // Act & Assert
+            var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+            result.Should().BeFalse();
+        }
+
+        #endregion
+
+        #region Additional Security Tests
+
+        [Fact]
+        public async Task VerifySignatureAsync_WithDifferentKeySizesAboveMinimum_ShouldSucceed()
+        {
+            // Arrange & Act & Assert
+            var testCases = new[]
+            {
+                new { SignatureSize = 64, PublicKeySize = 80, Description = "Minimum sizes" },
+                new { SignatureSize = 64, PublicKeySize = 91, Description = "Standard ECDSA sizes" },
+                new { SignatureSize = 128, PublicKeySize = 150, Description = "Larger sizes" },
+                new { SignatureSize = 256, PublicKeySize = 256, Description = "Very large sizes" }
+            };
+
+            foreach (var testCase in testCases)
+            {
+                // Arrange
+                var content = "test content";
+                var signature = new byte[testCase.SignatureSize];
+                var publicKey = new byte[testCase.PublicKeySize];
+                var expectedHash = new byte[32];
+
+                _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                    .ReturnsAsync(expectedHash);
+
+                _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                    .ReturnsAsync(true);
+
+                // Act
+                var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+
+                // Assert
+                result.Should().BeTrue(testCase.Description);
+            }
+        }
+
+        [Fact]
+        public async Task VerifySignatureAsync_WithZeroFilledSignatureAndKey_ShouldProcessCorrectly()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64]; // All zeros
+            var publicKey = new byte[91]; // All zeros
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(expectedHash);
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(false); // Zero-filled signature should not verify
+
+            // Act
+            var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+
+            // Assert
+            result.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task VerifySignatureAsync_WithMaxFilledSignatureAndKey_ShouldProcessCorrectly()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = Enumerable.Range(0, 64).Select(i => (byte)255).ToArray(); // All 0xFF
+            var publicKey = Enumerable.Range(0, 91).Select(i => (byte)255).ToArray(); // All 0xFF
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(expectedHash);
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(false); // Max-filled signature should likely not verify for arbitrary content
+
+            // Act
+            var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+
+            // Assert
+            result.Should().BeFalse();
+        }
+
+        [Theory]
+        [InlineData("Content with null bytes\0in\0middle", "Content with null bytes")]
+        [InlineData("Content\twith\ttabs", "Content with tabs")]
+        [InlineData("Content\nwith\nnewlines\r\n", "Content with various newlines")]
+        [InlineData("Content with very long repeated text: " + 
+                    "This is a very long string that repeats multiple times to test handling of repetitive content patterns. " +
+                    "This is a very long string that repeats multiple times to test handling of repetitive content patterns. " +
+                    "This is a very long string that repeats multiple times to test handling of repetitive content patterns.", 
+                    "Content with repetitive patterns")]
+        public async Task VerifySignatureAsync_WithSpecialContentPatterns_ShouldProcessCorrectly(
+            string content, string scenario)
+        {
+            // Arrange
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(expectedHash);
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            // Act
+            var result = await _service.VerifySignatureAsync(content, signature, publicKey);
+
+            // Assert
+            result.Should().BeTrue(scenario);
+            _cryptoServiceMock.Verify(c => c.Sha256Async(It.Is<byte[]>(b => Encoding.UTF8.GetString(b) == content)), Times.Once);
+        }
+
+        #endregion
+
+        #region Error Message Classification Tests
+
+        [Theory]
+        [InlineData("hash", "Failed to hash content during verification")]
+        [InlineData("Hash", "Failed to hash content during verification")]
+        [InlineData("HASH", "Failed to hash content during verification")]
+        [InlineData("verif", "Failed to perform signature verification")]
+        [InlineData("Verif", "Failed to perform signature verification")]
+        [InlineData("VERIF", "Failed to perform signature verification")]
+        [InlineData("verification", "Failed to perform signature verification")]
+        [InlineData("other error", "Cryptographic operation failed during verification")]
+        public async Task VerifySignatureAsync_ShouldClassifyExceptionsCorrectly(string errorMessage, string expectedMessage)
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ThrowsAsync(new InvalidOperationException(errorMessage));
+
+            // Act & Assert
+            var exception = await _service.Invoking(s => s.VerifySignatureAsync(content, signature, publicKey))
+                .Should().ThrowAsync<CryptoException>();
+
+            exception.Which.Message.Should().Contain(expectedMessage);
+        }
+
+        #endregion
+
+        #region Performance Tests
+
+        [Fact]
+        public async Task VerifySignatureAsync_WithMultipleOperations_ShouldMaintainPerformance()
+        {
+            // Arrange
+            var content = "test content";
+            var signature = new byte[64];
+            var publicKey = new byte[91];
+            var expectedHash = new byte[32];
+
+            _cryptoServiceMock.Setup(c => c.Sha256Async(It.IsAny<byte[]>()))
+                .ReturnsAsync(expectedHash);
+
+            _cryptoServiceMock.Setup(c => c.VerifyECDSAAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            // Act
+            var tasks = new Task<bool>[10];
+            for (int i = 0; i < 10; i++)
+            {
+                tasks[i] = _service.VerifySignatureAsync($"{content}_{i}", signature, publicKey);
+            }
+
+            var results = await Task.WhenAll(tasks);
+
+            // Assert - Should complete without timeout
+            results.Should().OnlyContain(r => r == true);
+            tasks.Should().OnlyContain(t => t.IsCompletedSuccessfully);
         }
 
         #endregion

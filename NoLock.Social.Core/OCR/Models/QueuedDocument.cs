@@ -273,13 +273,15 @@ namespace NoLock.Social.Core.OCR.Models
 
             OcrStatus = statusResponse.Status;
             ProgressPercentage = statusResponse.ProgressPercentage;
+            
+            // Always store the OCR status response
+            ProcessingResult = statusResponse;
 
             // Map OCR status to queue status if appropriate
             switch (statusResponse.Status)
             {
                 case OCRProcessingStatus.Complete:
                     UpdateStatus(QueuedDocumentStatus.Completed);
-                    ProcessingResult = statusResponse;
                     break;
 
                 case OCRProcessingStatus.Failed:

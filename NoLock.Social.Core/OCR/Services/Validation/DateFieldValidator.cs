@@ -11,7 +11,7 @@ namespace NoLock.Social.Core.OCR.Services.Validation
 
         public async Task ValidateAsync(object value, string fieldName, FieldValidationResult result)
         {
-            if (!DateTime.TryParse(value.ToString(), out var dateValue))
+            if (value == null || !DateTime.TryParse(value.ToString(), out var dateValue))
             {
                 result.Errors.Add($"{fieldName} must be a valid date.");
                 result.IsValid = false;

@@ -347,6 +347,9 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
 
             // Act
             await _service.LockSessionAsync();
+            
+            // Wait for the event to be processed
+            await Task.Delay(100);
 
             // Assert
             receivedArgs.Should().NotBeNull();

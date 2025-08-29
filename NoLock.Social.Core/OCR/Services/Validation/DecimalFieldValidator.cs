@@ -11,7 +11,7 @@ namespace NoLock.Social.Core.OCR.Services.Validation
 
         public async Task ValidateAsync(object value, string fieldName, FieldValidationResult result)
         {
-            if (!decimal.TryParse(value.ToString(), out var decimalValue))
+            if (value == null || !decimal.TryParse(value.ToString(), out var decimalValue))
             {
                 result.Errors.Add($"{fieldName} must be a valid number.");
                 result.IsValid = false;

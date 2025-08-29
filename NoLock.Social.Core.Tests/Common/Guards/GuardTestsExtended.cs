@@ -326,7 +326,7 @@ namespace NoLock.Social.Core.Tests.Common.Guards
             string? value = null;
 
             // Act & Assert
-            var action = () => Guard.AgainstNull(value, customMessage);
+            var action = () => Guard.AgainstNull(value, message: customMessage);
             if (string.IsNullOrEmpty(customMessage))
             {
                 action.Should().Throw<ArgumentNullException>()
@@ -350,7 +350,7 @@ namespace NoLock.Social.Core.Tests.Common.Guards
             string value = "";
 
             // Act & Assert
-            var action = () => Guard.AgainstNullOrEmpty(value, customMessage);
+            var action = () => Guard.AgainstNullOrEmpty(value, message: customMessage);
             if (string.IsNullOrEmpty(customMessage))
             {
                 action.Should().Throw<ArgumentException>()
@@ -374,7 +374,7 @@ namespace NoLock.Social.Core.Tests.Common.Guards
             string value = "   ";
 
             // Act & Assert
-            var action = () => Guard.AgainstNullOrWhiteSpace(value, customMessage);
+            var action = () => Guard.AgainstNullOrWhiteSpace(value, message: customMessage);
             if (string.IsNullOrEmpty(customMessage))
             {
                 action.Should().Throw<ArgumentException>()

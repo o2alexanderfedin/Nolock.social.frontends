@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace NoLock.Social.Core.OCR.Models
 {
     /// <summary>
@@ -113,7 +115,7 @@ namespace NoLock.Social.Core.OCR.Models
             {
                 ValidationErrors.Add("Routing number is missing");
             }
-            else if (RoutingNumber.Length != 9)
+            else if (RoutingNumber.Length != 9 || !RoutingNumber.All(char.IsDigit))
             {
                 ValidationErrors.Add("Routing number must be 9 digits");
             }
@@ -151,6 +153,11 @@ namespace NoLock.Social.Core.OCR.Models
                 {
                     ValidationErrors.Add($"Amount mismatch: Numeric=${AmountNumeric.Value:F2}, Written=${AmountWrittenParsed.Value:F2}");
                 }
+            }
+            else
+            {
+                // If either amount is missing, they don't match
+                AmountsMatch = false;
             }
 
             return ValidationErrors.Count == 0;

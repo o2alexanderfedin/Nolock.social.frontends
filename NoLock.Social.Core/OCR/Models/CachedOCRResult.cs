@@ -65,7 +65,7 @@ namespace NoLock.Social.Core.OCR.Models
         /// Indicates whether this cache entry has expired.
         /// </summary>
         [JsonIgnore]
-        public bool IsExpired => DateTime.UtcNow > ExpiresAt;
+        public bool IsExpired => DateTime.UtcNow >= ExpiresAt;
 
         /// <summary>
         /// Gets the remaining time until expiration.
