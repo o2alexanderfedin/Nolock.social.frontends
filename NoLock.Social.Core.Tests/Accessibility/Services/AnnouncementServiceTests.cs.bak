@@ -427,9 +427,9 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
 
         [Theory]
         [InlineData(AnnouncementCategory.Error)]
-        [InlineData(AnnouncementCategory.General)]
-        [InlineData(AnnouncementCategory.Navigation)]
-        [InlineData(AnnouncementCategory.CameraOperation)]
+        [InlineData(AnnouncementCategory.Success)]
+        [InlineData(AnnouncementCategory.Warning)]
+        [InlineData(AnnouncementCategory.Information)]
         [InlineData(AnnouncementCategory.QualityFeedback)]
         public async Task AnnouncementCategories_AllEnumValuesSupported(AnnouncementCategory category)
         {

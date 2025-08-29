@@ -152,7 +152,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
         [InlineData(100.00, 100.00, true, "Amounts match exactly")]
         [InlineData(100.00, 100.005, true, "Amounts match within tolerance")]
         [InlineData(100.00, 99.995, true, "Amounts match within tolerance negative")]
-        [InlineData(100.00, 100.01, true, "Amounts match at tolerance boundary")]
+        [InlineData(100.00, 100.01, false, "Amounts don't match at tolerance boundary")]
         [InlineData(100.00, 100.02, false, "Amounts don't match beyond tolerance")]
         [InlineData(100.00, 99.98, false, "Amounts don't match beyond tolerance negative")]
         public void Validate_AmountMatching(

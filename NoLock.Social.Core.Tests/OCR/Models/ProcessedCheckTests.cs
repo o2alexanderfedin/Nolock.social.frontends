@@ -68,7 +68,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             
             if (!isRoutingValid)
             {
-                Assert.Contains("Invalid routing number checksum", processedCheck.ValidationErrors);
+                Assert.Contains("Invalid routing number checksum.", processedCheck.ValidationErrors);
             }
             
             if (!amountsMatch)
@@ -98,7 +98,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
 
             // Assert
             Assert.False(result);
-            Assert.Contains("Check data is required", processedCheck.ValidationErrors);
+            Assert.Contains("Check data is required.", processedCheck.ValidationErrors);
         }
 
         [Fact]
@@ -129,9 +129,9 @@ namespace NoLock.Social.Core.Tests.OCR.Models
 
             // Assert
             Assert.False(result);
-            Assert.Contains("Document type is required", processedCheck.ValidationErrors);
-            Assert.Contains("Confidence score must be between 0 and 1", processedCheck.ValidationErrors);
-            Assert.Contains("Processed date cannot be in the future", processedCheck.ValidationErrors);
+            Assert.Contains("Document type is required.", processedCheck.ValidationErrors);
+            Assert.Contains("Confidence score must be between 0 and 1.", processedCheck.ValidationErrors);
+            Assert.Contains("Processed date cannot be in the future.", processedCheck.ValidationErrors);
         }
 
         [Fact]

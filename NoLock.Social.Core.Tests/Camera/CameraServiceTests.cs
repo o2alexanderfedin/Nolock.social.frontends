@@ -884,6 +884,155 @@ namespace NoLock.Social.Core.Tests.Camera
 
         #endregion
 
+        #region JavaScript Interop Error Handling Tests
+
+        [Fact]
+        public async Task StartStreamAsync_WithJSException_ThrowsException()
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<string>("cameraPermissions.getState", It.IsAny<object[]>()))
+                .ReturnsAsync("granted");
+
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("camera.startStream", It.IsAny<object[]>()))
+                .ThrowsAsync(new JSException("Camera initialization failed"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<JSException>(() => _sut.StartStreamAsync());
+        }
+
+        [Fact]
+        public async Task CaptureImageAsync_WithJSException_ThrowsException()
+        {
+            // Arrange
+            await StartTestStreamAsync();
+            
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("camera.captureImage", It.IsAny<object[]>()))
+                .ThrowsAsync(new JSException("Capture failed"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<JSException>(() => _sut.CaptureImageAsync());
+        }
+
+        [Theory]
+        [InlineData("camera.getTorchSupport", false)]
+        [InlineData("camera.getZoom", 1.0)]
+        [InlineData("camera.getMaxZoom", 3.0)]
+        public async Task CameraControlMethods_WithJSException_ReturnDefaultValues(string jsMethod, object expectedDefault)
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<It.IsAnyType>(jsMethod, It.IsAny<object[]>()))
+                .ThrowsAsync(new JSException("JS Error"));
+
+            // Act & Assert based on method
+            switch (jsMethod)
+            {
+                case "camera.getTorchSupport":
+                    var torchSupported = await _sut.IsTorchSupportedAsync();
+                    torchSupported.Should().Be((bool)expectedDefault);
+                    break;
+                case "camera.getZoom":
+                    var zoom = await _sut.GetZoomAsync();
+                    zoom.Should().Be((double)expectedDefault);
+                    break;
+                case "camera.getMaxZoom":
+                    var maxZoom = await _sut.GetMaxZoomAsync();
+                    maxZoom.Should().Be((double)expectedDefault);
+                    break;
+            }
+        }
+
+        [Fact]
+        public async Task GetAvailableCamerasAsync_WithJSException_ReturnsEmptyArray()
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<string[]>("camera.getAvailableCameras", It.IsAny<object[]>()))
+                .ThrowsAsync(new JSException("Enumeration failed"));
+
+            // Act
+            var cameras = await _sut.GetAvailableCamerasAsync();
+
+            // Assert
+            cameras.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task ValidateImageQualityAsync_WithJSInteropFailure_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var image = new CapturedImage { ImageData = "base64data" };
+            
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("imageQuality.detectBlur", It.IsAny<object[]>()))
+                .ThrowsAsync(new JSException("Quality analysis failed"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.ValidateImageQualityAsync(image));
+        }
+
+        [Fact]
+        public async Task StartStreamAsync_WithNullStreamData_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<string>("cameraPermissions.getState", It.IsAny<object[]>()))
+                .ReturnsAsync("granted");
+
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<object>("camera.startStream", It.IsAny<object[]>()))
+                .ReturnsAsync((object)null!);
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.StartStreamAsync());
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(0)]
+        [InlineData(1000)]
+        public async Task SetZoomAsync_WithInvalidZoomBounds_ReturnsFalse(double invalidZoom)
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<double>("camera.getMaxZoom", It.IsAny<object[]>()))
+                .ReturnsAsync(3.0);
+
+            // Act
+            var result = await _sut.SetZoomAsync(invalidZoom);
+
+            // Assert - Should return false for out-of-bounds values
+            if (invalidZoom < 1.0 || invalidZoom > 3.0)
+            {
+                result.Should().BeFalse();
+            }
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData("nonexistent-session-id")]
+        public async Task SessionMethods_WithInvalidSessionId_HandleGracefully(string invalidSessionId)
+        {
+            // Act & Assert - These should throw ArgumentException for invalid session IDs
+            if (string.IsNullOrWhiteSpace(invalidSessionId))
+            {
+                await Assert.ThrowsAsync<ArgumentException>(() => 
+                    _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
+            }
+            else
+            {
+                // For nonexistent session, should throw InvalidOperationException
+                await Assert.ThrowsAsync<InvalidOperationException>(() => 
+                    _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
+            }
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private async Task StartTestStreamAsync()
