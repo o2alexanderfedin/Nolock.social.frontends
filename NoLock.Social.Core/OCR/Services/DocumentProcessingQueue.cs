@@ -94,44 +94,11 @@ namespace NoLock.Social.Core.OCR.Services
             Dictionary<string, object> metadata = null,
             CancellationToken cancellation = default)
         {
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
+            ValidateEnqueueRequest(request);
+            ValidateQueueState();
 
-            ThrowIfDisposed();
-
-            lock (_stateLock)
-            {
-                if (_currentState == QueueState.Stopping || _currentState == QueueState.Stopped)
-                    throw new InvalidOperationException("Queue is shutting down and cannot accept new documents.");
-            }
-
-            // Create queued document
             var queuedDocument = QueuedDocument.CreateFromRequest(request, priority, metadata, "DocumentProcessingQueue");
-
-            await _queueLock.WaitAsync(cancellation);
-            try
-            {
-                // Add to in-memory queue
-                _queuedDocuments.TryAdd(queuedDocument.QueueId, queuedDocument);
-                
-                // Update queue positions
-                UpdateQueuePositions();
-                
-                // Persist to IndexedDB
-                await PersistDocumentAsync(queuedDocument, cancellation);
-
-                // Add to processing queue for background processing
-                _processingQueue.Enqueue(queuedDocument.QueueId);
-
-                // Raise event
-                DocumentQueued?.Invoke(this, new QueuedDocumentEventArgs(queuedDocument));
-
-                return queuedDocument.QueueId;
-            }
-            finally
-            {
-                _queueLock.Release();
-            }
+            return await ProcessDocumentEnqueueAsync(queuedDocument, cancellation);
         }
 
         /// <inheritdoc />
@@ -163,36 +130,12 @@ namespace NoLock.Social.Core.OCR.Services
         /// <inheritdoc />
         public async Task<bool> RemoveDocumentAsync(string queueId, CancellationToken cancellation = default)
         {
-            if (string.IsNullOrEmpty(queueId))
-                throw new ArgumentNullException(nameof(queueId));
-
-            ThrowIfDisposed();
+            ValidateRemoveRequest(queueId);
 
             await _queueLock.WaitAsync(cancellation);
             try
             {
-                if (!_queuedDocuments.TryGetValue(queueId, out var document))
-                    return false;
-
-                // Cancel processing if currently processing
-                if (document.IsCancellable)
-                {
-                    document.Cancel();
-                }
-
-                // Remove from in-memory collections
-                _queuedDocuments.TryRemove(queueId, out _);
-                
-                // Update queue positions
-                UpdateQueuePositions();
-
-                // Remove from persistence
-                await RemoveFromPersistenceAsync(queueId, cancellation);
-
-                // Raise event
-                ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
-
-                return true;
+                return await ProcessDocumentRemovalAsync(queueId, cancellation);
             }
             finally
             {
@@ -217,31 +160,12 @@ namespace NoLock.Social.Core.OCR.Services
         /// <inheritdoc />
         public async Task<bool> CancelDocumentProcessingAsync(string queueId, CancellationToken cancellation = default)
         {
-            if (string.IsNullOrEmpty(queueId))
-                throw new ArgumentNullException(nameof(queueId));
-
-            ThrowIfDisposed();
+            ValidateCancelRequest(queueId);
 
             await _queueLock.WaitAsync(cancellation);
             try
             {
-                if (!_queuedDocuments.TryGetValue(queueId, out var document))
-                    return false;
-
-                if (!document.IsCancellable)
-                    return false;
-
-                // Cancel the document
-                document.Cancel();
-
-                // Update persistence
-                await PersistDocumentAsync(document, cancellation);
-
-                // Raise event
-                ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
-                ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
-
-                return true;
+                return await ProcessDocumentCancellationAsync(queueId, cancellation);
             }
             finally
             {
@@ -393,33 +317,16 @@ namespace NoLock.Social.Core.OCR.Services
             string errorCode = null,
             CancellationToken cancellation = default)
         {
-            if (!_queuedDocuments.TryGetValue(queueId, out var document))
+            if (!TryGetDocumentForUpdate(queueId, out var document))
                 return false;
 
             var previousStatus = document.Status;
-
-            // Update document status
-            document.UpdateStatus(status, errorMessage, errorCode);
-
-            // Update OCR status if provided
-            if (ocrStatus != null)
-            {
-                document.UpdateFromOcrStatus(ocrStatus);
-            }
-
-            // Update statistics
+            
+            UpdateDocumentWithNewStatus(document, status, errorMessage, errorCode, ocrStatus);
             UpdateStatistics(document, previousStatus);
-
-            // Persist changes
+            
             await PersistDocumentAsync(document, cancellation);
-
-            // Raise appropriate events
-            ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
-
-            if (document.IsCompleted)
-            {
-                ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
-            }
+            NotifyStatusChanged(document);
 
             return true;
         }
@@ -450,6 +357,76 @@ namespace NoLock.Social.Core.OCR.Services
         #endregion
 
         #region Private Methods
+
+        private void ValidateEnqueueRequest(OCRSubmissionRequest request)
+        {
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            ThrowIfDisposed();
+        }
+
+        private void ValidateQueueState()
+        {
+            lock (_stateLock)
+            {
+                if (_currentState == QueueState.Stopping || _currentState == QueueState.Stopped)
+                    throw new InvalidOperationException("Queue is shutting down and cannot accept new documents.");
+            }
+        }
+
+        private async Task<string> ProcessDocumentEnqueueAsync(QueuedDocument queuedDocument, CancellationToken cancellation)
+        {
+            await _queueLock.WaitAsync(cancellation);
+            try
+            {
+                AddDocumentToQueue(queuedDocument);
+                await PersistDocumentAsync(queuedDocument, cancellation);
+                NotifyDocumentQueued(queuedDocument);
+                return queuedDocument.QueueId;
+            }
+            finally
+            {
+                _queueLock.Release();
+            }
+        }
+
+        private void AddDocumentToQueue(QueuedDocument queuedDocument)
+        {
+            _queuedDocuments.TryAdd(queuedDocument.QueueId, queuedDocument);
+            UpdateQueuePositions();
+            _processingQueue.Enqueue(queuedDocument.QueueId);
+        }
+
+        private void NotifyDocumentQueued(QueuedDocument queuedDocument)
+        {
+            DocumentQueued?.Invoke(this, new QueuedDocumentEventArgs(queuedDocument));
+        }
+
+        private bool TryGetDocumentForUpdate(string queueId, out QueuedDocument document)
+        {
+            return _queuedDocuments.TryGetValue(queueId, out document);
+        }
+
+        private void UpdateDocumentWithNewStatus(QueuedDocument document, QueuedDocumentStatus status, string errorMessage, string errorCode, OCRStatusResponse ocrStatus)
+        {
+            document.UpdateStatus(status, errorMessage, errorCode);
+            
+            if (ocrStatus != null)
+            {
+                document.UpdateFromOcrStatus(ocrStatus);
+            }
+        }
+
+        private void NotifyStatusChanged(QueuedDocument document)
+        {
+            ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
+
+            if (document.IsCompleted)
+            {
+                ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
+            }
+        }
 
         private async Task PersistDocumentAsync(QueuedDocument document, CancellationToken cancellation)
         {
@@ -504,35 +481,126 @@ namespace NoLock.Social.Core.OCR.Services
         {
             lock (_statisticsLock)
             {
-                if (document.IsCompleted && previousStatus != document.Status)
+                if (ShouldUpdateStatistics(document, previousStatus))
                 {
-                    _statistics.TotalProcessed++;
-
-                    if (document.Status == QueuedDocumentStatus.Completed)
-                    {
-                        _statistics.SuccessfullyProcessed++;
-                    }
-                    else if (document.Status == QueuedDocumentStatus.Failed)
-                    {
-                        _statistics.FailedProcessing++;
-                    }
-
-                    // Update average processing time
-                    if (document.ProcessingTimeMs.HasValue && _statistics.TotalProcessed > 0)
-                    {
-                        _statistics.AverageProcessingTimeMs = 
-                            (_statistics.AverageProcessingTimeMs * (_statistics.TotalProcessed - 1) + document.ProcessingTimeMs.Value) 
-                            / _statistics.TotalProcessed;
-                    }
-
-                    // Calculate throughput
-                    var uptimeMinutes = DateTime.UtcNow.Subtract(_statistics.StartedAt).TotalMinutes;
-                    if (uptimeMinutes > 0)
-                    {
-                        _statistics.ThroughputPerMinute = _statistics.TotalProcessed / uptimeMinutes;
-                    }
+                    UpdateCompletionCounters(document);
+                    UpdateProcessingTimeStatistics(document);
+                    UpdateThroughputStatistics();
                 }
             }
+        }
+
+        private bool ShouldUpdateStatistics(QueuedDocument document, QueuedDocumentStatus previousStatus)
+        {
+            return document.IsCompleted && previousStatus != document.Status;
+        }
+
+        private void UpdateCompletionCounters(QueuedDocument document)
+        {
+            _statistics.TotalProcessed++;
+
+            if (document.Status == QueuedDocumentStatus.Completed)
+            {
+                _statistics.SuccessfullyProcessed++;
+            }
+            else if (document.Status == QueuedDocumentStatus.Failed)
+            {
+                _statistics.FailedProcessing++;
+            }
+        }
+
+        private void UpdateProcessingTimeStatistics(QueuedDocument document)
+        {
+            if (document.ProcessingTimeMs.HasValue && _statistics.TotalProcessed > 0)
+            {
+                _statistics.AverageProcessingTimeMs = 
+                    (_statistics.AverageProcessingTimeMs * (_statistics.TotalProcessed - 1) + document.ProcessingTimeMs.Value) 
+                    / _statistics.TotalProcessed;
+            }
+        }
+
+        private void UpdateThroughputStatistics()
+        {
+            var uptimeMinutes = DateTime.UtcNow.Subtract(_statistics.StartedAt).TotalMinutes;
+            if (uptimeMinutes > 0)
+            {
+                _statistics.ThroughputPerMinute = _statistics.TotalProcessed / uptimeMinutes;
+            }
+        }
+
+        private void ValidateRemoveRequest(string queueId)
+        {
+            if (string.IsNullOrEmpty(queueId))
+                throw new ArgumentNullException(nameof(queueId));
+
+            ThrowIfDisposed();
+        }
+
+        private async Task<bool> ProcessDocumentRemovalAsync(string queueId, CancellationToken cancellation)
+        {
+            if (!_queuedDocuments.TryGetValue(queueId, out var document))
+                return false;
+
+            CancelDocumentIfPossible(document);
+            RemoveDocumentFromQueue(queueId);
+            
+            await RemoveFromPersistenceAsync(queueId, cancellation);
+            NotifyDocumentRemovalCompleted(document);
+            
+            return true;
+        }
+
+        private void CancelDocumentIfPossible(QueuedDocument document)
+        {
+            if (document.IsCancellable)
+            {
+                document.Cancel();
+            }
+        }
+
+        private void RemoveDocumentFromQueue(string queueId)
+        {
+            _queuedDocuments.TryRemove(queueId, out _);
+            UpdateQueuePositions();
+        }
+
+        private void NotifyDocumentRemovalCompleted(QueuedDocument document)
+        {
+            ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
+        }
+
+        private void ValidateCancelRequest(string queueId)
+        {
+            if (string.IsNullOrEmpty(queueId))
+                throw new ArgumentNullException(nameof(queueId));
+
+            ThrowIfDisposed();
+        }
+
+        private async Task<bool> ProcessDocumentCancellationAsync(string queueId, CancellationToken cancellation)
+        {
+            if (!TryGetCancellableDocument(queueId, out var document))
+                return false;
+
+            document.Cancel();
+            await PersistDocumentAsync(document, cancellation);
+            NotifyDocumentCancellation(document);
+            
+            return true;
+        }
+
+        private bool TryGetCancellableDocument(string queueId, out QueuedDocument document)
+        {
+            if (!_queuedDocuments.TryGetValue(queueId, out document))
+                return false;
+
+            return document.IsCancellable;
+        }
+
+        private void NotifyDocumentCancellation(QueuedDocument document)
+        {
+            ProcessingStatusChanged?.Invoke(this, new QueuedDocumentEventArgs(document));
+            ProcessingCompleted?.Invoke(this, new QueuedDocumentEventArgs(document));
         }
 
         private void ThrowIfDisposed()

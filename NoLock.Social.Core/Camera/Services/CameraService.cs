@@ -6,6 +6,7 @@ using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Common.Guards;
 using NoLock.Social.Core.Resources;
 using NoLock.Social.Core.Common.Extensions;
+using NoLock.Social.Core.Common.Results;
 
 namespace NoLock.Social.Core.Camera.Services
 {
@@ -47,36 +48,15 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async Task<CameraPermissionState> GetPermissionStateAsync()
         {
-            // Call JavaScript to check current camera permission state
             var result = await _jsRuntime.InvokeAsync<string>("cameraPermissions.getState");
-            
-            // Parse result string to CameraPermissionState enum
-            _currentPermissionState = result?.ToLowerInvariant() switch
-            {
-                "granted" => CameraPermissionState.Granted,
-                "denied" => CameraPermissionState.Denied,
-                "prompt" => CameraPermissionState.Prompt,
-                "not-requested" => CameraPermissionState.NotRequested,
-                _ => CameraPermissionState.NotRequested
-            };
-            
+            _currentPermissionState = ParsePermissionStateResult(result, CameraPermissionState.NotRequested);
             return _currentPermissionState;
         }
 
         public async Task<CameraPermissionState> RequestPermission()
         {
-            // Call JavaScript to request camera permission
             var result = await _jsRuntime.InvokeAsync<string>("cameraPermissions.request");
-            
-            // Parse result string to CameraPermissionState enum
-            _currentPermissionState = result?.ToLowerInvariant() switch
-            {
-                "granted" => CameraPermissionState.Granted,
-                "denied" => CameraPermissionState.Denied,
-                "prompt" => CameraPermissionState.Prompt,
-                _ => CameraPermissionState.Denied
-            };
-            
+            _currentPermissionState = ParsePermissionStateResult(result, CameraPermissionState.Denied);
             return _currentPermissionState;
         }
 
@@ -264,23 +244,11 @@ namespace NoLock.Social.Core.Camera.Services
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
-                // Validate zoom level range
-                if (zoomLevel < 1.0)
-                {
+                if (!await IsZoomLevelValidAsync(zoomLevel))
                     return false;
-                }
 
-                // Get maximum zoom to validate upper bound
-                var maxZoom = await GetMaxZoomAsync();
-                if (zoomLevel > maxZoom)
-                {
-                    return false;
-                }
-
-                // Call JavaScript to set zoom level
                 var setResult = await _jsRuntime.InvokeAsync<bool>("camera.setZoom", zoomLevel);
                 
-                // Update settings state if successful
                 if (setResult)
                 {
                     _controlSettings.ZoomLevel = zoomLevel;
@@ -290,7 +258,6 @@ namespace NoLock.Social.Core.Camera.Services
             },
             "SetZoomAsync");
             
-            // Zoom control failed, return false
             return result.IsSuccess ? result.Value : false;
         }
 
@@ -371,123 +338,22 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async Task<ImageQualityResult> ValidateImageQualityAsync(CapturedImage capturedImage)
         {
-            // Validate input
-            if (capturedImage == null || string.IsNullOrEmpty(capturedImage?.ImageData))
-            {
-                throw new ArgumentException("Invalid captured image data", nameof(capturedImage));
-            }
+            ValidateImageInput(capturedImage);
 
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
-                // Perform individual quality analyses
-                var blurResult = await DetectBlurAsync(capturedImage.ImageData);
-                var lightingResult = await AssessLightingAsync(capturedImage.ImageData);
-                var edgeResult = await DetectDocumentEdgesAsync(capturedImage.ImageData);
-
-                // Calculate overall score (weighted average)
-                var overallScore = (int)((blurResult.BlurScore * 0.4 + 
-                                        lightingResult.LightingScore * 0.3 + 
-                                        edgeResult.EdgeScore * 0.3) * 100);
-
-                // Create result with combined analysis
-                var qualityResult = new ImageQualityResult
-                {
-                    OverallScore = overallScore,
-                    BlurScore = blurResult.BlurScore,
-                    LightingScore = lightingResult.LightingScore,
-                    EdgeDetectionScore = edgeResult.EdgeScore
-                };
-
-                // Add intelligent suggestions based on specific quality scores
-                var hasBlurIssue = blurResult.IsBlurry;
-                var hasLightingIssue = !lightingResult.IsAdequate;
-                var hasEdgeIssue = !edgeResult.HasClearEdges;
-
-                if (hasBlurIssue)
-                {
-                    qualityResult.Issues.Add("Image appears blurry");
-                    
-                    // Specific blur suggestions based on score severity
-                    if (blurResult.BlurScore < 0.3)
-                    {
-                        qualityResult.Suggestions.Add("Hold device much steadier - significant motion detected");
-                    }
-                    else if (blurResult.BlurScore < 0.4)
-                    {
-                        qualityResult.Suggestions.Add("Move closer to document for better focus");
-                    }
-                    else
-                    {
-                        qualityResult.Suggestions.Add("Hold camera steadier and tap to focus");
-                    }
-                }
-
-                if (hasLightingIssue)
-                {
-                    qualityResult.Issues.Add("Poor lighting conditions");
-                    
-                    // Specific lighting suggestions based on brightness and score
-                    if (lightingResult.Brightness < 100)
-                    {
-                        qualityResult.Suggestions.Add("Move to brighter location or enable torch/flash");
-                    }
-                    else if (lightingResult.Contrast < 0.4)
-                    {
-                        qualityResult.Suggestions.Add("Avoid shadows and ensure even lighting");
-                    }
-                    else
-                    {
-                        qualityResult.Suggestions.Add("Improve lighting conditions for better clarity");
-                    }
-                }
-
-                if (hasEdgeIssue)
-                {
-                    qualityResult.Issues.Add("Document edges not clearly detected");
-                    
-                    // Specific edge detection suggestions based on score and confidence
-                    if (edgeResult.Confidence < 0.4)
-                    {
-                        qualityResult.Suggestions.Add("Ensure document is flat and well-positioned");
-                    }
-                    else if (edgeResult.EdgeScore < 0.5)
-                    {
-                        qualityResult.Suggestions.Add("Position document fully within frame boundaries");
-                    }
-                    else
-                    {
-                        qualityResult.Suggestions.Add("Move camera to capture complete document outline");
-                    }
-                }
-
-                // Add combination suggestions for multiple issues
-                if (hasBlurIssue && hasLightingIssue)
-                {
-                    qualityResult.Suggestions.Add("Use tripod or stable surface in well-lit area");
-                }
+                var qualityAnalysis = await PerformQualityAnalysisAsync(capturedImage.ImageData);
+                var qualityResult = CreateQualityResult(qualityAnalysis);
                 
-                if (hasLightingIssue && hasEdgeIssue)
-                {
-                    qualityResult.Suggestions.Add("Move to better lighting and reposition document");
-                }
+                AddQualityIssuesAndSuggestions(qualityResult, qualityAnalysis);
                 
-                if (hasBlurIssue && hasEdgeIssue)
-                {
-                    qualityResult.Suggestions.Add("Stabilize camera and ensure document fits completely in frame");
-                }
-
                 return qualityResult;
             },
             "ValidateImageQualityAsync");
 
             if (result.IsFailure)
             {
-                // Handle JavaScript interop errors
-                if (result.Exception is JSException jsEx)
-                {
-                    throw new InvalidOperationException($"Image quality analysis failed: {jsEx.Message}", jsEx);
-                }
-                throw result.Exception;
+                HandleQualityAnalysisError(result);
             }
 
             return result.Value;
@@ -621,15 +487,11 @@ namespace NoLock.Social.Core.Camera.Services
         public async Task AddPageToSessionAsync(string sessionId, CapturedImage capturedImage)
         {
             ThrowIfDisposed();
-            
-            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
+            var session = ValidateAndGetSession(sessionId);
             
             if (capturedImage == null)
                 throw new ArgumentNullException(nameof(capturedImage));
                 
-            if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
-            
             // Add to memory session (existing functionality)
             session.Pages.Add(capturedImage);
             session.CurrentPageIndex = session.Pages.Count - 1;
@@ -696,40 +558,13 @@ namespace NoLock.Social.Core.Camera.Services
         public async Task ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex)
         {
             ThrowIfDisposed();
+            var session = ValidateAndGetSession(sessionId);
+            ValidateReorderIndices(fromIndex, toIndex, session.Pages.Count);
             
-            Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
-                
-            if (!_activeSessions.TryGetValue(sessionId, out var session))
-                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
-                
-            if (fromIndex < 0 || fromIndex >= session.Pages.Count)
-                throw new ArgumentOutOfRangeException(nameof(fromIndex));
-                
-            if (toIndex < 0 || toIndex >= session.Pages.Count)
-                throw new ArgumentOutOfRangeException(nameof(toIndex));
-                
-            if (fromIndex == toIndex)
-                return;
-                
-            var page = session.Pages[fromIndex];
-            session.Pages.RemoveAt(fromIndex);
-            session.Pages.Insert(toIndex, page);
+            if (fromIndex == toIndex) return;
             
-            // Update current page index if it was affected by the reorder
-            if (session.CurrentPageIndex == fromIndex)
-            {
-                session.CurrentPageIndex = toIndex;
-            }
-            else if (fromIndex < session.CurrentPageIndex && toIndex >= session.CurrentPageIndex)
-            {
-                session.CurrentPageIndex--;
-            }
-            else if (fromIndex > session.CurrentPageIndex && toIndex <= session.CurrentPageIndex)
-            {
-                session.CurrentPageIndex++;
-            }
-            
-            session.UpdateActivity(); // Track activity for timeout management
+            ReorderPages(session, fromIndex, toIndex);
+            session.UpdateActivity();
         }
 
         public async Task ClearDocumentSessionAsync(string sessionId)
@@ -842,6 +677,277 @@ namespace NoLock.Social.Core.Camera.Services
             if (_disposed)
             {
                 throw new ObjectDisposedException(nameof(CameraService));
+            }
+        }
+
+        // Helper methods for permission parsing
+        private static CameraPermissionState ParsePermissionStateResult(string result, CameraPermissionState defaultState)
+        {
+            return result?.ToLowerInvariant() switch
+            {
+                "granted" => CameraPermissionState.Granted,
+                "denied" => CameraPermissionState.Denied,
+                "prompt" => CameraPermissionState.Prompt,
+                "not-requested" => CameraPermissionState.NotRequested,
+                _ => defaultState
+            };
+        }
+
+        // Helper methods for camera controls
+        private async Task<bool> IsZoomLevelValidAsync(double zoomLevel)
+        {
+            if (zoomLevel < 1.0) return false;
+            
+            var maxZoom = await GetMaxZoomAsync();
+            return zoomLevel <= maxZoom;
+        }
+
+        // Helper methods for session management
+        private DocumentSession ValidateAndGetSession(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+                throw new ArgumentException(ValidationMessages.SessionIdRequired, nameof(sessionId));
+            
+            if (!_activeSessions.TryGetValue(sessionId, out var session))
+                throw new InvalidOperationException(string.Format(ValidationMessages.SessionNotFound, sessionId));
+                
+            return session;
+        }
+
+        private static void ValidateReorderIndices(int fromIndex, int toIndex, int pageCount)
+        {
+            if (fromIndex < 0 || fromIndex >= pageCount)
+                throw new ArgumentOutOfRangeException(nameof(fromIndex));
+                
+            if (toIndex < 0 || toIndex >= pageCount)
+                throw new ArgumentOutOfRangeException(nameof(toIndex));
+        }
+
+        private static void ReorderPages(DocumentSession session, int fromIndex, int toIndex)
+        {
+            var page = session.Pages[fromIndex];
+            session.Pages.RemoveAt(fromIndex);
+            session.Pages.Insert(toIndex, page);
+            
+            session.CurrentPageIndex = CalculateNewCurrentPageIndex(
+                session.CurrentPageIndex, fromIndex, toIndex);
+        }
+
+        private static int CalculateNewCurrentPageIndex(int currentIndex, int fromIndex, int toIndex)
+        {
+            if (currentIndex == fromIndex)
+                return toIndex;
+            
+            if (fromIndex < currentIndex && toIndex >= currentIndex)
+                return currentIndex - 1;
+            
+            if (fromIndex > currentIndex && toIndex <= currentIndex)
+                return currentIndex + 1;
+            
+            return currentIndex;
+        }
+
+        // Helper methods for ValidateImageQualityAsync
+        private static void ValidateImageInput(CapturedImage capturedImage)
+        {
+            if (capturedImage == null || string.IsNullOrEmpty(capturedImage?.ImageData))
+            {
+                throw new ArgumentException("Invalid captured image data", nameof(capturedImage));
+            }
+        }
+
+        private async Task<QualityAnalysisData> PerformQualityAnalysisAsync(string imageData)
+        {
+            // Call the methods directly without the defensive error handling - let exceptions bubble up
+            var blurResult = await DetectBlurDirectAsync(imageData);
+            var lightingResult = await AssessLightingDirectAsync(imageData);
+            var edgeResult = await DetectDocumentEdgesDirectAsync(imageData);
+
+            return new QualityAnalysisData(blurResult, lightingResult, edgeResult);
+        }
+
+        private async Task<BlurDetectionResult> DetectBlurDirectAsync(string imageData)
+        {
+            var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectBlur", imageData);
+            
+            var blurScore = jsResult?.blurScore ?? 0.0;
+            var threshold = jsResult?.threshold ?? 0.5;
+            
+            return new BlurDetectionResult
+            {
+                BlurScore = blurScore,
+                BlurThreshold = threshold,
+                IsBlurry = blurScore < threshold
+            };
+        }
+
+        private async Task<LightingQualityResult> AssessLightingDirectAsync(string imageData)
+        {
+            var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.assessLighting", imageData);
+            
+            var lightingScore = jsResult?.lightingScore ?? 0.0;
+            var brightness = jsResult?.brightness ?? 128.0;
+            var contrast = jsResult?.contrast ?? 0.5;
+            
+            return new LightingQualityResult
+            {
+                LightingScore = lightingScore,
+                Brightness = brightness,
+                Contrast = contrast,
+                IsAdequate = lightingScore >= 0.6
+            };
+        }
+
+        private async Task<EdgeDetectionResult> DetectDocumentEdgesDirectAsync(string imageData)
+        {
+            var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectEdges", imageData);
+            
+            var edgeScore = jsResult?.edgeScore ?? 0.0;
+            var edgeCount = jsResult?.edgeCount ?? 0;
+            var confidence = jsResult?.confidence ?? 0.0;
+            
+            return new EdgeDetectionResult
+            {
+                EdgeScore = edgeScore,
+                EdgeCount = edgeCount,
+                Confidence = confidence,
+                HasClearEdges = edgeScore >= 0.7 && confidence >= 0.6
+            };
+        }
+
+        private static ImageQualityResult CreateQualityResult(QualityAnalysisData analysis)
+        {
+            var overallScore = CalculateOverallScore(analysis);
+            
+            return new ImageQualityResult
+            {
+                OverallScore = overallScore,
+                BlurScore = analysis.BlurResult.BlurScore,
+                LightingScore = analysis.LightingResult.LightingScore,
+                EdgeDetectionScore = analysis.EdgeResult.EdgeScore
+            };
+        }
+
+        private static int CalculateOverallScore(QualityAnalysisData analysis)
+        {
+            return (int)((analysis.BlurResult.BlurScore * 0.4 +
+                         analysis.LightingResult.LightingScore * 0.3 +
+                         analysis.EdgeResult.EdgeScore * 0.3) * 100);
+        }
+
+        private static void AddQualityIssuesAndSuggestions(ImageQualityResult result, QualityAnalysisData analysis)
+        {
+            var issues = new QualityIssues(analysis);
+            
+            AddBlurIssuesAndSuggestions(result, analysis.BlurResult, issues.HasBlurIssue);
+            AddLightingIssuesAndSuggestions(result, analysis.LightingResult, issues.HasLightingIssue);
+            AddEdgeIssuesAndSuggestions(result, analysis.EdgeResult, issues.HasEdgeIssue);
+            AddCombinationSuggestions(result, issues);
+        }
+
+        private static void AddBlurIssuesAndSuggestions(ImageQualityResult result, BlurDetectionResult blurResult, bool hasBlurIssue)
+        {
+            if (!hasBlurIssue) return;
+            
+            result.Issues.Add("Image appears blurry");
+            
+            if (blurResult.BlurScore < 0.3)
+            {
+                result.Suggestions.Add("Hold device much steadier - significant motion detected");
+            }
+            else if (blurResult.BlurScore < 0.4)
+            {
+                result.Suggestions.Add("Move closer to document for better focus");
+            }
+            else
+            {
+                result.Suggestions.Add("Hold camera steadier and tap to focus");
+            }
+        }
+
+        private static void AddLightingIssuesAndSuggestions(ImageQualityResult result, LightingQualityResult lightingResult, bool hasLightingIssue)
+        {
+            if (!hasLightingIssue) return;
+            
+            result.Issues.Add("Poor lighting conditions");
+            
+            if (lightingResult.Brightness < 100)
+            {
+                result.Suggestions.Add("Move to brighter location or enable torch/flash");
+            }
+            else if (lightingResult.Contrast < 0.4)
+            {
+                result.Suggestions.Add("Avoid shadows and ensure even lighting");
+            }
+            else
+            {
+                result.Suggestions.Add("Improve lighting conditions for better clarity");
+            }
+        }
+
+        private static void AddEdgeIssuesAndSuggestions(ImageQualityResult result, EdgeDetectionResult edgeResult, bool hasEdgeIssue)
+        {
+            if (!hasEdgeIssue) return;
+            
+            result.Issues.Add("Document edges not clearly detected");
+            
+            if (edgeResult.Confidence < 0.4)
+            {
+                result.Suggestions.Add("Ensure document is flat and well-positioned");
+            }
+            else if (edgeResult.EdgeScore < 0.5)
+            {
+                result.Suggestions.Add("Position document fully within frame boundaries");
+            }
+            else
+            {
+                result.Suggestions.Add("Move camera to capture complete document outline");
+            }
+        }
+
+        private static void AddCombinationSuggestions(ImageQualityResult result, QualityIssues issues)
+        {
+            if (issues.HasBlurIssue && issues.HasLightingIssue)
+            {
+                result.Suggestions.Add("Use tripod or stable surface in well-lit area");
+            }
+            
+            if (issues.HasLightingIssue && issues.HasEdgeIssue)
+            {
+                result.Suggestions.Add("Move to better lighting and reposition document");
+            }
+            
+            if (issues.HasBlurIssue && issues.HasEdgeIssue)
+            {
+                result.Suggestions.Add("Stabilize camera and ensure document fits completely in frame");
+            }
+        }
+
+        private static void HandleQualityAnalysisError(Result<ImageQualityResult> result)
+        {
+            if (result.Exception is JSException jsEx)
+            {
+                throw new InvalidOperationException($"Image quality analysis failed: {jsEx.Message}", jsEx);
+            }
+            throw result.Exception;
+        }
+
+        // Helper classes for quality analysis
+        private readonly record struct QualityAnalysisData(
+            BlurDetectionResult BlurResult,
+            LightingQualityResult LightingResult,
+            EdgeDetectionResult EdgeResult);
+
+        private readonly record struct QualityIssues(
+            bool HasBlurIssue,
+            bool HasLightingIssue,
+            bool HasEdgeIssue)
+        {
+            public QualityIssues(QualityAnalysisData analysis) : this(
+                analysis.BlurResult.IsBlurry,
+                !analysis.LightingResult.IsAdequate,
+                !analysis.EdgeResult.HasClearEdges)
+            {
             }
         }
     }

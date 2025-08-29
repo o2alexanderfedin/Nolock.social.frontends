@@ -63,8 +63,8 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             if (!expectValid)
             {
                 var expectedTotal = subtotal + tax;
-                Assert.Contains($"Total mismatch: Expected ${expectedTotal:C} but got ${total:C}", 
-                    processedReceipt.Warnings);
+                Assert.Contains($"Total mismatch: Expected {expectedTotal:C} but got {total:C}", 
+                    processedReceipt.ValidationErrors);
             }
         }
 
@@ -207,9 +207,9 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             processedReceipt.Validate();
 
             // Assert
-            Assert.Equal(2, processedReceipt.Warnings.Count);
+            Assert.Equal(1, processedReceipt.Warnings.Count);
             Assert.Contains("Pre-existing warning", processedReceipt.Warnings);
-            Assert.Contains("Total mismatch: Expected $108.00 but got $109.00", processedReceipt.Warnings);
+            Assert.Contains("Total mismatch: Expected $108.00 but got $109.00", processedReceipt.ValidationErrors);
         }
 
         [Fact]

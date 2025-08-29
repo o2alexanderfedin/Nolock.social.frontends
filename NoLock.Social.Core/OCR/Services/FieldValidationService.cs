@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using NoLock.Social.Core.OCR.Models;
+using NoLock.Social.Core.OCR.Services.Validation;
 
 namespace NoLock.Social.Core.OCR.Services
 {
@@ -10,16 +11,20 @@ namespace NoLock.Social.Core.OCR.Services
     public class FieldValidationService
     {
         private readonly Dictionary<string, FieldValidationRules> _fieldRulesCache = new();
+        private readonly FieldValidatorFactory _validatorFactory;
+        private readonly DocumentSpecificRulesHandler _documentRulesHandler;
+        private readonly FieldRulesFactory _fieldRulesFactory;
         
-        // Common validation patterns
-        private static readonly Dictionary<FieldType, string> ValidationPatterns = new()
+        /// <summary>
+        /// Initializes a new instance of the FieldValidationService class.
+        /// </summary>
+        public FieldValidationService()
         {
-            [FieldType.Email] = @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-            [FieldType.Phone] = @"^(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})$",
-            [FieldType.RoutingNumber] = @"^[0-9]{9}$",
-            [FieldType.AccountNumber] = @"^[0-9]{4,17}$",
-            [FieldType.PostalCode] = @"^[0-9]{5}(-[0-9]{4})?$"
-        };
+            _validatorFactory = new FieldValidatorFactory();
+            _documentRulesHandler = new DocumentSpecificRulesHandler();
+            _fieldRulesFactory = new FieldRulesFactory();
+        }
+
 
         /// <summary>
         /// Validates a field value against its type and document context.
@@ -78,7 +83,7 @@ namespace NoLock.Social.Core.OCR.Services
             if (_fieldRulesCache.TryGetValue(cacheKey, out var cachedRules))
                 return cachedRules;
 
-            var rules = CreateDefaultRulesForField(fieldName, documentType);
+            var rules = _fieldRulesFactory.CreateDefaultRules(fieldName, documentType);
             _fieldRulesCache[cacheKey] = rules;
             
             return await Task.FromResult(rules);
@@ -154,214 +159,10 @@ namespace NoLock.Social.Core.OCR.Services
 
         private async Task ValidateByFieldType(object value, FieldType fieldType, string fieldName, FieldValidationResult result)
         {
-            switch (fieldType)
-            {
-                case FieldType.Decimal:
-                case FieldType.Currency:
-                    await ValidateDecimalField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Integer:
-                    await ValidateIntegerField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Date:
-                case FieldType.DateTime:
-                    await ValidateDateField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Email:
-                    await ValidateEmailField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Phone:
-                    await ValidatePhoneField(value, fieldName, result);
-                    break;
-                
-                case FieldType.RoutingNumber:
-                    await ValidateRoutingNumberField(value, fieldName, result);
-                    break;
-                
-                case FieldType.AccountNumber:
-                    await ValidateAccountNumberField(value, fieldName, result);
-                    break;
-                
-                case FieldType.PostalCode:
-                    await ValidatePostalCodeField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Percentage:
-                    await ValidatePercentageField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Boolean:
-                    await ValidateBooleanField(value, fieldName, result);
-                    break;
-                
-                case FieldType.Text:
-                default:
-                    await ValidateTextField(value, fieldName, result);
-                    break;
-            }
+            var validator = _validatorFactory.GetValidator(fieldType);
+            await validator.ValidateAsync(value, fieldName, result);
         }
 
-        private async Task ValidateDecimalField(object value, string fieldName, FieldValidationResult result)
-        {
-            if (!decimal.TryParse(value.ToString(), out var decimalValue))
-            {
-                result.Errors.Add($"{fieldName} must be a valid number.");
-                result.IsValid = false;
-                return;
-            }
-
-            if (fieldName.ToLower().Contains("amount") || fieldName.ToLower().Contains("total") || fieldName.ToLower().Contains("price"))
-            {
-                var currencyResult = ValidateCurrencyAmount(decimalValue, fieldName);
-                result.Errors.AddRange(currencyResult.Errors);
-                result.Warnings.AddRange(currencyResult.Warnings);
-                if (!currencyResult.IsValid) result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateIntegerField(object value, string fieldName, FieldValidationResult result)
-        {
-            if (!int.TryParse(value.ToString(), out var intValue))
-            {
-                result.Errors.Add($"{fieldName} must be a valid whole number.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateDateField(object value, string fieldName, FieldValidationResult result)
-        {
-            if (!DateTime.TryParse(value.ToString(), out var dateValue))
-            {
-                result.Errors.Add($"{fieldName} must be a valid date.");
-                result.IsValid = false;
-                return;
-            }
-
-            // Check for reasonable date ranges
-            var now = DateTime.Now;
-            if (dateValue > now.AddDays(1))
-            {
-                result.Warnings.Add($"{fieldName} is in the future. Please verify the date is correct.");
-            }
-
-            if (dateValue < now.AddYears(-10))
-            {
-                result.Warnings.Add($"{fieldName} is more than 10 years old. Please verify the date is correct.");
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateEmailField(object value, string fieldName, FieldValidationResult result)
-        {
-            var email = value.ToString()!;
-            if (!Regex.IsMatch(email, ValidationPatterns[FieldType.Email], RegexOptions.IgnoreCase))
-            {
-                result.Errors.Add($"{fieldName} must be a valid email address.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidatePhoneField(object value, string fieldName, FieldValidationResult result)
-        {
-            var phone = value.ToString()!;
-            if (!Regex.IsMatch(phone, ValidationPatterns[FieldType.Phone]))
-            {
-                result.Errors.Add($"{fieldName} must be a valid phone number format.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateRoutingNumberField(object value, string fieldName, FieldValidationResult result)
-        {
-            var routingNumber = value.ToString()!;
-            if (!ValidateRoutingNumber(routingNumber))
-            {
-                result.Errors.Add($"{fieldName} is not a valid routing number.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateAccountNumberField(object value, string fieldName, FieldValidationResult result)
-        {
-            var accountNumber = value.ToString()!;
-            if (!Regex.IsMatch(accountNumber, ValidationPatterns[FieldType.AccountNumber]))
-            {
-                result.Errors.Add($"{fieldName} must be 4-17 digits.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidatePostalCodeField(object value, string fieldName, FieldValidationResult result)
-        {
-            var postalCode = value.ToString()!;
-            if (!Regex.IsMatch(postalCode, ValidationPatterns[FieldType.PostalCode]))
-            {
-                result.Errors.Add($"{fieldName} must be a valid ZIP code (e.g., 12345 or 12345-6789).");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidatePercentageField(object value, string fieldName, FieldValidationResult result)
-        {
-            if (!decimal.TryParse(value.ToString(), out var percentage))
-            {
-                result.Errors.Add($"{fieldName} must be a valid percentage.");
-                result.IsValid = false;
-                return;
-            }
-
-            if (percentage < 0 || percentage > 100)
-            {
-                result.Errors.Add($"{fieldName} must be between 0 and 100.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateBooleanField(object value, string fieldName, FieldValidationResult result)
-        {
-            var stringValue = value.ToString()!.ToLower();
-            if (!new[] { "true", "false", "yes", "no", "1", "0" }.Contains(stringValue))
-            {
-                result.Errors.Add($"{fieldName} must be true/false or yes/no.");
-                result.IsValid = false;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ValidateTextField(object value, string fieldName, FieldValidationResult result)
-        {
-            var text = value.ToString()!;
-            
-            // Check for potentially dangerous content
-            if (text.Contains('<') || text.Contains('>') || text.Contains("script"))
-            {
-                result.Warnings.Add($"{fieldName} contains special characters that may need review.");
-            }
-
-            await Task.CompletedTask;
-        }
 
         private async Task ApplyFieldSpecificRules(object value, FieldValidationRules rules, FieldValidationResult result)
         {
@@ -411,160 +212,8 @@ namespace NoLock.Social.Core.OCR.Services
 
         private async Task ApplyDocumentSpecificRules(string fieldName, object value, string documentType, FieldValidationResult result)
         {
-            switch (documentType.ToLower())
-            {
-                case "receipt":
-                    await ApplyReceiptSpecificRules(fieldName, value, result);
-                    break;
-                
-                case "check":
-                    await ApplyCheckSpecificRules(fieldName, value, result);
-                    break;
-                
-                case "w4":
-                    await ApplyW4SpecificRules(fieldName, value, result);
-                    break;
-            }
+            await _documentRulesHandler.ApplyRulesAsync(fieldName, value, documentType, result);
         }
 
-        private async Task ApplyReceiptSpecificRules(string fieldName, object value, FieldValidationResult result)
-        {
-            switch (fieldName.ToLower())
-            {
-                case "total":
-                case "subtotal":
-                case "taxamount":
-                    if (decimal.TryParse(value.ToString(), out var amount) && amount < 0)
-                    {
-                        result.Errors.Add($"{fieldName} cannot be negative on a receipt.");
-                        result.IsValid = false;
-                    }
-                    break;
-                
-                case "transactiondate":
-                    if (DateTime.TryParse(value.ToString(), out var date) && date > DateTime.Now)
-                    {
-                        result.Warnings.Add("Transaction date is in the future.");
-                    }
-                    break;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ApplyCheckSpecificRules(string fieldName, object value, FieldValidationResult result)
-        {
-            switch (fieldName.ToLower())
-            {
-                case "amount":
-                    if (decimal.TryParse(value.ToString(), out var amount))
-                    {
-                        if (amount <= 0)
-                        {
-                            result.Errors.Add("Check amount must be greater than zero.");
-                            result.IsValid = false;
-                        }
-                        
-                        if (amount > 10000)
-                        {
-                            result.Warnings.Add("Check amount is unusually large. Please verify.");
-                        }
-                    }
-                    break;
-                
-                case "date":
-                    if (DateTime.TryParse(value.ToString(), out var checkDate))
-                    {
-                        if (checkDate > DateTime.Now.AddDays(180))
-                        {
-                            result.Warnings.Add("Check is post-dated more than 6 months in the future.");
-                        }
-                    }
-                    break;
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async Task ApplyW4SpecificRules(string fieldName, object value, FieldValidationResult result)
-        {
-            // W4-specific validation rules would go here
-            await Task.CompletedTask;
-        }
-
-        private FieldValidationRules CreateDefaultRulesForField(string fieldName, string documentType)
-        {
-            var rules = new FieldValidationRules
-            {
-                FieldName = fieldName,
-                FieldType = DetermineFieldType(fieldName),
-                IsRequired = DetermineIfRequired(fieldName, documentType)
-            };
-
-            // Set type-specific defaults
-            switch (rules.FieldType)
-            {
-                case FieldType.Email:
-                    rules.MaxLength = 254;
-                    rules.Pattern = ValidationPatterns[FieldType.Email];
-                    break;
-                
-                case FieldType.Phone:
-                    rules.MaxLength = 20;
-                    rules.Pattern = ValidationPatterns[FieldType.Phone];
-                    break;
-                
-                case FieldType.Currency:
-                    rules.MinValue = 0;
-                    rules.MaxValue = 1_000_000;
-                    break;
-                
-                case FieldType.Percentage:
-                    rules.MinValue = 0;
-                    rules.MaxValue = 100;
-                    break;
-                
-                case FieldType.Text:
-                    rules.MaxLength = 255;
-                    break;
-            }
-
-            return rules;
-        }
-
-        private FieldType DetermineFieldType(string fieldName)
-        {
-            var lowerName = fieldName.ToLower();
-            
-            if (lowerName.Contains("email")) return FieldType.Email;
-            if (lowerName.Contains("phone") || lowerName.Contains("tel")) return FieldType.Phone;
-            if (lowerName.Contains("amount") || lowerName.Contains("total") || lowerName.Contains("price") || lowerName.Contains("cost")) return FieldType.Currency;
-            if (lowerName.Contains("date") || lowerName.Contains("time")) return FieldType.Date;
-            if (lowerName.Contains("percent") || lowerName.Contains("rate")) return FieldType.Percentage;
-            if (lowerName.Contains("routing")) return FieldType.RoutingNumber;
-            if (lowerName.Contains("account") && lowerName.Contains("number")) return FieldType.AccountNumber;
-            if (lowerName.Contains("zip") || lowerName.Contains("postal")) return FieldType.PostalCode;
-            if (lowerName.Contains("quantity") || lowerName.Contains("count")) return FieldType.Integer;
-            
-            return FieldType.Text;
-        }
-
-        private bool DetermineIfRequired(string fieldName, string documentType)
-        {
-            var lowerName = fieldName.ToLower();
-            
-            // Common required fields
-            if (lowerName.Contains("total") || lowerName.Contains("amount")) return true;
-            if (lowerName.Contains("date")) return true;
-            
-            // Document-specific required fields
-            return documentType.ToLower() switch
-            {
-                "receipt" => lowerName is "storename" or "total" or "transactiondate",
-                "check" => lowerName is "amount" or "payto" or "date" or "routingnumber" or "accountnumber",
-                "w4" => lowerName is "name" or "ssn" or "address",
-                _ => false
-            };
-        }
     }
 }
