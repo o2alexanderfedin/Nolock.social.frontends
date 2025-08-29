@@ -69,9 +69,9 @@ namespace NoLock.Social.Core.Tests.OCR.Models
         }
 
         [Theory]
-        [InlineData(-100.00, "Total amount cannot be negative")]
-        [InlineData(-50.00, "Subtotal amount cannot be negative")]
-        [InlineData(-10.00, "Tax amount cannot be negative")]
+        [InlineData(-100.00, "Total amount cannot be negative.")]
+        [InlineData(-50.00, "Subtotal amount cannot be negative.")]
+        [InlineData(-10.00, "Tax amount cannot be negative.")]
         public void Validate_NegativeAmounts_AreInvalid(decimal negativeAmount, string expectedError)
         {
             // Arrange
@@ -111,7 +111,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
 
             // Assert
             Assert.False(result);
-            Assert.Contains("Receipt data is required", processedReceipt.ValidationErrors);
+            Assert.Contains("Receipt data is required.", processedReceipt.ValidationErrors);
         }
 
         [Fact]
@@ -136,9 +136,9 @@ namespace NoLock.Social.Core.Tests.OCR.Models
 
             // Assert
             Assert.False(result);
-            Assert.Contains("Document type is required", processedReceipt.ValidationErrors);
-            Assert.Contains("Confidence score must be between 0 and 1", processedReceipt.ValidationErrors);
-            Assert.Contains("Processed date cannot be in the future", processedReceipt.ValidationErrors);
+            Assert.Contains("Document type is required.", processedReceipt.ValidationErrors);
+            Assert.Contains("Confidence score must be between 0 and 1.", processedReceipt.ValidationErrors);
+            Assert.Contains("Processed date cannot be in the future.", processedReceipt.ValidationErrors);
         }
 
         [Theory]
@@ -177,11 +177,11 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             // Warning should only be added if difference > 0.01
             if (actualDifference > 0.01m)
             {
-                Assert.Contains("Total mismatch", processedReceipt.Warnings);
+                Assert.Contains("Total mismatch:", processedReceipt.Warnings);
             }
             else
             {
-                Assert.DoesNotContain("Total mismatch", processedReceipt.Warnings);
+                Assert.DoesNotContain("Total mismatch:", processedReceipt.Warnings);
             }
         }
 
@@ -209,7 +209,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             // Assert
             Assert.Equal(2, processedReceipt.Warnings.Count);
             Assert.Contains("Pre-existing warning", processedReceipt.Warnings);
-            Assert.Contains("Total mismatch", processedReceipt.Warnings);
+            Assert.Contains("Total mismatch: Expected $108.00 but got $109.00", processedReceipt.Warnings);
         }
 
         [Fact]
@@ -377,12 +377,12 @@ namespace NoLock.Social.Core.Tests.OCR.Models
 
             // Assert
             Assert.False(result);
-            Assert.Contains("Document type is required", processedReceipt.ValidationErrors);
-            Assert.Contains("Confidence score must be between 0 and 1", processedReceipt.ValidationErrors);
-            Assert.Contains("Processed date cannot be in the future", processedReceipt.ValidationErrors);
-            Assert.Contains("Total amount cannot be negative", processedReceipt.ValidationErrors);
-            Assert.Contains("Subtotal amount cannot be negative", processedReceipt.ValidationErrors);
-            Assert.Contains("Tax amount cannot be negative", processedReceipt.ValidationErrors);
+            Assert.Contains("Document type is required.", processedReceipt.ValidationErrors);
+            Assert.Contains("Confidence score must be between 0 and 1.", processedReceipt.ValidationErrors);
+            Assert.Contains("Processed date cannot be in the future.", processedReceipt.ValidationErrors);
+            Assert.Contains("Total amount cannot be negative.", processedReceipt.ValidationErrors);
+            Assert.Contains("Subtotal amount cannot be negative.", processedReceipt.ValidationErrors);
+            Assert.Contains("Tax amount cannot be negative.", processedReceipt.ValidationErrors);
         }
     }
 }

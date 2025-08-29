@@ -593,6 +593,125 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
 
         #endregion
 
+        #region Advanced Command Matching Tests
+
+        [Theory]
+        [InlineData("take a beautiful photo please", "take photo", true)]
+        [InlineData("could you please start the camera", "start camera", true)]
+        [InlineData("zoom camera in a bit", "zoom in", true)]
+        [InlineData("please help me zoom out", "zoom out", true)]
+        [InlineData("turn the torch on please", "torch on", true)]
+        [InlineData("I need to take a picture", "take picture", true)]
+        [InlineData("dance around", "take photo", false)]
+        [InlineData("zoom", "zoom in", false)] // Partial match should fail - missing keywords
+        [InlineData("turn on", "torch on", false)] // Missing 'torch' keyword
+        public async Task OnSpeechRecognized_ComplexPartialMatching_WorksCorrectly(string spokenText, string expectedCommand, bool shouldMatch)
+        {
+            // Arrange
+            var commandExecuted = false;
+            var commands = new Dictionary<string, Func<Task>>
+            {
+                { expectedCommand, async () => { commandExecuted = true; await Task.CompletedTask; } },
+                { "other command", async () => await Task.CompletedTask }
+            };
+            
+            await _service.SetCommandsAsync(commands);
+
+            // Act
+            await _service.OnSpeechRecognized(spokenText, 0.9);
+
+            // Assert
+            commandExecuted.Should().Be(shouldMatch);
+        }
+
+        [Fact]
+        public async Task OnSpeechRecognized_WithDisposedService_DoesNotProcess()
+        {
+            // Arrange
+            var commandExecuted = false;
+            var commands = new Dictionary<string, Func<Task>>
+            {
+                { "test command", async () => { commandExecuted = true; await Task.CompletedTask; } }
+            };
+            
+            await _service.SetCommandsAsync(commands);
+            await _service.DisposeAsync();
+
+            // Act
+            await _service.OnSpeechRecognized("test command", 0.9);
+
+            // Assert
+            commandExecuted.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task OnSpeechRecognized_CommandExecutionGeneratesProcessingError_FiresErrorEvent()
+        {
+            // Arrange
+            var commands = new Dictionary<string, Func<Task>>
+            {
+                { "error command", () => throw new InvalidOperationException("Processing error") }
+            };
+            
+            SpeechErrorEventArgs? errorArgs = null;
+            _service.OnSpeechError += (sender, args) => errorArgs = args;
+            
+            await _service.SetCommandsAsync(commands);
+
+            // Act
+            await _service.OnSpeechRecognized("error command", 0.9);
+
+            // Assert
+            errorArgs.Should().NotBeNull();
+            errorArgs!.ErrorMessage.Should().Contain("Processing error");
+            errorArgs.ErrorCode.Should().Be("PROCESSING_ERROR");
+        }
+
+        [Theory]
+        [InlineData(0.0)]
+        [InlineData(0.1)]
+        [InlineData(0.5)]
+        [InlineData(0.9)]
+        [InlineData(1.0)]
+        [InlineData(1.5)] // Above normal range
+        public async Task OnSpeechRecognized_VariousConfidenceLevels_ProcessedCorrectly(double confidence)
+        {
+            // Arrange
+            var commands = new Dictionary<string, Func<Task>>
+            {
+                { "test command", async () => await Task.CompletedTask }
+            };
+            
+            VoiceCommandEventArgs? eventArgs = null;
+            _service.OnCommandRecognized += (sender, args) => eventArgs = args;
+            
+            await _service.SetCommandsAsync(commands);
+
+            // Act
+            await _service.OnSpeechRecognized("test command", confidence);
+
+            // Assert
+            eventArgs.Should().NotBeNull();
+            eventArgs!.Confidence.Should().Be(confidence);
+        }
+
+        [Fact]
+        public async Task IsSpeechRecognitionSupportedAsync_WithGeneralException_ReturnsFalse()
+        {
+            // Arrange
+            _jsRuntimeMock
+                .Setup(x => x.InvokeAsync<bool>("speechRecognition.isSupported", It.IsAny<object[]>()))
+                .ThrowsAsync(new InvalidOperationException("General error"));
+
+            // Act
+            var result = await _service.IsSpeechRecognitionSupportedAsync();
+
+            // Assert
+            result.Should().BeFalse();
+        }
+
+        #endregion
+
         public void Dispose()
         {
             _service?.DisposeAsync().AsTask().GetAwaiter().GetResult();

@@ -433,7 +433,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var stats = await _queue.GetStatisticsAsync();
 
             // Assert
-            stats.TotalProcessed.Should().Be(successCount + failCount + cancelCount);
+            stats.TotalProcessed.Should().Be(successCount + failCount); // Cancelled documents are not counted as processed
             stats.SuccessfullyProcessed.Should().Be(successCount);
             stats.FailedProcessing.Should().Be(failCount);
             stats.AverageProcessingTimeMs.Should().BeGreaterThan(0);

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 using Moq;
 using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Accessibility.Services;
@@ -650,6 +651,178 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             // Act & Assert
             await _integration.DisposeAsync();
             await _integration.DisposeAsync(); // Should not throw
+        }
+
+        #endregion
+
+        #region Error Handling and Edge Case Tests
+
+        [Fact]
+        public async Task CameraCommandExecution_WithCameraServiceException_HandlesGracefully()
+        {
+            // Arrange
+            var captureCommand = await SetupAndGetCommand("capture");
+            
+            _cameraServiceMock
+                .Setup(x => x.CaptureImageAsync())
+                .ThrowsAsync(new InvalidOperationException("Camera not available"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => captureCommand());
+        }
+
+        [Fact]
+        public async Task ZoomCommands_WithZoomServiceException_HandlesGracefully()
+        {
+            // Arrange
+            var zoomInCommand = await SetupAndGetCommand("zoom in");
+            
+            _cameraServiceMock
+                .Setup(x => x.GetZoomAsync())
+                .ThrowsAsync(new JSException("JS Error"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<JSException>(() => zoomInCommand());
+        }
+
+        [Fact]
+        public async Task SwitchCamera_WithEmptyAvailableCameras_LogsWarningAndSkips()
+        {
+            // Arrange
+            var switchCommand = await SetupAndGetCommand("switch camera");
+            
+            _cameraServiceMock
+                .Setup(x => x.GetAvailableCamerasAsync())
+                .ReturnsAsync(Array.Empty<string>());
+
+            // Act
+            await switchCommand();
+
+            // Assert
+            _cameraServiceMock.Verify(x => x.SwitchCameraAsync(It.IsAny<string>()), Times.Never);
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("only one camera available")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task TorchCommands_WithServiceException_ThrowsException()
+        {
+            // Arrange
+            var torchOnCommand = await SetupAndGetCommand("torch on");
+            
+            _cameraServiceMock
+                .Setup(x => x.ToggleTorchAsync(true))
+                .ThrowsAsync(new NotSupportedException("Torch not supported"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<NotSupportedException>(() => torchOnCommand());
+        }
+
+        [Theory]
+        [InlineData("zoom in", 2.9, 3.0)] // Near max zoom
+        [InlineData("zoom out", 1.1, 1.0)] // Near min zoom
+        public async Task ZoomCommands_AtBoundaryValues_HandlesBoundariesCorrectly(string command, double currentZoom, double expectedZoom)
+        {
+            // Arrange
+            var zoomCommand = await SetupAndGetCommand(command);
+            
+            _cameraServiceMock
+                .Setup(x => x.GetZoomAsync())
+                .ReturnsAsync(currentZoom);
+            
+            _cameraServiceMock
+                .Setup(x => x.SetZoomAsync(expectedZoom))
+                .ReturnsAsync(true);
+
+            // Act
+            await zoomCommand();
+
+            // Assert
+            _cameraServiceMock.Verify(x => x.SetZoomAsync(expectedZoom), Times.Once);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenVoiceCommandServiceFails_ThrowsException()
+        {
+            // Arrange
+            var integration = new CameraVoiceCommandIntegration(
+                _voiceCommandServiceMock.Object,
+                _cameraServiceMock.Object,
+                _loggerMock.Object
+            );
+
+            _voiceCommandServiceMock
+                .Setup(x => x.SetCommandsAsync(It.IsAny<Dictionary<string, Func<Task>>>()))
+                .ThrowsAsync(new InvalidOperationException("Voice service error"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => integration.InitializeAsync());
+        }
+
+        [Fact]
+        public async Task StartListeningAsync_WhenVoiceServiceFails_ThrowsException()
+        {
+            // Arrange
+            _voiceCommandServiceMock
+                .Setup(x => x.SetCommandsAsync(It.IsAny<Dictionary<string, Func<Task>>>()))
+                .Returns(Task.CompletedTask);
+            
+            _voiceCommandServiceMock
+                .Setup(x => x.StartListeningAsync())
+                .ThrowsAsync(new InvalidOperationException("Cannot start listening"));
+
+            await _integration.InitializeAsync();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _integration.StartListeningAsync());
+        }
+
+        [Fact]
+        public async Task StopListeningAsync_WhenVoiceServiceFails_ThrowsException()
+        {
+            // Arrange
+            _voiceCommandServiceMock
+                .Setup(x => x.StopListeningAsync())
+                .ThrowsAsync(new InvalidOperationException("Cannot stop listening"));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _integration.StopListeningAsync());
+        }
+
+        [Fact]
+        public async Task DisposeAsync_WhenStopListeningThrows_LogsErrorButCompletes()
+        {
+            // Arrange
+            _voiceCommandServiceMock
+                .Setup(x => x.SetCommandsAsync(It.IsAny<Dictionary<string, Func<Task>>>()))
+                .Returns(Task.CompletedTask);
+            
+            _voiceCommandServiceMock
+                .Setup(x => x.IsListeningAsync())
+                .ReturnsAsync(true);
+            
+            _voiceCommandServiceMock
+                .Setup(x => x.StopListeningAsync())
+                .ThrowsAsync(new InvalidOperationException("Cannot stop"));
+            
+            await _integration.InitializeAsync();
+
+            // Act
+            await _integration.DisposeAsync();
+
+            // Assert
+            _loggerMock.Verify(x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error during camera voice command integration disposal")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
         }
 
         #endregion
