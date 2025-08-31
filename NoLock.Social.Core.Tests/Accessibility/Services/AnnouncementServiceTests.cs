@@ -516,8 +516,8 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
 
             // Assert - Should complete without memory issues
             // Due to concurrent execution, we might miss some events but should be close to the expected count
-            _capturedPoliteAnnouncements.Should().HaveCountGreaterOrEqualTo(largeNumberOfAnnouncements); // At least one event per message
-            _capturedPoliteAnnouncements.Should().HaveCountLessOrEqualTo(largeNumberOfAnnouncements * 2); // At most two events per message
+            _capturedPoliteAnnouncements.Count.Should().BeGreaterThanOrEqualTo(largeNumberOfAnnouncements); // At least one event per message
+            _capturedPoliteAnnouncements.Count.Should().BeLessThanOrEqualTo(largeNumberOfAnnouncements * 2); // At most two events per message
             
             // Verify final state is clear
             _service.GetCurrentPoliteAnnouncement().Should().BeEmpty();
