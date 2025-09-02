@@ -307,7 +307,11 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Don't auto-initialize camera, let user click Start Camera button
+        if (firstRender && LoginService.CurrentLoginState.IsLoggedIn)
+        {
+            // Auto-start the camera when the page loads
+            await InitializeCamera();
+        }
         await base.OnAfterRenderAsync(firstRender);
     }
 

@@ -1,0 +1,223 @@
+@page "/simplified-document-capture"
+@using NoLock.Social.Core.OCR.Interfaces
+@using NoLock.Social.Core.OCR.Models
+@using NoLock.Social.Core.Identity.Interfaces
+@using Microsoft.Extensions.Logging
+@using NoLock.Social.Core.Camera.Models
+@using NoLock.Social.Components
+@inject IOCRService OCRService
+@inject ILoginAdapterService LoginService
+@inject NavigationManager Navigation
+@inject ILogger<SimplifiedDocumentCapture> Logger
+@implements IDisposable
+
+<PageTitle>Simplified Document Capture</PageTitle>
+
+<div class="container-fluid">
+    <h1>Simplified Document Capture</h1>
+    
+    @if (!LoginService.CurrentLoginState.IsLoggedIn)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Please log in to capture documents.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Camera Section -->
+            <div class="col-lg-8">
+                <NoLock.Social.Components.SimpleCameraControl OnImageCaptured="@HandleImageCaptured" />
+            </div>
+            
+            <!-- Document Manager Section -->
+            <div class="col-lg-4">
+                <NoLock.Social.Components.DocumentManager @ref="documentManager" />
+                
+                
+                <!-- Process Document -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-lightning"></i> Actions
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-success w-100" @onclick="ProcessDocument" 
+                                disabled="@(!HasPages() || isProcessing)">
+                            @if (isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="bi bi-play-fill"></i> Process Document
+                        </button>
+                        
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger mt-3 mb-0">
+                                <i class="bi bi-exclamation-circle"></i> @errorMessage
+                            </div>
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success mt-3 mb-0">
+                                <i class="bi bi-check-circle"></i> @successMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private dynamic? documentManager;
+    private bool isProcessing;
+    private string? errorMessage;
+    private string? successMessage;
+    private IDisposable? loginStateSubscription;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to login state changes
+        loginStateSubscription = LoginService.LoginStateChanges
+            .Subscribe(change =>
+            {
+                if (!change.NewState.IsLoggedIn)
+                {
+                    // Navigate away if logged out
+                    Navigation.NavigateTo("/");
+                }
+            });
+    }
+
+    private void HandleImageCaptured(string base64Image)
+    {
+        // Clear any previous messages
+        errorMessage = null;
+        successMessage = null;
+        
+        // Add the captured image to the document manager
+        if (documentManager != null)
+        {
+            var capturedImage = new NoLock.Social.Core.Camera.Models.CapturedImage
+            {
+                ImageData = base64Image,
+                ImageUrl = base64Image.StartsWith("data:") ? base64Image : $"data:image/jpeg;base64,{base64Image}",
+                Width = 1920, // Default values, could be extracted from image
+                Height = 1080,
+                Quality = 100
+            };
+            documentManager.AddPage(capturedImage);
+        }
+        
+        Logger.LogInformation("Image captured and added to document manager");
+    }
+
+    private bool HasPages()
+    {
+        return documentManager?.CapturedPages?.Any() ?? false;
+    }
+
+    private async Task ProcessDocument()
+    {
+        if (documentManager == null || !HasPages())
+            return;
+
+        try
+        {
+            isProcessing = true;
+            errorMessage = null;
+            successMessage = null;
+            StateHasChanged();
+
+            var pages = (List<NoLock.Social.Core.Camera.Models.CapturedImage>)documentManager.CapturedPages;
+            var processedCount = 0;
+            var selectedDocumentType = (NoLock.Social.Core.OCR.Models.DocumentType)documentManager.GetSelectedDocumentType();
+
+            // Process each page through OCR
+            foreach (var page in pages)
+            {
+                try
+                {
+                    // Convert base64 to byte array
+                    var base64Data = page.ImageData;
+                    if (base64Data.Contains(","))
+                    {
+                        base64Data = base64Data.Split(',')[1]; // Remove data URL prefix
+                    }
+                    var imageBytes = Convert.FromBase64String(base64Data);
+
+                    // Create OCR submission request
+                    var submission = new OCRSubmissionRequest
+                    {
+                        DocumentType = selectedDocumentType,
+                        ImageData = imageBytes
+                    };
+
+                    // Submit for OCR processing
+                    await OCRService.SubmitDocumentAsync(submission);
+                    processedCount++;
+                    
+                    Logger.LogInformation("Successfully processed page {PageNumber} as {DocumentType}", 
+                        processedCount, selectedDocumentType);
+                }
+                catch (HttpRequestException error) when (error.Message.Contains("Failed to fetch"))
+                {
+                    errorMessage = "OCR service is not accessible due to CORS policy. This is a known limitation when running locally.";
+                    Logger.LogError(error, "CORS error calling OCR API");
+                    break;
+                }
+                catch (Exception error)
+                {
+                    errorMessage = $"Error processing page {processedCount + 1}: {error.Message}";
+                    Logger.LogError(error, "Error processing page {PageNumber}", processedCount + 1);
+                    break;
+                }
+            }
+
+            // Show success message if all pages processed
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                successMessage = $"Successfully processed {processedCount} page(s)";
+                
+                // Clear the document manager after successful processing
+                ((List<NoLock.Social.Core.Camera.Models.CapturedImage>)documentManager.CapturedPages).Clear();
+                
+                // Optionally navigate away after a delay
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(2000);
+                    await InvokeAsync(() =>
+                    {
+                        Navigation.NavigateTo("/");
+                    });
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to process document: {ex.Message}";
+            Logger.LogError(ex, "Failed to process document");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        loginStateSubscription?.Dispose();
+    }
+}
+
+<style>
+    /* Ensure document manager section is properly sized */
+    .col-lg-4 {
+        min-height: 600px;
+    }
+</style>
