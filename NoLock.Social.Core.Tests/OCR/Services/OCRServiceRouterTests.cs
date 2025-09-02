@@ -190,7 +190,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         [Theory]
         [MemberData(nameof(ServiceProviderExceptionTestCases))]
         public async Task SubmitDocumentAsync_ServiceProviderThrowsException_PropagatesException(
-            System.Type exceptionType, string exceptionMessage)
+            Type exceptionType, string exceptionMessage)
         {
             // Arrange
             var imageData = new byte[] { 1, 2, 3, 4 };

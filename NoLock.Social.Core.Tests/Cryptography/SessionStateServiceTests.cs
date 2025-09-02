@@ -144,7 +144,7 @@ namespace NoLock.Social.Core.Tests.Cryptography
             var privateKeyBuffer = Mock.Of<ISecureBuffer>();
             _sut.StartSessionAsync("testuser", keyPair, privateKeyBuffer).Wait();
             var initialActivity = _sut.CurrentSession!.LastActivityAt;
-            System.Threading.Thread.Sleep(10); // Small delay to ensure time difference
+            Thread.Sleep(10); // Small delay to ensure time difference
 
             // Act
             _sut.UpdateActivity();

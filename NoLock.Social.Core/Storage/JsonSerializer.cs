@@ -38,7 +38,7 @@ namespace NoLock.Social.Core.Storage
 
             try
             {
-                var json = System.Text.Json.JsonSerializer.Serialize(value, _options);
+                var json = JsonSerializer.Serialize(value, _options);
                 return Encoding.UTF8.GetBytes(json);
             }
             catch (Exception ex)
@@ -58,7 +58,7 @@ namespace NoLock.Social.Core.Storage
             try
             {
                 var json = Encoding.UTF8.GetString(data);
-                var result = System.Text.Json.JsonSerializer.Deserialize<T>(json, _options);
+                var result = JsonSerializer.Deserialize<T>(json, _options);
                 
                 if (result == null)
                 {

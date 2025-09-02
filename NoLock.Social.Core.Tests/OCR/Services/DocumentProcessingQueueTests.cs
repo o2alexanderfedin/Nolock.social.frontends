@@ -582,7 +582,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Use reflection to call internal method
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             var result = await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId, QueuedDocumentStatus.Completed, ocrStatus, null, null, CancellationToken.None 
             });
@@ -602,7 +602,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Use reflection to call internal method
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId, QueuedDocumentStatus.Failed, null, "OCR processing failed", "OCR_TIMEOUT", CancellationToken.None 
             });
@@ -623,7 +623,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Use reflection to call internal method
             var method = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             await (Task<bool>)method.Invoke(_queue, new object[] { 
                 queueId, QueuedDocumentStatus.Processing, null, null, null, CancellationToken.None 
             });
@@ -647,7 +647,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             // Use reflection to call internal method
             var method = typeof(DocumentProcessingQueue).GetMethod("GetNextDocumentForProcessing",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             var document = (QueuedDocument)method.Invoke(_queue, null);
 
             // Assert
@@ -660,7 +660,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
         {
             // Use reflection to call internal method
             var method = typeof(DocumentProcessingQueue).GetMethod("GetNextDocumentForProcessing",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             var document = (QueuedDocument)method.Invoke(_queue, null);
 
             // Assert
@@ -675,14 +675,14 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             
             // Use reflection to update status
             var updateMethod = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             updateMethod.Invoke(_queue, new object[] { 
                 queueId, QueuedDocumentStatus.Processing, null, null, null, CancellationToken.None 
             });
 
             // Use reflection to get next document
             var getMethod = typeof(DocumentProcessingQueue).GetMethod("GetNextDocumentForProcessing",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             var document = (QueuedDocument)getMethod.Invoke(_queue, null);
 
             // Assert
@@ -709,7 +709,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             }
             
             var updateMethod = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             
             for (int i = 0; i < processingCount; i++)
             {
@@ -776,7 +776,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             tasks.Add(_queue.RemoveDocumentAsync(queueIds[0]));
             tasks.Add(_queue.GetQueuedDocumentsAsync());
             var updateMethod = typeof(DocumentProcessingQueue).GetMethod("UpdateDocumentStatusAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic);
             tasks.Add((Task)updateMethod.Invoke(_queue, new object[] { 
                 queueIds[1], QueuedDocumentStatus.Processing, null, null, null, CancellationToken.None 
             }));

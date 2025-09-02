@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Extensions;
 using NoLock.Social.Web;
 using TG.Blazor.IndexedDB;
@@ -39,14 +40,15 @@ var app = builder.Build();
 
 // Check Web Crypto API availability
 var webCrypto = app.Services.GetRequiredService<NoLock.Social.Core.Cryptography.Interfaces.IWebCryptoService>();
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
 var webCryptoAvailable = await webCrypto.IsAvailableAsync();
 if (!webCryptoAvailable)
 {
-    Console.WriteLine("Warning: Web Crypto API is not available. This application requires a modern browser with HTTPS.");
+    logger.LogWarning("Web Crypto API is not available. This application requires a modern browser with HTTPS.");
 }
 else
 {
-    Console.WriteLine("Web Crypto API is available and ready");
+    logger.LogInformation("Web Crypto API is available and ready");
 }
 
 await app.RunAsync();

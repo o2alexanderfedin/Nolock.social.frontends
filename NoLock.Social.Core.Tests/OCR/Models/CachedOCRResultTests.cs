@@ -174,7 +174,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             {
                 cachedResult.RecordAccess();
                 accessTimes.Add(cachedResult.LastAccessedAt);
-                System.Threading.Thread.Sleep(10); // Small delay between accesses
+                Thread.Sleep(10); // Small delay between accesses
             }
 
             // Assert

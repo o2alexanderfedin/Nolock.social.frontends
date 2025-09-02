@@ -31,7 +31,7 @@ namespace NoLock.Social.Core.Cryptography.Extensions
             var delay = initialDelay ?? TimeSpan.FromSeconds(1);
             
             return source.RetryWhen(failures => failures
-                .Zip(System.Linq.Enumerable.Range(1, retryCount), (error, attempt) => new { error, attempt })
+                .Zip(Enumerable.Range(1, retryCount), (error, attempt) => new { error, attempt })
                 .SelectMany(x =>
                 {
                     var backoff = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * Math.Pow(2, x.attempt - 1));

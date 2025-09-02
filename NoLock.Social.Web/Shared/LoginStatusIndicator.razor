@@ -19,7 +19,7 @@
     private string statusMessage = "";
     private string alertClass = "alert-info";
     private string iconClass = "bi-info-circle";
-    private System.Threading.Timer? hideTimer;
+    private Timer? hideTimer;
 
     protected override void OnInitialized()
     {
@@ -43,14 +43,14 @@
                 
                 // Auto-hide after 5 seconds
                 hideTimer?.Dispose();
-                hideTimer = new System.Threading.Timer(_ =>
+                hideTimer = new Timer(_ =>
                 {
                     InvokeAsync(() =>
                     {
                         showStatusMessage = false;
                         StateHasChanged();
                     });
-                }, null, 5000, System.Threading.Timeout.Infinite);
+                }, null, 5000, Timeout.Infinite);
                 
                 InvokeAsync(StateHasChanged);
             });

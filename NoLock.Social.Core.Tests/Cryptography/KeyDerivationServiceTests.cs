@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
@@ -11,12 +12,14 @@ namespace NoLock.Social.Core.Tests.Cryptography
         private readonly KeyDerivationService _sut;
         private readonly Mock<IWebCryptoService> _webCryptoMock;
         private readonly Mock<ISecureMemoryManager> _secureMemoryManagerMock;
+        private readonly Mock<ILogger<KeyDerivationService>> _loggerMock;
 
         public KeyDerivationServiceTests()
         {
             _webCryptoMock = new Mock<IWebCryptoService>();
             _secureMemoryManagerMock = new Mock<ISecureMemoryManager>();
-            _sut = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object);
+            _loggerMock = new Mock<ILogger<KeyDerivationService>>();
+            _sut = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object, _loggerMock.Object);
         }
 
         public void Dispose()

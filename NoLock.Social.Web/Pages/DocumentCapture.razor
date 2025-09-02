@@ -4,12 +4,14 @@
 @using NoLock.Social.Core.OCR.Interfaces
 @using NoLock.Social.Core.Identity.Interfaces
 @using System
+@using Microsoft.Extensions.Logging
 @using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType
 @inject ICameraService CameraService
 @inject IOCRService OCRService
 @inject ILoginAdapterService LoginService
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
+@inject ILogger<DocumentCapture> Logger
 @implements IDisposable
 
 <PageTitle>Document Capture</PageTitle>
@@ -319,7 +321,7 @@
 
             // Check camera permission first
             var permissionStatus = await JSRuntime.InvokeAsync<string>("checkCameraPermission");
-            Console.WriteLine($"Camera permission status: {permissionStatus}");
+            Logger.LogInformation("Camera permission status: {PermissionStatus}", permissionStatus);
             
             // If permission not granted, request it
             if (permissionStatus != "granted")
@@ -494,7 +496,7 @@
                 var imageBytes = Convert.FromBase64String(base64Data);
 
                 // Create OCR submission request
-                var submission = new NoLock.Social.Core.OCR.Models.OCRSubmissionRequest
+                var submission = new Core.OCR.Models.OCRSubmissionRequest
                 {
                     DocumentType = selectedDocumentType,
                     ImageData = imageBytes
@@ -507,15 +509,15 @@
                     // If successful, show success message
                     errorMessage = null;
                 }
-                catch (HttpRequestException httpEx) when (httpEx.Message.Contains("Failed to fetch"))
+                catch (HttpRequestException error) when (error.Message.Contains("Failed to fetch"))
                 {
                     errorMessage = "OCR service is not accessible due to CORS policy. This is a known limitation when running locally. The OCR service needs to be configured to allow requests from localhost.";
-                    Console.WriteLine($"CORS error calling OCR API: {httpEx.Message}");
+                    Logger.LogError(error, "CORS error calling OCR API: {ErrorMessage}", errorMessage);
                 }
-                catch (Exception ex)
+                catch (Exception error)
                 {
-                    errorMessage = $"Error processing document: {ex.Message}";
-                    Console.WriteLine($"Error calling OCR API: {ex}");
+                    errorMessage = $"Error processing document: {error.Message}";
+                    Logger.LogError(error, "Error calling OCR API: {ErrorMessage}", errorMessage);
                 }
             }
             

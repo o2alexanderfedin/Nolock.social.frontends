@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using NoLock.Social.Core.Cryptography.Services;
@@ -13,14 +14,16 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
     {
         private readonly Mock<IWebCryptoService> _webCryptoMock;
         private readonly Mock<ISecureMemoryManager> _secureMemoryManagerMock;
+        private readonly Mock<ILogger<KeyDerivationService>> _loggerMock;
         private readonly KeyDerivationService _service;
 
         public KeyDerivationServiceTests()
         {
             _webCryptoMock = new Mock<IWebCryptoService>();
             _secureMemoryManagerMock = new Mock<ISecureMemoryManager>();
+            _loggerMock = new Mock<ILogger<KeyDerivationService>>();
 
-            _service = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object);
+            _service = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object, _loggerMock.Object);
         }
 
         #region Constructor Tests
@@ -29,7 +32,7 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
         public void Constructor_WithValidDependencies_ShouldInitialize()
         {
             // Arrange & Act
-            var service = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object);
+            var service = new KeyDerivationService(_webCryptoMock.Object, _secureMemoryManagerMock.Object, _loggerMock.Object);
 
             // Assert
             service.Should().NotBeNull();
@@ -47,7 +50,7 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
             var memoryManager = nullParam1 == "secureMemoryManager" ? null : _secureMemoryManagerMock.Object;
 
             // Act & Assert
-            var action = () => new KeyDerivationService(webCrypto, memoryManager);
+            var action = () => new KeyDerivationService(webCrypto, memoryManager, _loggerMock.Object);
             action.Should().Throw<ArgumentNullException>();
         }
 
@@ -264,27 +267,18 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
             _secureMemoryManagerMock.Setup(s => s.CreateSecureBuffer(expectedDerivedKey))
                 .Returns(mockSecureBuffer.Object);
 
-            // Capture console output
-            var consoleOutput = new List<string>();
-            var originalOut = Console.Out;
-            var stringWriter = new System.IO.StringWriter();
-            Console.SetOut(stringWriter);
+            // Act
+            await _service.DeriveMasterKeyAsync("password", "testuser");
 
-            try
-            {
-                // Act
-                await _service.DeriveMasterKeyAsync("password", "testuser");
-
-                // Assert
-                var output = stringWriter.ToString();
-                output.Should().Contain("Warning: Key derivation took");
-                output.Should().Contain("exceeding 1000ms timeout");
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-                stringWriter.Dispose();
-            }
+            // Assert - Verify logger was called with warning
+            _loggerMock.Verify(
+                x => x.Log(
+                    It.Is<LogLevel>(l => l == LogLevel.Warning),
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("exceeding 1000ms timeout")),
+                    It.IsAny<Exception>(),
+                    It.Is<Func<It.IsAnyType, Exception, string>>((v, t) => true)),
+                Times.Once);
         }
 
         [Fact]
