@@ -149,17 +149,17 @@
     [Parameter] public EventCallback<(int from, int to)> OnPageMoved { get; set; }
     [Parameter] public EventCallback OnSaveDraft { get; set; }
     [Parameter] public bool IsCapturing { get; set; }
-    [Parameter] public NoLock.Social.Core.Camera.Models.DocumentType InitialDocumentType { get; set; } = NoLock.Social.Core.Camera.Models.DocumentType.Generic;
+    [Parameter] public NoLock.Social.Core.Camera.Models.DocumentType InitialDocumentType { get; set; } = Core.Camera.Models.DocumentType.Generic;
 
     // State
-    private NoLock.Social.Core.Camera.Models.DocumentType SelectedDocumentType = NoLock.Social.Core.Camera.Models.DocumentType.Generic;
+    private NoLock.Social.Core.Camera.Models.DocumentType SelectedDocumentType = Core.Camera.Models.DocumentType.Generic;
     private int SelectedPageIndex = -1;
     private bool IsGridView = true;
     private string StatusMessage = string.Empty;
     private string StatusMessageClass = "alert-info";
 
     // Computed properties
-    private bool CanProcessDocument => CapturedPages.Any() && SelectedDocumentType != NoLock.Social.Core.Camera.Models.DocumentType.Generic;
+    private bool CanProcessDocument => CapturedPages.Any() && SelectedDocumentType != Core.Camera.Models.DocumentType.Generic;
 
     protected override void OnInitialized()
     {
@@ -269,13 +269,13 @@
     {
         return docType switch
         {
-            NoLock.Social.Core.Camera.Models.DocumentType.DriversLicense => "Driver's License",
-            NoLock.Social.Core.Camera.Models.DocumentType.IDCard => "ID Card",
-            NoLock.Social.Core.Camera.Models.DocumentType.W4 => "W-4 Form",
-            NoLock.Social.Core.Camera.Models.DocumentType.W2 => "W-2 Form",
-            NoLock.Social.Core.Camera.Models.DocumentType.Form1099 => "1099 Form",
-            NoLock.Social.Core.Camera.Models.DocumentType.SinglePage => "Single Page",
-            NoLock.Social.Core.Camera.Models.DocumentType.MultiPage => "Multi Page",
+            Core.Camera.Models.DocumentType.DriversLicense => "Driver's License",
+            Core.Camera.Models.DocumentType.IDCard => "ID Card",
+            Core.Camera.Models.DocumentType.W4 => "W-4 Form",
+            Core.Camera.Models.DocumentType.W2 => "W-2 Form",
+            Core.Camera.Models.DocumentType.Form1099 => "1099 Form",
+            Core.Camera.Models.DocumentType.SinglePage => "Single Page",
+            Core.Camera.Models.DocumentType.MultiPage => "Multi Page",
             _ => docType.ToString()
         };
     }
