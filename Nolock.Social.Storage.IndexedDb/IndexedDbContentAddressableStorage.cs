@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Linq.Expressions;
+using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,12 +13,13 @@ using Nolock.Social.Storage.IndexedDb.Models;
 namespace Nolock.Social.Storage.IndexedDb;
 
 public sealed class IndexedDbContentAddressableStorage<T>
-    : IContentAddressableStorage<T>
+    : IContentAddressableStorage<T>, IDisposable
 {
     private readonly IndexedDbCasDatabase _database;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ISerializer<T> _serializer;
     private readonly IHashService _hashService;
+    private readonly Subject<string> _hashNotifications = new();
 
     public IndexedDbContentAddressableStorage(
         IJSRuntime jsRuntime, 
@@ -62,6 +64,9 @@ public sealed class IndexedDbContentAddressableStorage<T>
         // Store in IndexedDB
         await _database.CasEntries.AddAsync(entry, hash);
         
+        // Notify observers about the new content hash
+        _hashNotifications.OnNext(hash);
+        
         return hash;
     }
 
@@ -90,8 +95,16 @@ public sealed class IndexedDbContentAddressableStorage<T>
         
         try
         {
-            await _database.CasEntries.DeleteAsync(contentHash);
-            return true;
+            if (await ExistsAsync(contentHash))
+            {
+                await _database.CasEntries.DeleteAsync(contentHash);
+                _hashNotifications.OnNext(contentHash);
+                return true;
+            }
+            else
+            { 
+                return false;
+            }
         }
         catch
         {
@@ -154,5 +167,24 @@ public sealed class IndexedDbContentAddressableStorage<T>
         
         // Use the injected hash service (now always returns Base64Url encoding)
         return await _hashService.HashAsync(bytes);
+    }
+
+    /// <summary>
+    /// Subscribes an observer to receive notifications when new content is stored.
+    /// </summary>
+    /// <param name="observer">The observer to subscribe for hash notifications</param>
+    /// <returns>A disposable that can be used to unsubscribe the observer</returns>
+    public IDisposable Subscribe(IObserver<string> observer)
+    {
+        return _hashNotifications.Subscribe(observer);
+    }
+
+    /// <summary>
+    /// Disposes resources and completes the notification stream.
+    /// </summary>
+    public void Dispose()
+    {
+        _hashNotifications?.OnCompleted();
+        _hashNotifications?.Dispose();
     }
 }
