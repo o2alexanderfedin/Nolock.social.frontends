@@ -25,7 +25,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NoLock.Social.Core\NoLock.Social.Core.csproj" />
-    <ProjectReference Include="..\NoLock.Social.Components\NoLock.Social.Components.csproj" />
   </ItemGroup>
 
 </Project>

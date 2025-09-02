@@ -155,7 +155,7 @@
                         {
                             <button type="button" 
                                     class="btn btn-link btn-sm"
-                                    @onclick="() => { FieldFilter = @"all"; HandleFilterChange(); }">
+                                    @onclick="ShowAllFields">
                                 Show all fields
                             </button>
                         }
@@ -498,6 +498,12 @@
         }
 
         StateHasChanged();
+    }
+
+    private void ShowAllFields()
+    {
+        FieldFilter = "all";
+        HandleFilterChange();
     }
 
     private void HandleFilterChange()
