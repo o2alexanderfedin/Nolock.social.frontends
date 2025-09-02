@@ -276,6 +276,7 @@
     private string? sessionId;
     
     private string[]? availableCameras;
+    private Dictionary<string, string> cameraMapping = new();
     private string? selectedCamera;
     private OCRDocumentType selectedDocumentType = OCRDocumentType.Receipt;
     
@@ -358,11 +359,26 @@
             }
             
             // Get available cameras
-            var cameras = await JSRuntime.InvokeAsync<object[]>("getAvailableCameras");
+            var cameras = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement[]>("getAvailableCameras");
             if (cameras != null && cameras.Length > 0)
             {
-                availableCameras = cameras.Select(c => c?.ToString() ?? "Camera").ToArray();
-                selectedCamera = availableCameras[0];
+                cameraMapping.Clear();
+                var cameraLabels = new List<string>();
+                
+                foreach (var camera in cameras)
+                {
+                    if (camera.TryGetProperty("id", out var idProp) && 
+                        camera.TryGetProperty("label", out var labelProp))
+                    {
+                        var id = idProp.GetString() ?? "";
+                        var label = labelProp.GetString() ?? "Camera";
+                        cameraMapping[label] = id;
+                        cameraLabels.Add(label);
+                    }
+                }
+                
+                availableCameras = cameraLabels.ToArray();
+                selectedCamera = availableCameras.Length > 0 ? availableCameras[0] : "Default Camera";
             }
             else
             {
@@ -440,8 +456,13 @@
         if (e.Value != null && isCameraInitialized)
         {
             selectedCamera = e.Value.ToString();
-            // For now, camera switching is not implemented in the simplified version
-            await Task.CompletedTask;
+            
+            // Get the device ID from the label
+            if (!string.IsNullOrEmpty(selectedCamera) && cameraMapping.TryGetValue(selectedCamera, out var deviceId))
+            {
+                // Switch to the selected camera using its device ID
+                await JSRuntime.InvokeVoidAsync("switchCamera", deviceId);
+            }
         }
     }
 
