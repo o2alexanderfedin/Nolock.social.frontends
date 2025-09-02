@@ -112,6 +112,22 @@
                                 }
                             </select>
                         </div>
+                        
+                        <div class="mb-3">
+                            <button class="btn btn-outline-secondary btn-sm" 
+                                    @onclick="RefreshCameraList"
+                                    disabled="@isRefreshingCameras">
+                                @if (isRefreshingCameras)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                <i class="bi bi-arrow-clockwise"></i> Refresh Camera List
+                            </button>
+                            @if (availableCameras != null)
+                            {
+                                <small class="text-muted d-block mt-1">@availableCameras.Length camera(s) found</small>
+                            }
+                        </div>
                     </div>
                 </div>
                 
@@ -143,6 +159,7 @@
     private bool supportsZoom = false;
     private bool torchEnabled;
     private double currentZoom = 1.0;
+    private bool isRefreshingCameras = false;
     
     
     protected override async Task OnInitializedAsync()
@@ -387,6 +404,62 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error stopping camera");
+        }
+    }
+    
+    private async Task RefreshCameraList()
+    {
+        if (isRefreshingCameras) return;
+        
+        try
+        {
+            isRefreshingCameras = true;
+            StateHasChanged();
+            
+            Logger.LogInformation("🔄 [CameraCapture] Refreshing camera list...");
+            
+            // Get available cameras again
+            var cameras = await JSRuntime.InvokeAsync<JsonElement[]>("getAvailableCameras");
+            if (cameras != null && cameras.Length > 0)
+            {
+                cameraMapping.Clear();
+                var cameraLabels = new List<string>();
+                
+                foreach (var camera in cameras)
+                {
+                    if (camera.TryGetProperty("id", out var idProp) && 
+                        camera.TryGetProperty("label", out var labelProp))
+                    {
+                        var id = idProp.GetString() ?? "";
+                        var label = labelProp.GetString() ?? "Camera";
+                        cameraMapping[label] = id;
+                        cameraLabels.Add(label);
+                        Logger.LogInformation("📹 [CameraCapture] Found camera: {Label} (ID: {Id})", label, id);
+                    }
+                }
+                
+                availableCameras = cameraLabels.ToArray();
+                selectedCamera = availableCameras.Length > 0 ? availableCameras[0] : "Default Camera";
+                
+                Logger.LogInformation("✅ [CameraCapture] Camera list refreshed. Found {Count} cameras", availableCameras.Length);
+            }
+            else
+            {
+                availableCameras = new[] { "Default Camera" };
+                selectedCamera = availableCameras[0];
+                Logger.LogWarning("⚠️ [CameraCapture] No cameras found during refresh");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "❌ [CameraCapture] Error refreshing camera list");
+            errorMessage = $"Failed to refresh camera list: {ex.Message}";
+            await NotifyError(errorMessage);
+        }
+        finally
+        {
+            isRefreshingCameras = false;
+            StateHasChanged();
         }
     }
     
