@@ -1,0 +1,506 @@
+@namespace NoLock.Social.Components
+@using NoLock.Social.Core.Camera.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+<div class="document-manager">
+    <div class="document-header">
+        <h3 class="document-title">Document Manager</h3>
+        
+        @* Document Type Selection *@
+        <div class="document-type-selector">
+            <label for="document-type">Document Type:</label>
+            <select id="document-type" class="form-control" @bind="SelectedDocumentType">
+                <option value="">-- Select Document Type --</option>
+                @foreach (var docType in Enum.GetValues<DocumentType>())
+                {
+                    <option value="@docType">@GetFriendlyName(docType)</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @* Captured Pages Display *@
+    <div class="captured-pages-section">
+        <div class="pages-header">
+            <h4>Captured Pages (@CapturedPages.Count)</h4>
+            <div class="view-toggle">
+                <button class="btn btn-sm @(IsGridView ? "btn-primary" : "btn-outline-primary")" 
+                        @onclick="() => IsGridView = true"
+                        disabled="@IsGridView">
+                    <i class="bi bi-grid-3x3-gap"></i> Grid
+                </button>
+                <button class="btn btn-sm @(!IsGridView ? "btn-primary" : "btn-outline-primary")" 
+                        @onclick="() => IsGridView = false"
+                        disabled="@(!IsGridView)">
+                    <i class="bi bi-list"></i> List
+                </button>
+            </div>
+        </div>
+
+        @if (CapturedPages.Any())
+        {
+            <div class="@(IsGridView ? "pages-grid" : "pages-list")">
+                @foreach (var (page, index) in CapturedPages.Select((p, i) => (p, i)))
+                {
+                    <div class="page-item @(SelectedPageIndex == index ? "selected" : "")" 
+                         @onclick="() => SelectPage(index)">
+                        <div class="page-preview">
+                            @if (!string.IsNullOrEmpty(page.ImageUrl))
+                            {
+                                <img src="@page.ImageUrl" alt="Page @(index + 1)" />
+                            }
+                            else
+                            {
+                                <div class="placeholder-image">
+                                    <i class="bi bi-file-earmark-image"></i>
+                                </div>
+                            }
+                        </div>
+                        <div class="page-info">
+                            <span class="page-number">Page @(index + 1)</span>
+                            <span class="page-quality">Quality: @page.Quality%</span>
+                            <span class="page-size">@page.Width x @page.Height</span>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    @onclick:stopPropagation="true"
+                                    @onclick="() => RemovePage(index)"
+                                    title="Remove page">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            @if (index > 0)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => MovePage(index, index - 1)"
+                                        title="Move up">
+                                    <i class="bi bi-arrow-up"></i>
+                                </button>
+                            }
+                            @if (index < CapturedPages.Count - 1)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => MovePage(index, index + 1)"
+                                        title="Move down">
+                                    <i class="bi bi-arrow-down"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="no-pages-message">
+                <i class="bi bi-camera"></i>
+                <p>No pages captured yet. Use the camera to capture document pages.</p>
+            </div>
+        }
+    </div>
+
+    @* Action Buttons *@
+    <div class="document-actions">
+        <button class="btn btn-primary" 
+                @onclick="ProcessDocument"
+                disabled="@(!CanProcessDocument)">
+            <i class="bi bi-gear-fill"></i> Process Document
+        </button>
+        
+        <button class="btn btn-success" 
+                @onclick="AddNewPage"
+                disabled="@IsCapturing">
+            <i class="bi bi-plus-circle"></i> Add Page
+        </button>
+        
+        <button class="btn btn-warning" 
+                @onclick="ClearAllPages"
+                disabled="@(!CapturedPages.Any())">
+            <i class="bi bi-x-circle"></i> Clear All
+        </button>
+        
+        <button class="btn btn-info" 
+                @onclick="SaveDraft"
+                disabled="@(!CapturedPages.Any())">
+            <i class="bi bi-save"></i> Save Draft
+        </button>
+    </div>
+
+    @* Status Messages *@
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <div class="alert @StatusMessageClass mt-3" role="alert">
+            @StatusMessage
+        </div>
+    }
+</div>
+
+@code {
+    // Parameters
+    [Parameter] public List<CapturedImage> CapturedPages { get; set; } = new();
+    [Parameter] public EventCallback<List<CapturedImage>> CapturedPagesChanged { get; set; }
+    [Parameter] public EventCallback OnProcessDocument { get; set; }
+    [Parameter] public EventCallback OnAddPage { get; set; }
+    [Parameter] public EventCallback OnClearPages { get; set; }
+    [Parameter] public EventCallback<int> OnPageSelected { get; set; }
+    [Parameter] public EventCallback<int> OnPageRemoved { get; set; }
+    [Parameter] public EventCallback<(int from, int to)> OnPageMoved { get; set; }
+    [Parameter] public EventCallback OnSaveDraft { get; set; }
+    [Parameter] public bool IsCapturing { get; set; }
+    [Parameter] public DocumentType InitialDocumentType { get; set; } = DocumentType.Generic;
+
+    // State
+    private DocumentType SelectedDocumentType = DocumentType.Generic;
+    private int SelectedPageIndex = -1;
+    private bool IsGridView = true;
+    private string StatusMessage = string.Empty;
+    private string StatusMessageClass = "alert-info";
+
+    // Computed properties
+    private bool CanProcessDocument => CapturedPages.Any() && SelectedDocumentType != DocumentType.Generic;
+
+    protected override void OnInitialized()
+    {
+        SelectedDocumentType = InitialDocumentType;
+    }
+
+    private async Task ProcessDocument()
+    {
+        if (!CanProcessDocument)
+        {
+            ShowStatusMessage("Please select a document type and capture at least one page.", "alert-warning");
+            return;
+        }
+
+        ShowStatusMessage("Processing document...", "alert-info");
+        await OnProcessDocument.InvokeAsync();
+    }
+
+    private async Task AddNewPage()
+    {
+        await OnAddPage.InvokeAsync();
+    }
+
+    private async Task ClearAllPages()
+    {
+        bool confirmed = await ConfirmAction("Are you sure you want to clear all pages?");
+        if (confirmed)
+        {
+            CapturedPages.Clear();
+            SelectedPageIndex = -1;
+            await CapturedPagesChanged.InvokeAsync(CapturedPages);
+            await OnClearPages.InvokeAsync();
+            ShowStatusMessage("All pages cleared.", "alert-success");
+        }
+    }
+
+    private async Task SelectPage(int index)
+    {
+        SelectedPageIndex = index;
+        await OnPageSelected.InvokeAsync(index);
+    }
+
+    private async Task RemovePage(int index)
+    {
+        if (index >= 0 && index < CapturedPages.Count)
+        {
+            CapturedPages.RemoveAt(index);
+            if (SelectedPageIndex >= CapturedPages.Count)
+            {
+                SelectedPageIndex = CapturedPages.Count - 1;
+            }
+            await CapturedPagesChanged.InvokeAsync(CapturedPages);
+            await OnPageRemoved.InvokeAsync(index);
+            ShowStatusMessage($"Page {index + 1} removed.", "alert-success");
+        }
+    }
+
+    private async Task MovePage(int fromIndex, int toIndex)
+    {
+        if (fromIndex >= 0 && fromIndex < CapturedPages.Count &&
+            toIndex >= 0 && toIndex < CapturedPages.Count)
+        {
+            var page = CapturedPages[fromIndex];
+            CapturedPages.RemoveAt(fromIndex);
+            CapturedPages.Insert(toIndex, page);
+            
+            // Update selected index if needed
+            if (SelectedPageIndex == fromIndex)
+            {
+                SelectedPageIndex = toIndex;
+            }
+            
+            await CapturedPagesChanged.InvokeAsync(CapturedPages);
+            await OnPageMoved.InvokeAsync((fromIndex, toIndex));
+        }
+    }
+
+    private async Task SaveDraft()
+    {
+        ShowStatusMessage("Saving draft...", "alert-info");
+        await OnSaveDraft.InvokeAsync();
+        ShowStatusMessage("Draft saved successfully.", "alert-success");
+    }
+
+    private void ShowStatusMessage(string message, string cssClass)
+    {
+        StatusMessage = message;
+        StatusMessageClass = cssClass;
+        StateHasChanged();
+        
+        // Auto-hide message after 5 seconds
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            StatusMessage = string.Empty;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task<bool> ConfirmAction(string message)
+    {
+        // For now, return true. In a real app, you'd show a modal or use IJSRuntime
+        // This is a placeholder for confirmation logic
+        return await Task.FromResult(true);
+    }
+
+    private string GetFriendlyName(DocumentType docType)
+    {
+        return docType switch
+        {
+            DocumentType.DriversLicense => "Driver's License",
+            DocumentType.IDCard => "ID Card",
+            DocumentType.W4 => "W-4 Form",
+            DocumentType.W2 => "W-2 Form",
+            DocumentType.Form1099 => "1099 Form",
+            DocumentType.SinglePage => "Single Page",
+            DocumentType.MultiPage => "Multi Page",
+            _ => docType.ToString()
+        };
+    }
+
+    // Public method to add a page programmatically
+    public void AddPage(CapturedImage page)
+    {
+        CapturedPages.Add(page);
+        CapturedPagesChanged.InvokeAsync(CapturedPages);
+        ShowStatusMessage($"Page {CapturedPages.Count} added.", "alert-success");
+    }
+
+    // Public method to get selected document type
+    public DocumentType GetSelectedDocumentType() => SelectedDocumentType;
+
+    // Public method to set document type programmatically
+    public void SetDocumentType(DocumentType docType)
+    {
+        SelectedDocumentType = docType;
+        StateHasChanged();
+    }
+}
+
+<style>
+    .document-manager {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .document-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .document-title {
+        margin: 0;
+        color: #212529;
+    }
+
+    .document-type-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .document-type-selector select {
+        min-width: 200px;
+    }
+
+    .captured-pages-section {
+        min-height: 300px;
+        margin-bottom: 1.5rem;
+    }
+
+    .pages-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .pages-header h4 {
+        margin: 0;
+    }
+
+    .view-toggle {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .pages-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+    }
+
+    .pages-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .page-item {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .page-item:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .page-item.selected {
+        border-color: #0d6efd;
+        background: #e7f1ff;
+    }
+
+    .pages-list .page-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .page-preview {
+        width: 100%;
+        aspect-ratio: 3/4;
+        overflow: hidden;
+        border-radius: 4px;
+        background: #f8f9fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pages-list .page-preview {
+        width: 80px;
+        height: 100px;
+        flex-shrink: 0;
+    }
+
+    .page-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .placeholder-image {
+        color: #6c757d;
+        font-size: 2rem;
+    }
+
+    .page-info {
+        display: flex;
+        flex-direction: column;
+        font-size: 0.875rem;
+        gap: 0.25rem;
+        flex-grow: 1;
+    }
+
+    .pages-grid .page-info {
+        margin-top: 0.5rem;
+    }
+
+    .page-number {
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .page-quality {
+        color: #6c757d;
+    }
+
+    .page-size {
+        color: #6c757d;
+        font-size: 0.75rem;
+    }
+
+    .page-actions {
+        display: flex;
+        gap: 0.25rem;
+        margin-top: 0.5rem;
+    }
+
+    .pages-list .page-actions {
+        margin-top: 0;
+        flex-shrink: 0;
+    }
+
+    .no-pages-message {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+
+    .no-pages-message i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    .document-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .document-actions button {
+        min-width: 120px;
+    }
+
+    @media (max-width: 768px) {
+        .document-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .document-type-selector {
+            width: 100%;
+        }
+        
+        .document-type-selector select {
+            flex-grow: 1;
+        }
+        
+        .pages-grid {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        }
+        
+        .document-actions {
+            flex-direction: column;
+        }
+        
+        .document-actions button {
+            width: 100%;
+        }
+    }
+</style>

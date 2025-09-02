@@ -1,0 +1,269 @@
+@namespace NoLock.Social.Components
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="simple-camera-control">
+    <!-- Camera Preview -->
+    <div class="camera-preview-container">
+        <video @ref="videoElement" 
+               class="camera-preview" 
+               autoplay 
+               playsinline
+               muted>
+        </video>
+    </div>
+    
+    <!-- Camera Selection -->
+    <div class="camera-selection">
+        <label for="camera-select">Camera:</label>
+        <select id="camera-select" 
+                class="camera-select-dropdown"
+                @bind="selectedCameraId"
+                @bind:after="OnCameraSelectionChanged">
+            <option value="">Select a camera...</option>
+            @if (availableCameras != null)
+            {
+                @foreach (var camera in availableCameras)
+                {
+                    <option value="@camera.DeviceId">@camera.Label</option>
+                }
+            }
+        </select>
+    </div>
+    
+    <!-- Capture Button -->
+    <div class="capture-controls">
+        <button class="capture-button" 
+                @onclick="OnCaptureClick"
+                disabled="@(!isCameraReady)">
+            Capture Photo
+        </button>
+    </div>
+</div>
+
+@code {
+    // Component parameters
+    [Parameter] public EventCallback<byte[]> OnImageCaptured { get; set; }
+    
+    // JavaScript module reference
+    private IJSObjectReference? jsModule;
+    private bool isVisible = false;
+    
+    // Component state (placeholders for now)
+    private ElementReference videoElement;
+    private string? selectedCameraId;
+    private bool isCameraReady = false;
+    private List<CameraDevice>? availableCameras;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Load the JavaScript module
+            jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "import", 
+                "./_content/NoLock.Social.Components/SimpleCameraControl.js");
+            
+            // Load available cameras
+            await LoadCameraDevicesAsync();
+            
+            // Start camera if component is visible
+            isVisible = true;
+            await StartCameraIfVisible();
+        }
+    }
+    
+    private async Task LoadCameraDevicesAsync()
+    {
+        if (jsModule != null)
+        {
+            try
+            {
+                var devices = await jsModule.InvokeAsync<CameraDevice[]>("getCameraDevices");
+                availableCameras = devices?.ToList() ?? new List<CameraDevice>();
+                
+                // Auto-select first camera if available
+                if (availableCameras.Any() && string.IsNullOrEmpty(selectedCameraId))
+                {
+                    selectedCameraId = availableCameras.First().DeviceId;
+                }
+                
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to load camera devices: {ex.Message}");
+                availableCameras = new List<CameraDevice>();
+            }
+        }
+    }
+    
+    private async Task StartCameraIfVisible()
+    {
+        if (isVisible && jsModule != null)
+        {
+            try
+            {
+                var success = await jsModule.InvokeAsync<bool>("startCamera", videoElement, selectedCameraId);
+                isCameraReady = success;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't crash
+                Console.WriteLine($"Failed to start camera: {ex.Message}");
+                isCameraReady = false;
+                StateHasChanged();
+            }
+        }
+    }
+    
+    private async Task OnCameraSelectionChanged()
+    {
+        if (!string.IsNullOrEmpty(selectedCameraId) && jsModule != null)
+        {
+            // Stop current camera and restart with new device
+            await StopCameraIfRunning();
+            await StartCameraIfVisible();
+        }
+    }
+    
+    private async Task StopCameraIfRunning()
+    {
+        if (jsModule != null)
+        {
+            try
+            {
+                await jsModule.InvokeAsync<bool>("stopCamera");
+                isCameraReady = false;
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't crash
+                Console.WriteLine($"Failed to stop camera: {ex.Message}");
+            }
+        }
+    }
+    
+    private async Task OnCaptureClick()
+    {
+        if (jsModule != null && isCameraReady)
+        {
+            try
+            {
+                // Capture image as base64 data URL
+                var dataUrl = await jsModule.InvokeAsync<string>("captureImage", videoElement);
+                
+                if (!string.IsNullOrEmpty(dataUrl))
+                {
+                    // Convert base64 to byte array
+                    var base64Data = dataUrl.Split(',')[1];
+                    var imageBytes = Convert.FromBase64String(base64Data);
+                    
+                    if (OnImageCaptured.HasDelegate)
+                    {
+                        await OnImageCaptured.InvokeAsync(imageBytes);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to capture photo: {ex.Message}");
+            }
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        isVisible = false;
+        
+        // Stop camera before disposing
+        await StopCameraIfRunning();
+        
+        // Dispose of the JavaScript module
+        if (jsModule != null)
+        {
+            try
+            {
+                await jsModule.DisposeAsync();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+    }
+    
+    // Camera device info matching JavaScript structure
+    private class CameraDevice
+    {
+        public string DeviceId { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string GroupId { get; set; } = string.Empty;
+    }
+}
+
+<style>
+    .simple-camera-control {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .camera-preview-container {
+        position: relative;
+        width: 100%;
+        max-width: 640px;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .camera-preview {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    
+    .camera-selection {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .camera-select-dropdown {
+        flex: 1;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    
+    .capture-controls {
+        display: flex;
+        justify-content: center;
+    }
+    
+    .capture-button {
+        padding: 0.75rem 2rem;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .capture-button:hover:not(:disabled) {
+        background: #0056b3;
+    }
+    
+    .capture-button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+</style>

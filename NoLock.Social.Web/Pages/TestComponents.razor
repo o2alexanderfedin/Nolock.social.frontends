@@ -1,0 +1,31 @@
+@page "/test-components"
+@using NoLock.Social.Components
+
+<PageTitle>Test Components</PageTitle>
+
+<h3>Testing Component Rendering</h3>
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h4>Simple Camera Control Test</h4>
+            <NoLock.Social.Components.SimpleCameraControl />
+        </div>
+    </div>
+    
+    <hr />
+    
+    <div class="row">
+        <div class="col-12">
+            <h4>Document Manager Test</h4>
+            <NoLock.Social.Components.DocumentManager />
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Console.WriteLine("TestComponents page initialized");
+    }
+}
