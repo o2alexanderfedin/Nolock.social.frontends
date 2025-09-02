@@ -509,15 +509,15 @@
                     // If successful, show success message
                     errorMessage = null;
                 }
-                catch (HttpRequestException httpEx) when (httpEx.Message.Contains("Failed to fetch"))
+                catch (HttpRequestException error) when (error.Message.Contains("Failed to fetch"))
                 {
                     errorMessage = "OCR service is not accessible due to CORS policy. This is a known limitation when running locally. The OCR service needs to be configured to allow requests from localhost.";
-                    Logger.LogError(httpEx, "CORS error calling OCR API");
+                    Logger.LogError(error, "CORS error calling OCR API: {ErrorMessage}", errorMessage);
                 }
-                catch (Exception ex)
+                catch (Exception error)
                 {
-                    errorMessage = $"Error processing document: {ex.Message}";
-                    Logger.LogError(ex, "Error calling OCR API");
+                    errorMessage = $"Error processing document: {error.Message}";
+                    Logger.LogError(error, "Error calling OCR API: {ErrorMessage}", errorMessage);
                 }
             }
             
