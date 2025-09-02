@@ -112,7 +112,7 @@ namespace NoLock.Social.Core.OCR.Models
         /// Used to cancel processing operations. Null if no cancellation capability.
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public System.Threading.CancellationTokenSource CancellationTokenSource { get; set; }
+        public CancellationTokenSource CancellationTokenSource { get; set; }
 
         /// <summary>
         /// Additional metadata associated with the queued document.
@@ -219,7 +219,7 @@ namespace NoLock.Social.Core.OCR.Models
                 Priority = priority,
                 Metadata = metadata ?? new Dictionary<string, object>(),
                 SourceIdentifier = sourceIdentifier ?? "Unknown",
-                CancellationTokenSource = new System.Threading.CancellationTokenSource()
+                CancellationTokenSource = new CancellationTokenSource()
             };
         }
 
@@ -320,7 +320,7 @@ namespace NoLock.Social.Core.OCR.Models
 
             // Create new cancellation token
             CancellationTokenSource?.Dispose();
-            CancellationTokenSource = new System.Threading.CancellationTokenSource();
+            CancellationTokenSource = new CancellationTokenSource();
         }
 
         /// <summary>

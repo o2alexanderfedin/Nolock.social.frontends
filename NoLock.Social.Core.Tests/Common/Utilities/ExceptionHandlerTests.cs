@@ -316,7 +316,7 @@ namespace NoLock.Social.Core.Tests.Common.Utilities
         public async Task ExecuteAsync_WithCancellationToken_ShouldHandleCancellation()
         {
             // Arrange
-            var cts = new System.Threading.CancellationTokenSource();
+            var cts = new CancellationTokenSource();
             var operation = new Func<Task<int>>(async () =>
             {
                 await Task.Delay(1000, cts.Token);

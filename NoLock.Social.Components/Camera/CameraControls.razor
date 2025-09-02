@@ -3,12 +3,14 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Core.Accessibility.Interfaces
 @using System.Text.Json
+@using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 
 @inject ICameraService CameraService
 @inject IJSRuntime JSRuntime
 @inject IVoiceCommandService VoiceCommandService
 @inject IAnnouncementService AnnouncementService
+@inject ILogger<CameraControls> Logger
 
 <div class="camera-controls-container" @onkeydown="OnKeyDown" tabindex="-1" data-accessibility-component="camera-controls">
     
@@ -146,8 +148,7 @@
         }
         catch (Exception ex)
         {
-            // TODO: Add proper error handling/logging
-            Console.WriteLine($"Error toggling torch: {ex.Message}");
+            Logger.LogError(ex, "Error toggling torch");
         }
     }
 
@@ -162,8 +163,7 @@
         }
         catch (Exception ex)
         {
-            // TODO: Add proper error handling/logging
-            Console.WriteLine($"Error switching camera: {ex.Message}");
+            Logger.LogError(ex, "Error switching camera");
         }
     }
 
@@ -180,8 +180,7 @@
         }
         catch (Exception ex)
         {
-            // TODO: Add proper error handling/logging
-            Console.WriteLine($"Error setting zoom: {ex.Message}");
+            Logger.LogError(ex, "Error setting zoom level to {ZoomLevel}", zoomLevel);
         }
     }
 
@@ -220,8 +219,7 @@
         }
         catch (Exception ex)
         {
-            // TODO: Add proper error handling/logging
-            Console.WriteLine($"Error saving camera settings: {ex.Message}");
+            Logger.LogError(ex, "Error saving camera settings");
         }
     }
     
@@ -241,8 +239,7 @@
         }
         catch (Exception ex)
         {
-            // TODO: Add proper error handling/logging
-            Console.WriteLine($"Error loading camera settings: {ex.Message}");
+            Logger.LogError(ex, "Error loading camera settings");
         }
     }
 
@@ -426,7 +423,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error initializing voice commands: {ex.Message}");
+            Logger.LogError(ex, "Error initializing voice commands");
             _isVoiceCommandEnabled = false;
             _isVoiceCommandListening = false;
         }
@@ -445,7 +442,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error handling voice command recognition: {ex.Message}");
+            Logger.LogError(ex, "Error handling voice command recognition for transcript: {Transcript}", e.Transcript);
         }
     }
     
@@ -470,7 +467,7 @@
                     }
                     catch (Exception restartEx)
                     {
-                        Console.WriteLine($"Failed to restart voice command listening: {restartEx.Message}");
+                        Logger.LogError(restartEx, "Failed to restart voice command listening");
                         _isVoiceCommandListening = false;
                         StateHasChanged();
                     }
@@ -479,7 +476,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error handling voice command error event: {ex.Message}");
+            Logger.LogError(ex, "Error handling voice command error event");
         }
     }
     
@@ -502,14 +499,14 @@
                 }
                 catch (Exception voiceEx)
                 {
-                    Console.WriteLine($"Error disposing voice command service: {voiceEx.Message}");
+                    Logger.LogError(voiceEx, "Error disposing voice command service");
                 }
             }
         }
         catch (Exception ex)
         {
             // Log error but don't throw during disposal
-            Console.WriteLine($"Error during CameraControls disposal: {ex.Message}");
+            Logger.LogError(ex, "Error during CameraControls disposal");
         }
     }
 }

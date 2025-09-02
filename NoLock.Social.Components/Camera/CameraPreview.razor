@@ -187,7 +187,7 @@
     private bool IsCapturing;
     private bool IsDocumentDetected;
     private int AutoCaptureCountdown;
-    private System.Threading.Timer? AutoCaptureTimer;
+    private Timer? AutoCaptureTimer;
     private ImageQualityResult? ImageQualityResult;
     
     private bool IsCameraReady => !IsLoading && string.IsNullOrEmpty(ErrorMessage) && CurrentStream != null;
@@ -358,7 +358,7 @@
         StateHasChanged();
         
         AutoCaptureTimer?.Dispose();
-        AutoCaptureTimer = new System.Threading.Timer(async _ =>
+        AutoCaptureTimer = new Timer(async _ =>
         {
             await InvokeAsync(async () =>
             {

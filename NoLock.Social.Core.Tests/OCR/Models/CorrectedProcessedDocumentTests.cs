@@ -416,7 +416,7 @@ namespace NoLock.Social.Core.Tests.OCR.Models
             var originalModified = correctedDoc.LastModifiedAt;
 
             // Act
-            System.Threading.Thread.Sleep(10); // Small delay to ensure time difference
+            Thread.Sleep(10); // Small delay to ensure time difference
             correctedDoc.LastModifiedAt = DateTime.UtcNow;
 
             // Assert

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Cryptography.Interfaces;
 using System.Diagnostics;
 using System.Text;
@@ -11,14 +12,19 @@ namespace NoLock.Social.Core.Cryptography.Services
     {
         private readonly IWebCryptoService _webCrypto;
         private readonly ISecureMemoryManager _secureMemoryManager;
+        private readonly ILogger<KeyDerivationService> _logger;
         private readonly Argon2idParameters _parameters = new();
 
         public event EventHandler<KeyDerivationProgressEventArgs>? DerivationProgress;
 
-        public KeyDerivationService(IWebCryptoService webCrypto, ISecureMemoryManager secureMemoryManager)
+        public KeyDerivationService(
+            IWebCryptoService webCrypto, 
+            ISecureMemoryManager secureMemoryManager,
+            ILogger<KeyDerivationService> logger)
         {
             _webCrypto = webCrypto ?? throw new ArgumentNullException(nameof(webCrypto));
             _secureMemoryManager = secureMemoryManager ?? throw new ArgumentNullException(nameof(secureMemoryManager));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<ISecureBuffer> DeriveMasterKeyAsync(string passphrase, string username)
@@ -76,7 +82,7 @@ namespace NoLock.Social.Core.Cryptography.Services
                 // Check performance budget (500ms target, 1000ms max)
                 if (stopwatch.ElapsedMilliseconds > 1000)
                 {
-                    Console.WriteLine($"Warning: Key derivation took {stopwatch.ElapsedMilliseconds}ms, exceeding 1000ms timeout");
+                    _logger.LogWarning("Key derivation took {ElapsedMilliseconds}ms, exceeding 1000ms timeout", stopwatch.ElapsedMilliseconds);
                 }
 
                 return secureBuffer;
