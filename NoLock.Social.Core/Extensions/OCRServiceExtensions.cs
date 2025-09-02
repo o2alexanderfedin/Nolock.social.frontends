@@ -92,6 +92,9 @@ namespace NoLock.Social.Core.Extensions
                 return new MistralOCRClient("https://nolock-ocr-services-qbhx5.ondigitalocean.app", httpClient);
             });
             
+            // Register IMistralOCRClient interface
+            services.AddScoped<IMistralOCRClient>(provider => provider.GetRequiredService<MistralOCRClient>());
+            
             // CAS service removed - storage handled externally
             
             // Register specific OCR services for each document type with keys

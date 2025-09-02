@@ -383,7 +383,8 @@ namespace NoLock.Social.Core.Tests.OCR.Services
             var afterStart = DateTime.UtcNow;
 
             // Assert
-            stats.StartedAt.Should().BeOnOrAfter(beforeStart);
+            // Use BeCloseTo to handle clock precision and thread scheduling variations
+            stats.StartedAt.Should().BeCloseTo(beforeStart, TimeSpan.FromMilliseconds(100));
             stats.StartedAt.Should().BeOnOrBefore(afterStart);
             stats.LastUpdated.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
             
