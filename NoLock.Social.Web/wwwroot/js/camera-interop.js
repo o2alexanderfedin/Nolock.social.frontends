@@ -98,7 +98,8 @@ window.cameraInterop = {
         }
         if (this.video) {
             this.video.srcObject = null;
-            this.video = null;
+            // Don't null the video reference - we need it for switching cameras
+            // this.video = null;
         }
     },
     
@@ -119,8 +120,24 @@ window.cameraInterop = {
     
     switchCamera: async function(deviceId) {
         try {
-            // Stop current stream
-            this.stopCamera();
+            // Get video element if not already set
+            if (!this.video) {
+                this.video = document.getElementById('cameraPreview');
+                if (!this.video) {
+                    console.error('Video element not found');
+                    return false;
+                }
+            }
+            
+            // Stop current stream and clean up
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                // Also pause the video to stop any pending operations
+                if (this.video) {
+                    this.video.pause();
+                    this.video.srcObject = null;
+                }
+            }
             
             // Start new stream with selected camera
             const constraints = {
@@ -134,11 +151,37 @@ window.cameraInterop = {
             
             this.stream = await navigator.mediaDevices.getUserMedia(constraints);
             
+            // Set the new stream to video element
             if (this.video) {
                 this.video.srcObject = this.stream;
+                // Ensure video plays
+                await this.video.play();
             }
+            
+            return true;
         } catch (error) {
             console.error('Error switching camera:', error);
+            
+            // Try to restart with any available camera if exact match fails
+            try {
+                const fallbackConstraints = {
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+                
+                this.stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                
+                if (this.video) {
+                    this.video.srcObject = this.stream;
+                    await this.video.play();
+                }
+            } catch (fallbackError) {
+                console.error('Fallback camera also failed:', fallbackError);
+            }
+            
             throw error;
         }
     },
