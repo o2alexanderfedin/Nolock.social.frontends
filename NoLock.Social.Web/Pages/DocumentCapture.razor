@@ -3,6 +3,7 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Core.OCR.Interfaces
 @using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Components.Camera
 @using System
 @using Microsoft.Extensions.Logging
 @using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType
@@ -37,67 +38,11 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        @if (isCameraInitialized)
-                        {
-                            <div class="camera-container">
-                                <video id="cameraPreview" class="camera-preview" autoplay></video>
-                                <canvas id="captureCanvas" class="d-none"></canvas>
-                            </div>
-                            
-                            <!-- Camera Controls -->
-                            <div class="camera-controls mt-3">
-                                <button class="btn btn-primary btn-lg" @onclick="CaptureImage" disabled="@isCapturing">
-                                    @if (isCapturing)
-                                    {
-                                        <span class="spinner-border spinner-border-sm me-2"></span>
-                                    }
-                                    <i class="bi bi-camera-fill"></i> Capture
-                                </button>
-                                
-                                @if (supportsTorch)
-                                {
-                                    <button class="btn btn-secondary" @onclick="ToggleTorch">
-                                        <i class="bi @(torchEnabled ? "bi-lightbulb-fill" : "bi-lightbulb")"></i> 
-                                        @(torchEnabled ? "Torch Off" : "Torch On")
-                                    </button>
-                                }
-                                
-                                @if (supportsZoom)
-                                {
-                                    <div class="zoom-control d-inline-block ms-3">
-                                        <label>Zoom: @currentZoom.ToString("F1")x</label>
-                                        <input type="range" class="form-range" min="1" max="5" step="0.1" 
-                                               value="@currentZoom" @onchange="OnZoomChanged" />
-                                    </div>
-                                }
-                            </div>
-                        }
-                        else if (isInitializing)
-                        {
-                            <div class="text-center p-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Initializing camera...</span>
-                                </div>
-                                <p class="mt-3">Initializing camera...</p>
-                            </div>
-                        }
-                        else if (!string.IsNullOrEmpty(errorMessage))
-                        {
-                            <div class="alert alert-danger">
-                                <i class="bi bi-exclamation-circle"></i> @errorMessage
-                            </div>
-                            <button class="btn btn-primary" @onclick="InitializeCamera">
-                                <i class="bi bi-arrow-clockwise"></i> Retry
-                            </button>
-                        }
-                        else
-                        {
-                            <div class="text-center p-5">
-                                <button class="btn btn-primary btn-lg" @onclick="InitializeCamera">
-                                    <i class="bi bi-camera"></i> Start Camera
-                                </button>
-                            </div>
-                        }
+                        <CameraCapture 
+                            PreviewTitle="Document Camera"
+                            AutoStart="true"
+                            OnImageCaptured="@HandleCameraImageCaptured"
+                            OnError="@HandleCameraError" />
                     </div>
                 </div>
                 
@@ -142,22 +87,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label for="cameraSelect" class="form-label">Select Camera</label>
-                            <select id="cameraSelect" class="form-select" @onchange="OnCameraChanged" disabled="@(!isCameraInitialized)">
-                                @if (availableCameras != null)
-                                {
-                                    @foreach (var camera in availableCameras)
-                                    {
-                                        <option value="@camera">@camera</option>
-                                    }
-                                }
-                                else
-                                {
-                                    <option>No cameras available</option>
-                                }
-                            </select>
-                        </div>
+@* Camera selection is now handled by CameraCapture component *@
                     </div>
                 </div>
                 
@@ -268,26 +198,13 @@
 </div>
 
 @code {
-    private bool isInitializing;
-    private bool isCameraInitialized;
-    private bool isCapturing;
     private bool isProcessing;
     private string? errorMessage;
     private string? sessionId;
-    
-    private string[]? availableCameras;
-    private Dictionary<string, string> cameraMapping = new();
-    private string? selectedCamera;
     private OCRDocumentType selectedDocumentType = OCRDocumentType.Receipt;
-    
-    private bool supportsTorch = false;
-    private bool supportsZoom = false;
-    private bool torchEnabled;
-    private double currentZoom = 1.0;
     
     private List<CapturedImage> capturedPages = new();
     private ImageQualityResult? lastQualityResult;
-    private CameraStream? cameraStream;
     
     private IDisposable? loginStateSubscription;
 
@@ -299,8 +216,7 @@
             {
                 if (!change.NewState.IsLoggedIn)
                 {
-                    // Stop camera and navigate away if logged out
-                    _ = StopCamera();
+                    // Navigate away if logged out
                     Navigation.NavigateTo("/");
                 }
             });
@@ -308,180 +224,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && LoginService.CurrentLoginState.IsLoggedIn)
-        {
-            // Auto-start the camera when the page loads
-            await InitializeCamera();
-        }
         await base.OnAfterRenderAsync(firstRender);
     }
 
-    private async Task InitializeCamera()
-    {
-        try
-        {
-            isInitializing = true;
-            errorMessage = null;
-            StateHasChanged();
 
-            // Check camera permission first
-            var permissionStatus = await JSRuntime.InvokeAsync<string>("checkCameraPermission");
-            Logger.LogInformation("Camera permission status: {PermissionStatus}", permissionStatus);
-            
-            // If permission not granted, request it
-            if (permissionStatus != "granted")
-            {
-                var permissionResult = await JSRuntime.InvokeAsync<string>("requestCameraPermission");
-                if (permissionResult != "granted")
-                {
-                    errorMessage = "Camera permission denied. Please grant camera access to use this feature.";
-                    isInitializing = false;
-                    StateHasChanged();
-                    return;
-                }
-            }
 
-            // Mark camera as initialized first so the video element gets rendered
-            isCameraInitialized = true;
-            StateHasChanged();
-            
-            // Wait a bit for the DOM to update with the video element
-            await Task.Delay(100);
 
-            // Set up camera stream using JavaScript interop
-            var setupSuccess = await JSRuntime.InvokeAsync<bool>("setupCamera", "cameraPreview", null);
-            if (!setupSuccess)
-            {
-                errorMessage = "Failed to start camera stream. Please check your camera is connected and not in use by another application.";
-                isCameraInitialized = false;
-                StateHasChanged();
-                return;
-            }
-            
-            // Get available cameras
-            var cameras = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement[]>("getAvailableCameras");
-            if (cameras != null && cameras.Length > 0)
-            {
-                cameraMapping.Clear();
-                var cameraLabels = new List<string>();
-                
-                foreach (var camera in cameras)
-                {
-                    if (camera.TryGetProperty("id", out var idProp) && 
-                        camera.TryGetProperty("label", out var labelProp))
-                    {
-                        var id = idProp.GetString() ?? "";
-                        var label = labelProp.GetString() ?? "Camera";
-                        cameraMapping[label] = id;
-                        cameraLabels.Add(label);
-                    }
-                }
-                
-                availableCameras = cameraLabels.ToArray();
-                selectedCamera = availableCameras.Length > 0 ? availableCameras[0] : "Default Camera";
-            }
-            else
-            {
-                availableCameras = new[] { "Default Camera" };
-                selectedCamera = availableCameras[0];
-            }
 
-            // Create a simple session ID
-            sessionId = Guid.NewGuid().ToString();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to initialize camera: {ex.Message}";
-        }
-        finally
-        {
-            isInitializing = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task CaptureImage()
-    {
-        if (!isCameraInitialized || string.IsNullOrEmpty(sessionId))
-            return;
-
-        try
-        {
-            isCapturing = true;
-            StateHasChanged();
-
-            // Capture image using JavaScript interop
-            var imageDataUrl = await JSRuntime.InvokeAsync<string>("captureImage", "captureCanvas", "cameraPreview");
-            
-            if (string.IsNullOrEmpty(imageDataUrl))
-            {
-                errorMessage = "Failed to capture image.";
-                return;
-            }
-
-            // Create a simple captured image object
-            var capturedImage = new CapturedImage
-            {
-                Id = Guid.NewGuid().ToString(),
-                ImageData = imageDataUrl,
-                ImageUrl = imageDataUrl,
-                Timestamp = DateTime.UtcNow,
-                Quality = 80 // Default quality for now
-            };
-            
-            // Add to captured pages
-            capturedPages.Add(capturedImage);
-            
-            // Create a simple quality result for display
-            lastQualityResult = new ImageQualityResult
-            {
-                OverallScore = 80,
-                BlurScore = 0.8,
-                LightingScore = 0.75
-            };
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to capture image: {ex.Message}";
-        }
-        finally
-        {
-            isCapturing = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task OnCameraChanged(ChangeEventArgs e)
-    {
-        if (e.Value != null && isCameraInitialized)
-        {
-            selectedCamera = e.Value.ToString();
-            
-            // Get the device ID from the label
-            if (!string.IsNullOrEmpty(selectedCamera) && cameraMapping.TryGetValue(selectedCamera, out var deviceId))
-            {
-                // Switch to the selected camera using its device ID
-                await JSRuntime.InvokeVoidAsync("switchCamera", deviceId);
-            }
-        }
-    }
-
-    private async Task OnZoomChanged(ChangeEventArgs e)
-    {
-        if (e.Value != null && double.TryParse(e.Value.ToString(), out var zoom))
-        {
-            currentZoom = zoom;
-            // For now, zoom is not implemented in the simplified version
-            await JSRuntime.InvokeVoidAsync("setZoom", zoom);
-        }
-    }
-
-    private async Task ToggleTorch()
-    {
-        torchEnabled = !torchEnabled;
-        // For now, torch is not implemented in the simplified version
-        await JSRuntime.InvokeVoidAsync("toggleTorch", torchEnabled);
-    }
 
     private void RemovePage(int index)
     {
@@ -565,21 +314,6 @@
         }
     }
 
-    private async Task StopCamera()
-    {
-        try
-        {
-            if (isCameraInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("stopCamera");
-                isCameraInitialized = false;
-            }
-        }
-        catch
-        {
-            // Ignore errors during cleanup
-        }
-    }
 
     private string GetQualityClass(double quality)
     {
@@ -591,10 +325,52 @@
         };
     }
 
-    public async void Dispose()
+    private async Task HandleCameraImageCaptured(CapturedImage capturedImage)
+    {
+        try
+        {
+            // Add the captured image to the pages list
+            capturedPages.Add(capturedImage);
+            
+            // Create quality result for display (maintaining original functionality)
+            lastQualityResult = new ImageQualityResult
+            {
+                OverallScore = capturedImage.Quality > 0 ? capturedImage.Quality : 80, // Use component's quality or default
+                BlurScore = 0.8, // Default values as in original
+                LightingScore = 0.75
+            };
+            
+            // Clear any previous error messages on successful capture
+            errorMessage = null;
+            
+            Logger.LogInformation("Image captured successfully. Total pages: {PageCount}", capturedPages.Count);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to process captured image: {ex.Message}";
+            Logger.LogError(ex, "Error processing captured image");
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void HandleCameraError(string error)
+    {
+        // Update error message from camera component
+        this.errorMessage = error;
+        
+        // Reset quality result on error
+        lastQualityResult = null;
+        
+        Logger.LogError("Camera error: {ErrorMessage}", error);
+        StateHasChanged();
+    }
+
+    public void Dispose()
     {
         loginStateSubscription?.Dispose();
-        await StopCamera();
     }
 }
 
