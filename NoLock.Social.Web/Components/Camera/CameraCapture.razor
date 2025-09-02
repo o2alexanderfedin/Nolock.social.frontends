@@ -1,0 +1,697 @@
+@using NoLock.Social.Core.Camera.Interfaces
+@using NoLock.Social.Core.Camera.Models
+@using NoLock.Social.Core.OCR.Interfaces
+@using NoLock.Social.Core.OCR.Models
+@using System
+@using Microsoft.Extensions.Logging
+@using System.Text.Json
+@inject ICameraService CameraService
+@inject IOCRService OCRService
+@inject IJSRuntime JSRuntime
+@inject ILogger<CameraCapture> Logger
+@implements IDisposable
+
+<h1 style="background-color: red; color: white; padding: 20px; text-align: center;">
+    🎯 CAMERACAPTURE COMPONENT LOADED 🎯
+</h1>
+
+<div class="camera-capture-component">
+    @if (!IsLoggedIn)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Please log in to use camera capture.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Camera Preview Section -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-camera"></i> Camera Preview
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        @if (isCameraInitialized)
+                        {
+                            <div class="camera-container">
+                                <video id="cameraPreview" class="camera-preview" autoplay></video>
+                                <canvas id="captureCanvas" class="d-none"></canvas>
+                            </div>
+                            
+                            <!-- Camera Controls -->
+                            <div class="camera-controls mt-3">
+                                <button class="btn btn-primary btn-lg" @onclick="CaptureImage" disabled="@isCapturing">
+                                    @if (isCapturing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                    }
+                                    <i class="bi bi-camera-fill"></i> Capture
+                                </button>
+                                
+                                @if (supportsTorch)
+                                {
+                                    <button class="btn btn-secondary" @onclick="ToggleTorch">
+                                        <i class="bi @(torchEnabled ? "bi-lightbulb-fill" : "bi-lightbulb")"></i> 
+                                        @(torchEnabled ? "Torch Off" : "Torch On")
+                                    </button>
+                                }
+                                
+                                @if (supportsZoom)
+                                {
+                                    <div class="zoom-control d-inline-block ms-3">
+                                        <label>Zoom: @currentZoom.ToString("F1")x</label>
+                                        <input type="range" class="form-range" min="1" max="5" step="0.1" 
+                                               value="@currentZoom" @onchange="OnZoomChanged" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (isInitializing)
+                        {
+                            <div class="text-center p-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Initializing camera...</span>
+                                </div>
+                                <p class="mt-3">Initializing camera...</p>
+                            </div>
+                        }
+                        else if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-circle"></i> @errorMessage
+                            </div>
+                            <button class="btn btn-primary" @onclick="InitializeCamera">
+                                <i class="bi bi-arrow-clockwise"></i> Retry
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="text-center p-5">
+                                <button class="btn btn-primary btn-lg" @onclick="InitializeCamera">
+                                    <i class="bi bi-camera"></i> Start Camera
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+                
+                <!-- Captured Pages -->
+                @if (capturedPages.Any())
+                {
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-images"></i> Captured Pages (@capturedPages.Count)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                @foreach (var (capturedPage, index) in capturedPages.Select((p, i) => (p, i)))
+                                {
+                                    <div class="col-md-3">
+                                        <div class="captured-page-thumbnail">
+                                            <img src="@capturedPage.ImageUrl" class="img-fluid" alt="Page @(index + 1)" />
+                                            <div class="page-actions">
+                                                <span class="badge bg-primary">Page @(index + 1)</span>
+                                                <button class="btn btn-sm btn-danger" @onclick="() => RemovePage(index)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            
+            <!-- Settings Section -->
+            <div class="col-lg-4">
+                <!-- Camera Selection -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear"></i> Camera Settings
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="cameraSelect" class="form-label">Select Camera</label>
+                            <select id="cameraSelect" class="form-select" @onchange="OnCameraChanged" disabled="@(!isCameraInitialized)">
+                                @if (availableCameras != null)
+                                {
+                                    @foreach (var camera in availableCameras)
+                                    {
+                                        <option value="@camera">@camera</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option>No cameras available</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Document Type Selection -->
+                @if (ShowDocumentTypeSelection)
+                {
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-file-earmark-text"></i> Document Type
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="documentType" id="receipt" 
+                                       checked="@(SelectedDocumentType == NoLock.Social.Core.OCR.Models.DocumentType.Receipt)" 
+                                       @onchange="() => SelectedDocumentType = NoLock.Social.Core.OCR.Models.DocumentType.Receipt">
+                                <label class="form-check-label" for="receipt">
+                                    <i class="bi bi-receipt"></i> Receipt
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="documentType" id="check" 
+                                       checked="@(SelectedDocumentType == NoLock.Social.Core.OCR.Models.DocumentType.Check)" 
+                                       @onchange="() => SelectedDocumentType = NoLock.Social.Core.OCR.Models.DocumentType.Check">
+                                <label class="form-check-label" for="check">
+                                    <i class="bi bi-credit-card"></i> Check
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                }
+                
+                <!-- Quality Indicators -->
+                @if (lastQualityResult != null)
+                {
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-check-circle"></i> Image Quality
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="quality-indicator mb-2">
+                                <span>Overall Quality:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.OverallScore)" 
+                                         style="width: @(lastQualityResult.OverallScore)%">
+                                        @lastQualityResult.OverallScore%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="quality-indicator mb-2">
+                                <span>Sharpness:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.BlurScore * 100)" 
+                                         style="width: @(lastQualityResult.BlurScore * 100)%">
+                                        @((lastQualityResult.BlurScore * 100).ToString("F0"))%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="quality-indicator">
+                                <span>Lighting:</span>
+                                <div class="progress">
+                                    <div class="progress-bar @GetQualityClass(lastQualityResult.LightingScore * 100)" 
+                                         style="width: @(lastQualityResult.LightingScore * 100)%">
+                                        @((lastQualityResult.LightingScore * 100).ToString("F0"))%
+                                    </div>
+                                </div>
+                            </div>
+                            @if (lastQualityResult.HasIssues)
+                            {
+                                <div class="alert alert-warning mt-2 mb-0">
+                                    <small>
+                                        @foreach (var issue in lastQualityResult.Issues)
+                                        {
+                                            <div>• @issue</div>
+                                        }
+                                    </small>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                
+                <!-- Actions -->
+                @if (ShowProcessButton)
+                {
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-lightning"></i> Actions
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <button class="btn btn-success w-100 mb-2" @onclick="ProcessDocument" 
+                                    disabled="@(!capturedPages.Any() || isProcessing)">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                <i class="bi bi-play-fill"></i> Process Document
+                            </button>
+                            <button class="btn btn-warning w-100" @onclick="ClearSession" 
+                                    disabled="@(!capturedPages.Any())">
+                                <i class="bi bi-trash"></i> Clear All Pages
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // Constructor for diagnostic logging
+    
+    // Component Parameters
+    [Parameter] public bool IsLoggedIn { get; set; } = true;
+    [Parameter] public bool AutoStart { get; set; } = true;
+    [Parameter] public bool ShowDocumentTypeSelection { get; set; } = true;
+    [Parameter] public bool ShowProcessButton { get; set; } = true;
+    [Parameter] public NoLock.Social.Core.OCR.Models.DocumentType SelectedDocumentType { get; set; } = NoLock.Social.Core.OCR.Models.DocumentType.Receipt;
+    [Parameter] public EventCallback<CapturedImage> OnImageCaptured { get; set; }
+    [Parameter] public EventCallback<List<CapturedImage>> OnDocumentProcessed { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+    
+    // Component State
+    private bool isInitializing;
+    private bool isCameraInitialized;
+    private bool isCapturing;
+    private bool isProcessing;
+    private string? errorMessage;
+    private string? sessionId;
+    
+    private string[]? availableCameras;
+    private Dictionary<string, string> cameraMapping = new();
+    private string? selectedCamera;
+    
+    private bool supportsTorch = false;
+    private bool supportsZoom = false;
+    private bool torchEnabled;
+    private double currentZoom = 1.0;
+    
+    private List<CapturedImage> capturedPages = new();
+    private ImageQualityResult? lastQualityResult;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("🔍 [SimpleCameraCapture] OnInitializedAsync called - Component lifecycle starting");
+        Logger.LogInformation("📊 [SimpleCameraCapture] Parameters - IsLoggedIn: {IsLoggedIn}, AutoStart: {AutoStart}, ShowDocumentTypeSelection: {ShowDocumentTypeSelection}, ShowProcessButton: {ShowProcessButton}", 
+            IsLoggedIn, AutoStart, ShowDocumentTypeSelection, ShowProcessButton);
+        Logger.LogInformation("📍 [SimpleCameraCapture] Component State - isInitializing: {isInitializing}, isCameraInitialized: {isCameraInitialized}", 
+            isInitializing, isCameraInitialized);
+        
+        try
+        {
+            await base.OnInitializedAsync();
+            Logger.LogInformation("✅ [SimpleCameraCapture] OnInitializedAsync completed successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "❌ [SimpleCameraCapture] Error in OnInitializedAsync");
+            throw;
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        Logger.LogInformation("🎨 [SimpleCameraCapture] OnAfterRenderAsync called - firstRender: {firstRender}", firstRender);
+        
+        if (firstRender)
+        {
+            Logger.LogInformation("🚀 [SimpleCameraCapture] First render detected");
+            Logger.LogInformation("📊 [SimpleCameraCapture] Render parameters - IsLoggedIn: {IsLoggedIn}, AutoStart: {AutoStart}", IsLoggedIn, AutoStart);
+            
+            if (IsLoggedIn && AutoStart)
+            {
+                Logger.LogInformation("📹 [SimpleCameraCapture] Conditions met for auto-start (IsLoggedIn=true, AutoStart=true)");
+                Logger.LogInformation("🔄 [SimpleCameraCapture] Initiating camera initialization...");
+                await InitializeCamera();
+            }
+            else
+            {
+                Logger.LogInformation("⏸️ [SimpleCameraCapture] Skipping auto-start - IsLoggedIn: {IsLoggedIn}, AutoStart: {AutoStart}", IsLoggedIn, AutoStart);
+            }
+        }
+        else
+        {
+            Logger.LogDebug("🔄 [SimpleCameraCapture] Re-render detected (not first render)");
+        }
+        
+        try
+        {
+            await base.OnAfterRenderAsync(firstRender);
+            Logger.LogDebug("✅ [SimpleCameraCapture] OnAfterRenderAsync completed");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "❌ [SimpleCameraCapture] Error in OnAfterRenderAsync");
+            throw;
+        }
+    }
+    
+    private async Task InitializeCamera()
+    {
+        Logger.LogInformation("📷 [SimpleCameraCapture] InitializeCamera() method called");
+        
+        try
+        {
+            Logger.LogInformation("🔧 [SimpleCameraCapture] Setting isInitializing=true, clearing errorMessage");
+            isInitializing = true;
+            errorMessage = null;
+            StateHasChanged();
+            Logger.LogInformation("🔄 [SimpleCameraCapture] StateHasChanged() called after setting isInitializing");
+
+            // Check camera permission first
+            var permissionStatus = await JSRuntime.InvokeAsync<string>("checkCameraPermission");
+            Logger.LogInformation("Camera permission status: {PermissionStatus}", permissionStatus);
+            
+            // If permission not granted, request it
+            if (permissionStatus != "granted")
+            {
+                var permissionResult = await JSRuntime.InvokeAsync<string>("requestCameraPermission");
+                if (permissionResult != "granted")
+                {
+                    errorMessage = "Camera permission denied. Please grant camera access to use this feature.";
+                    await NotifyError(errorMessage);
+                    isInitializing = false;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Mark camera as initialized first so the video element gets rendered
+            isCameraInitialized = true;
+            StateHasChanged();
+            
+            // Wait a bit for the DOM to update with the video element
+            await Task.Delay(100);
+
+            // Set up camera stream using JavaScript interop
+            var setupSuccess = await JSRuntime.InvokeAsync<bool>("setupCamera", "cameraPreview", null);
+            if (!setupSuccess)
+            {
+                errorMessage = "Failed to start camera stream. Please check your camera is connected and not in use by another application.";
+                await NotifyError(errorMessage);
+                isCameraInitialized = false;
+                StateHasChanged();
+                return;
+            }
+            
+            // Get available cameras
+            var cameras = await JSRuntime.InvokeAsync<JsonElement[]>("getAvailableCameras");
+            if (cameras != null && cameras.Length > 0)
+            {
+                cameraMapping.Clear();
+                var cameraLabels = new List<string>();
+                
+                foreach (var camera in cameras)
+                {
+                    if (camera.TryGetProperty("id", out var idProp) && 
+                        camera.TryGetProperty("label", out var labelProp))
+                    {
+                        var id = idProp.GetString() ?? "";
+                        var label = labelProp.GetString() ?? "Camera";
+                        cameraMapping[label] = id;
+                        cameraLabels.Add(label);
+                    }
+                }
+                
+                availableCameras = cameraLabels.ToArray();
+                selectedCamera = availableCameras.Length > 0 ? availableCameras[0] : "Default Camera";
+            }
+            else
+            {
+                availableCameras = new[] { "Default Camera" };
+                selectedCamera = availableCameras[0];
+            }
+
+            // Create a simple session ID
+            sessionId = Guid.NewGuid().ToString();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to initialize camera: {ex.Message}";
+            await NotifyError(errorMessage);
+            Logger.LogError(ex, "Failed to initialize camera");
+        }
+        finally
+        {
+            isInitializing = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task CaptureImage()
+    {
+        if (!isCameraInitialized || string.IsNullOrEmpty(sessionId))
+            return;
+
+        try
+        {
+            isCapturing = true;
+            StateHasChanged();
+
+            // Capture image using JavaScript interop
+            var imageDataUrl = await JSRuntime.InvokeAsync<string>("captureImage", "captureCanvas", "cameraPreview");
+            
+            if (string.IsNullOrEmpty(imageDataUrl))
+            {
+                errorMessage = "Failed to capture image.";
+                await NotifyError(errorMessage);
+                return;
+            }
+
+            // Create a simple captured image object
+            var capturedImage = new CapturedImage
+            {
+                Id = Guid.NewGuid().ToString(),
+                ImageData = imageDataUrl,
+                ImageUrl = imageDataUrl,
+                Timestamp = DateTime.UtcNow,
+                Quality = 80 // Default quality for now
+            };
+            
+            // Add to captured pages
+            capturedPages.Add(capturedImage);
+            
+            // Notify parent component
+            if (OnImageCaptured.HasDelegate)
+            {
+                await OnImageCaptured.InvokeAsync(capturedImage);
+            }
+            
+            // Create a simple quality result for display
+            lastQualityResult = new ImageQualityResult
+            {
+                OverallScore = 80,
+                BlurScore = 0.8,
+                LightingScore = 0.75
+            };
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to capture image: {ex.Message}";
+            await NotifyError(errorMessage);
+            Logger.LogError(ex, "Failed to capture image");
+        }
+        finally
+        {
+            isCapturing = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task OnCameraChanged(ChangeEventArgs e)
+    {
+        if (e.Value != null && isCameraInitialized)
+        {
+            selectedCamera = e.Value.ToString();
+            
+            // Get the device ID from the label
+            if (!string.IsNullOrEmpty(selectedCamera) && cameraMapping.TryGetValue(selectedCamera, out var deviceId))
+            {
+                // Switch to the selected camera using its device ID
+                await JSRuntime.InvokeVoidAsync("switchCamera", deviceId);
+            }
+        }
+    }
+    
+    private async Task OnZoomChanged(ChangeEventArgs e)
+    {
+        if (e.Value != null && double.TryParse(e.Value.ToString(), out var zoom))
+        {
+            currentZoom = zoom;
+            await JSRuntime.InvokeVoidAsync("setZoom", zoom);
+        }
+    }
+    
+    private async Task ToggleTorch()
+    {
+        torchEnabled = !torchEnabled;
+        await JSRuntime.InvokeVoidAsync("toggleTorch", torchEnabled);
+    }
+    
+    private void RemovePage(int index)
+    {
+        if (index >= 0 && index < capturedPages.Count)
+        {
+            capturedPages.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+    
+    private void ClearSession()
+    {
+        capturedPages.Clear();
+        lastQualityResult = null;
+        StateHasChanged();
+    }
+    
+    private async Task ProcessDocument()
+    {
+        if (!capturedPages.Any() || string.IsNullOrEmpty(sessionId))
+            return;
+
+        try
+        {
+            isProcessing = true;
+            StateHasChanged();
+
+            // Notify parent component with all captured pages
+            if (OnDocumentProcessed.HasDelegate)
+            {
+                await OnDocumentProcessed.InvokeAsync(new List<CapturedImage>(capturedPages));
+            }
+            
+            // Clear session after processing
+            ClearSession();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to process document: {ex.Message}";
+            await NotifyError(errorMessage);
+            Logger.LogError(ex, "Failed to process document");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task StopCamera()
+    {
+        try
+        {
+            if (isCameraInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("stopCamera");
+                isCameraInitialized = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error stopping camera");
+        }
+    }
+    
+    private string GetQualityClass(double quality)
+    {
+        return quality switch
+        {
+            >= 80 => "bg-success",
+            >= 60 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+    
+    private async Task NotifyError(string error)
+    {
+        if (OnError.HasDelegate)
+        {
+            await OnError.InvokeAsync(error);
+        }
+    }
+    
+    public void Dispose()
+    {
+        _ = StopCamera();
+    }
+}
+
+<style>
+    .camera-container {
+        position: relative;
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .camera-preview {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    
+    .camera-controls {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .zoom-control {
+        min-width: 200px;
+    }
+    
+    .captured-page-thumbnail {
+        position: relative;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .captured-page-thumbnail img {
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+    }
+    
+    .page-actions {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 0.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .quality-indicator {
+        margin-bottom: 0.5rem;
+    }
+    
+    .quality-indicator span {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-weight: 500;
+    }
+</style>
