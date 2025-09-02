@@ -2,8 +2,7 @@
 @using NoLock.Social.Core.Identity.Interfaces
 @using Microsoft.Extensions.Logging
 @inject ILoginAdapterService LoginService
-@inject NavigationManager Navigation
-@inject ILogger<NoLock.Social.Web.Pages.Camera> Logger
+@inject ILogger<Camera> Logger
 
 <PageTitle>Camera</PageTitle>
 
@@ -11,19 +10,15 @@
     <h1>Camera</h1>
     
     <NoLock.Social.Components.Camera.CameraCapture 
-        IsLoggedIn="@LoginService.CurrentLoginState.IsLoggedIn"
         AutoStart="true"
-        ShowDocumentTypeSelection="true"
-        ShowProcessButton="true"
         OnImageCaptured="@HandleImageCaptured"
-        OnDocumentProcessed="@HandleDocumentProcessed"
         OnError="@HandleError" />
 </div>
 
 @code {
     protected override void OnInitialized()
     {
-        Logger.LogInformation("Camera page initialized. IsLoggedIn: {IsLoggedIn}", LoginService.CurrentLoginState.IsLoggedIn);
+        Logger.LogInformation("Camera page initialized.");
         base.OnInitialized();
     }
     
@@ -31,7 +26,7 @@
     {
         if (firstRender)
         {
-            Logger.LogInformation("Camera page first render. IsLoggedIn: {IsLoggedIn}", LoginService.CurrentLoginState.IsLoggedIn);
+            Logger.LogInformation("Camera page first render.");
         }
         base.OnAfterRender(firstRender);
     }
@@ -39,12 +34,6 @@
     private void HandleImageCaptured(NoLock.Social.Core.Camera.Models.CapturedImage image)
     {
         Logger.LogInformation("Image captured: {ImageId}", image.Id);
-    }
-    
-    private void HandleDocumentProcessed(List<NoLock.Social.Core.Camera.Models.CapturedImage> images)
-    {
-        Logger.LogInformation("Processing {Count} images", images.Count);
-        Navigation.NavigateTo("/");
     }
     
     private void HandleError(string error)
