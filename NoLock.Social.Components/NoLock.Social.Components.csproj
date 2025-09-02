@@ -4,8 +4,9 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
-    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <RazorLangVersion>latest</RazorLangVersion>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <EnableDefaultRazorComponentItems>true</EnableDefaultRazorComponentItems>
   </PropertyGroup>
 
 
