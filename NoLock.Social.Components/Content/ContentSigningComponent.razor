@@ -247,7 +247,7 @@
 
         var json = System.Text.Json.JsonSerializer.Serialize(new
         {
-            content = _signatureResult.Content,
+            content = _signingModel.Content,
             contentHash = _contentHashBase64,
             signature = _signatureBase64,
             publicKey = _publicKeyBase64,

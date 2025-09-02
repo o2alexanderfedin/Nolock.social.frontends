@@ -12,7 +12,7 @@
             <label for="document-type">Document Type:</label>
             <select id="document-type" class="form-control" @bind="SelectedDocumentType">
                 <option value="">-- Select Document Type --</option>
-                @foreach (var docType in Enum.GetValues<DocumentType>())
+                @foreach (var docType in Enum.GetValues<NoLock.Social.Core.Camera.Models.DocumentType>())
                 {
                     <option value="@docType">@GetFriendlyName(docType)</option>
                 }
@@ -48,7 +48,7 @@
                         <div class="page-preview">
                             @if (!string.IsNullOrEmpty(page.ImageUrl))
                             {
-                                <img src="@page.ImageUrl" alt="Page @(index + 1)" />
+                                <img src="@(page.ImageUrl)" alt="Page @(index + 1)" />
                             }
                             else
                             {
@@ -59,8 +59,8 @@
                         </div>
                         <div class="page-info">
                             <span class="page-number">Page @(index + 1)</span>
-                            <span class="page-quality">Quality: @page.Quality%</span>
-                            <span class="page-size">@page.Width x @page.Height</span>
+                            <span class="page-quality">Quality: @(page.Quality)%</span>
+                            <span class="page-size">@(page.Width) x @(page.Height)</span>
                         </div>
                         <div class="page-actions">
                             <button class="btn btn-sm btn-outline-danger" 
@@ -149,17 +149,17 @@
     [Parameter] public EventCallback<(int from, int to)> OnPageMoved { get; set; }
     [Parameter] public EventCallback OnSaveDraft { get; set; }
     [Parameter] public bool IsCapturing { get; set; }
-    [Parameter] public DocumentType InitialDocumentType { get; set; } = DocumentType.Generic;
+    [Parameter] public NoLock.Social.Core.Camera.Models.DocumentType InitialDocumentType { get; set; } = NoLock.Social.Core.Camera.Models.DocumentType.Generic;
 
     // State
-    private DocumentType SelectedDocumentType = DocumentType.Generic;
+    private NoLock.Social.Core.Camera.Models.DocumentType SelectedDocumentType = NoLock.Social.Core.Camera.Models.DocumentType.Generic;
     private int SelectedPageIndex = -1;
     private bool IsGridView = true;
     private string StatusMessage = string.Empty;
     private string StatusMessageClass = "alert-info";
 
     // Computed properties
-    private bool CanProcessDocument => CapturedPages.Any() && SelectedDocumentType != DocumentType.Generic;
+    private bool CanProcessDocument => CapturedPages.Any() && SelectedDocumentType != NoLock.Social.Core.Camera.Models.DocumentType.Generic;
 
     protected override void OnInitialized()
     {
@@ -265,17 +265,17 @@
         return await Task.FromResult(true);
     }
 
-    private string GetFriendlyName(DocumentType docType)
+    private string GetFriendlyName(NoLock.Social.Core.Camera.Models.DocumentType docType)
     {
         return docType switch
         {
-            DocumentType.DriversLicense => "Driver's License",
-            DocumentType.IDCard => "ID Card",
-            DocumentType.W4 => "W-4 Form",
-            DocumentType.W2 => "W-2 Form",
-            DocumentType.Form1099 => "1099 Form",
-            DocumentType.SinglePage => "Single Page",
-            DocumentType.MultiPage => "Multi Page",
+            NoLock.Social.Core.Camera.Models.DocumentType.DriversLicense => "Driver's License",
+            NoLock.Social.Core.Camera.Models.DocumentType.IDCard => "ID Card",
+            NoLock.Social.Core.Camera.Models.DocumentType.W4 => "W-4 Form",
+            NoLock.Social.Core.Camera.Models.DocumentType.W2 => "W-2 Form",
+            NoLock.Social.Core.Camera.Models.DocumentType.Form1099 => "1099 Form",
+            NoLock.Social.Core.Camera.Models.DocumentType.SinglePage => "Single Page",
+            NoLock.Social.Core.Camera.Models.DocumentType.MultiPage => "Multi Page",
             _ => docType.ToString()
         };
     }
@@ -289,10 +289,10 @@
     }
 
     // Public method to get selected document type
-    public DocumentType GetSelectedDocumentType() => SelectedDocumentType;
+    public NoLock.Social.Core.Camera.Models.DocumentType GetSelectedDocumentType() => SelectedDocumentType;
 
     // Public method to set document type programmatically
-    public void SetDocumentType(DocumentType docType)
+    public void SetDocumentType(NoLock.Social.Core.Camera.Models.DocumentType docType)
     {
         SelectedDocumentType = docType;
         StateHasChanged();
@@ -476,7 +476,7 @@
         min-width: 120px;
     }
 
-    @media (max-width: 768px) {
+    @@media (max-width: 768px) {
         .document-header {
             flex-direction: column;
             align-items: flex-start;

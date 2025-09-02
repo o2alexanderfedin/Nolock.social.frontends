@@ -1,5 +1,6 @@
 @namespace NoLock.Social.Components.Storage
 @using NoLock.Social.Core.Cryptography.Interfaces
+@using NoLock.Social.Core.Storage
 @using Microsoft.Extensions.Logging
 @inject IStorageAdapterService StorageAdapter
 @inject ISigningService SigningService
@@ -123,7 +124,7 @@
                 <div class="mb-3">
                     <strong>Content:</strong>
                     <div class="content-display">
-                        <pre class="bg-light p-3 rounded">@retrievedContent.Content</pre>
+                        <pre class="bg-light p-3 rounded">@retrievedContent.TargetHash</pre>
                     </div>
                 </div>
                 <div class="metadata-display">
@@ -297,11 +298,11 @@
             var signedContent = await SigningService.SignAsync(contentToStore, privateKey, session.PublicKey);
             
             // Store in CAS
-            var metadata = await StorageAdapter.StoreSignedContentAsync(signedContent);
+            var contentAddress = await StorageAdapter.StoreSignedContentAsync(signedContent);
             
-            lastStoredAddress = metadata.ContentAddress;
-            lastStoredMetadata = metadata;
-            successMessage = $"Content successfully stored with address: {metadata.ContentAddress.Substring(0, 16)}...";
+            lastStoredAddress = contentAddress;
+            lastStoredMetadata = null; // No metadata object returned, just the address
+            successMessage = $"Content successfully stored with address: {contentAddress.Substring(0, 16)}...";
             
             // Refresh the content list
             await RefreshContentListAsync();
@@ -356,7 +357,7 @@
 
         try
         {
-            var content = await StorageAdapter.RetrieveSignedContentAsync(addressToRetrieve);
+            var (content, metadata) = await StorageAdapter.RetrieveSignedContentAsync(addressToRetrieve);
             
             if (content == null)
             {
@@ -448,7 +449,7 @@
         {
             storedContentList.Clear();
             
-            await foreach (var metadata in StorageAdapter.ListAllContentAsync())
+            foreach (var metadata in await StorageAdapter.ListAllContentAsync())
             {
                 storedContentList.Add(metadata);
             }

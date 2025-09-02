@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -25,7 +25,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NoLock.Social.Core\NoLock.Social.Core.csproj" />
-    <ProjectReference Include="..\NoLock.Social.Components\NoLock.Social.Components.csproj" />
   </ItemGroup>
 
 </Project>
