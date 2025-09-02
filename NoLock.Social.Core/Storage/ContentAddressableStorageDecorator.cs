@@ -99,5 +99,16 @@ namespace NoLock.Social.Core.Storage
         {
             return _underlying.ClearAsync(cancellation);
         }
+
+        /// <summary>
+        /// Subscribes an observer to receive notifications when content is stored.
+        /// Default implementation forwards to underlying storage.
+        /// </summary>
+        /// <param name="observer">The observer to subscribe</param>
+        /// <returns>A disposable that can be used to unsubscribe the observer</returns>
+        public virtual IDisposable Subscribe(IObserver<string> observer)
+        {
+            return _underlying.Subscribe(observer);
+        }
     }
 }

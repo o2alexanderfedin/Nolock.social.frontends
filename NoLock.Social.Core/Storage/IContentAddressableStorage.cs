@@ -1,11 +1,14 @@
+using System;
+
 namespace NoLock.Social.Core.Storage
 {
     /// <summary>
     /// Generic interface for type-safe content-addressable storage operations.
     /// Provides strongly-typed storage and retrieval of objects with automatic serialization.
+    /// Implements IObservable to notify observers when new content is stored.
     /// </summary>
     /// <typeparam name="T">The type of content to store</typeparam>
-    public interface IContentAddressableStorage<T>
+    public interface IContentAddressableStorage<T> : IObservable<string>
     {
         /// <summary>
         /// Stores content of type T and returns its content-addressed hash.
