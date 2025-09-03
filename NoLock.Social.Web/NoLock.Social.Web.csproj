@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NoLock.Social.Components\NoLock.Social.Components.csproj" />
     <ProjectReference Include="..\NoLock.Social.Core\NoLock.Social.Core.csproj" />
+    <ProjectReference Include="..\NoLock.Social.Storage.IndexedDb\NoLock.Social.Storage.IndexedDb.csproj" />
   </ItemGroup>
 
 </Project>

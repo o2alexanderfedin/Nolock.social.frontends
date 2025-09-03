@@ -3,6 +3,7 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Core.OCR.Interfaces
 @using NoLock.Social.Core.Identity.Interfaces
+@using NoLock.Social.Core.Storage
 @using NoLock.Social.Components.Camera
 @using System
 @using Microsoft.Extensions.Logging
@@ -13,6 +14,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 @inject ILogger<DocumentCapture> Logger
+@inject IContentAddressableStorage<ContentData<byte[]>> StorageService
 @implements IDisposable
 
 <PageTitle>Document Capture</PageTitle>
@@ -61,7 +63,7 @@
                                 {
                                     <div class="col-md-3">
                                         <div class="captured-page-thumbnail">
-                                            <img src="@capturedPage.ImageUrl" class="img-fluid" alt="Page @(index + 1)" />
+                                            <img src="@(GetImageUrl(capturedPage))" class="img-fluid" alt="Page @(index + 1)" />
                                             <div class="page-actions">
                                                 <span class="badge bg-primary">Page @(index + 1)</span>
                                                 <button class="btn btn-sm btn-danger" @onclick="() => RemovePage(index)">
@@ -171,7 +173,7 @@
                 }
                 
                 <!-- Actions -->
-                <div class="card">
+                <div class="card mb-3">
                     <div class="card-header">
                         <h5 class="mb-0">
                             <i class="bi bi-lightning"></i> Actions
@@ -186,12 +188,47 @@
                             }
                             <i class="bi bi-play-fill"></i> Process Document
                         </button>
-                        <button class="btn btn-warning w-100" @onclick="ClearSession" 
+                        <button class="btn btn-warning w-100 mb-2" @onclick="ClearSession" 
                                 disabled="@(!capturedPages.Any())">
                             <i class="bi bi-trash"></i> Clear All Pages
                         </button>
+                        <button class="btn btn-secondary w-100" @onclick="() => showDebugPanel = !showDebugPanel">
+                            <i class="bi bi-bug"></i> @(showDebugPanel ? "Hide" : "Show") Debug Panel
+                        </button>
                     </div>
                 </div>
+                
+                <!-- Debug Panel -->
+                @if (showDebugPanel)
+                {
+                    <div class="card">
+                        <div class="card-header bg-dark text-white">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-terminal"></i> Debug Logs
+                                </h5>
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => debugLogs.Clear()">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto; background-color: #1e1e1e;">
+                            @if (debugLogs.Any())
+                            {
+                                <div class="font-monospace small text-light">
+                                    @foreach (var log in debugLogs)
+                                    {
+                                        <div class="debug-log-entry">@log</div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-muted">No debug logs yet...</div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     }
@@ -200,13 +237,30 @@
 @code {
     private bool isProcessing;
     private string? errorMessage;
-    private string? sessionId;
     private OCRDocumentType selectedDocumentType = OCRDocumentType.Receipt;
     
-    private List<CapturedImage> capturedPages = new();
+    private List<string> capturedPages = new(); // Store content hashes instead of CapturedImage objects
     private ImageQualityResult? lastQualityResult;
     
     private IDisposable? loginStateSubscription;
+    
+    // Debug logging
+    private List<string> debugLogs = new();
+    private bool showDebugPanel = false;
+    
+    private void AddDebugLog(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        debugLogs.Insert(0, $"[{timestamp}] {message}");
+        
+        // Keep only last 100 entries
+        if (debugLogs.Count > 100)
+        {
+            debugLogs.RemoveRange(100, debugLogs.Count - 100);
+        }
+        
+        StateHasChanged();
+    }
 
     protected override void OnInitialized()
     {
@@ -227,11 +281,6 @@
         await base.OnAfterRenderAsync(firstRender);
     }
 
-
-
-
-
-
     private void RemovePage(int index)
     {
         if (index >= 0 && index < capturedPages.Count)
@@ -250,7 +299,7 @@
 
     private async Task ProcessDocument()
     {
-        if (!capturedPages.Any() || string.IsNullOrEmpty(sessionId))
+        if (!capturedPages.Any())
             return;
 
         try
@@ -259,15 +308,16 @@
             StateHasChanged();
 
             // Process each page individually (OCRService expects single images)
-            foreach (var capturedPage in capturedPages)
+            foreach (var contentHash in capturedPages)
             {
-                // Convert base64 to byte array
-                var base64Data = capturedPage.ImageData;
-                if (base64Data.Contains(","))
+                // Retrieve image data from storage using hash
+                var contentData = await StorageService.GetAsync(contentHash);
+                if (contentData?.Data == null)
                 {
-                    base64Data = base64Data.Split(',')[1]; // Remove data URL prefix
+                    Logger.LogWarning("Could not retrieve image data for hash {Hash}", contentHash);
+                    continue;
                 }
-                var imageBytes = Convert.FromBase64String(base64Data);
+                var imageBytes = contentData.Data;
 
                 // Create OCR submission request
                 var submission = new Core.OCR.Models.OCRSubmissionRequest
@@ -329,8 +379,31 @@
     {
         try
         {
-            // Add the captured image to the pages list
-            capturedPages.Add(capturedImage);
+            AddDebugLog("HandleCameraImageCaptured: Starting image capture processing");
+            
+            // Convert captured image data to ContentData for storage
+            var contentData = ConvertToContentData(capturedImage.ImageData);
+            AddDebugLog($"HandleCameraImageCaptured: Converted to ContentData - MimeType: {contentData.MimeType}, DataLength: {contentData.Data?.Length ?? 0} bytes");
+            
+            // Log the ContentData structure that will be stored
+            var contentDataJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                DataLength = contentData.Data?.Length ?? 0,
+                MimeType = contentData.MimeType,
+                DataPreview = contentData.Data != null && contentData.Data.Length > 0 
+                    ? Convert.ToBase64String(contentData.Data.Take(50).ToArray()) + "..." 
+                    : "null"
+            });
+            AddDebugLog($"HandleCameraImageCaptured: ContentData structure: {contentDataJson}");
+            
+            // Store the image in content-addressable storage and get hash
+            AddDebugLog("HandleCameraImageCaptured: Calling StorageService.StoreAsync");
+            var hash = await StorageService.StoreAsync(contentData);
+            AddDebugLog($"HandleCameraImageCaptured: Successfully stored with hash: {hash}");
+            
+            // Add the hash to the pages list
+            capturedPages.Add(hash);
+            AddDebugLog($"HandleCameraImageCaptured: Added to pages list. Total pages: {capturedPages.Count}");
             
             // Create quality result for display (maintaining original functionality)
             lastQualityResult = new ImageQualityResult
@@ -343,17 +416,95 @@
             // Clear any previous error messages on successful capture
             errorMessage = null;
             
-            Logger.LogInformation("Image captured successfully. Total pages: {PageCount}", capturedPages.Count);
+            Logger.LogInformation("Image captured and stored successfully. Hash: {Hash}, Total pages: {PageCount}", hash, capturedPages.Count);
+            AddDebugLog($"HandleCameraImageCaptured: Completed successfully. Hash: {hash}");
         }
         catch (Exception ex)
         {
             errorMessage = $"Failed to process captured image: {ex.Message}";
             Logger.LogError(ex, "Error processing captured image");
+            AddDebugLog($"HandleCameraImageCaptured: ERROR - {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                AddDebugLog($"HandleCameraImageCaptured: INNER ERROR - {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+            }
         }
         finally
         {
             StateHasChanged();
         }
+    }
+
+    private ContentData<byte[]> ConvertToContentData(string base64DataUrl)
+    {
+        AddDebugLog($"ConvertToContentData: Input length: {base64DataUrl?.Length ?? 0} chars");
+        
+        // Extract MIME type and base64 data from data URL
+        var (mimeType, base64Data) = ExtractMimeTypeAndData(base64DataUrl);
+        AddDebugLog($"ConvertToContentData: Extracted MimeType: {mimeType}, Base64 length: {base64Data?.Length ?? 0} chars");
+        
+        // Convert base64 to byte array
+        var bytes = Convert.FromBase64String(base64Data);
+        AddDebugLog($"ConvertToContentData: Converted to {bytes.Length} bytes");
+        
+        // Create ContentData object
+        var result = new ContentData<byte[]>
+        {
+            Data = bytes,
+            MimeType = mimeType
+        };
+        
+        AddDebugLog($"ConvertToContentData: Created ContentData with MimeType={result.MimeType}, DataLength={result.Data?.Length ?? 0}");
+        
+        return result;
+    }
+
+    private (string mimeType, string base64Data) ExtractMimeTypeAndData(string dataUrl)
+    {
+        // Handle data URL format: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA..."
+        if (dataUrl.StartsWith("data:"))
+        {
+            var parts = dataUrl.Split(',');
+            if (parts.Length == 2)
+            {
+                // Extract MIME type from header part
+                var header = parts[0]; // "data:image/jpeg;base64"
+                var mimeType = header.Substring(5); // Remove "data:"
+                
+                // Remove encoding specification if present
+                if (mimeType.Contains(";"))
+                {
+                    mimeType = mimeType.Split(';')[0];
+                }
+                
+                return (mimeType, parts[1]);
+            }
+        }
+        
+        // Fallback for raw base64 data without data URL prefix
+        return ("image/jpeg", dataUrl);
+    }
+
+    private string GetImageUrl(string contentHash)
+    {
+        try
+        {
+            // Retrieve content from storage using hash
+            var contentData = StorageService.GetAsync(contentHash).GetAwaiter().GetResult();
+            if (contentData?.Data != null)
+            {
+                // Convert back to data URL for display
+                var base64 = Convert.ToBase64String(contentData.Data);
+                return $"data:{contentData.MimeType};base64,{base64}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to retrieve image with hash {Hash}", contentHash);
+        }
+        
+        // Return a placeholder or empty image URL if retrieval fails
+        return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVycm9yPC90ZXh0Pjwvc3ZnPg==";
     }
 
     private void HandleCameraError(string error)
@@ -437,5 +588,16 @@
         display: block;
         margin-bottom: 0.25rem;
         font-weight: 500;
+    }
+    
+    .debug-log-entry {
+        padding: 2px 0;
+        border-bottom: 1px solid #333;
+        word-wrap: break-word;
+        color: #00ff00;
+    }
+    
+    .debug-log-entry:hover {
+        background-color: #2a2a2a;
     }
 </style>

@@ -18,11 +18,15 @@ namespace NoLock.Social.Core.Extensions
     {
         public static IServiceCollection AddContentAddressableStorage(this IServiceCollection services)
         {
-            // Content addressable storage removed - handled externally if needed
-            
-            // Hash services
+            // Hash services (required for content-addressable storage)
             services.AddScoped<IHashAlgorithm, SHA256HashAlgorithm>();
             services.AddScoped<IHashService, SHA256HashService>();
+            
+            // Serializer for byte array content
+            services.AddScoped<ISerializer<ContentData<byte[]>>, JsonSerializer<ContentData<byte[]>>>();
+            
+            // Note: The actual IContentAddressableStorage implementation must be registered
+            // in the consuming project (e.g., Web project) to avoid circular dependencies
             
             return services;
         }

@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Hashing;
 using NoLock.Social.Core.Storage;
@@ -16,42 +17,48 @@ public sealed class IndexedDbContentAddressableStorage<T>
     : IContentAddressableStorage<T>, IDisposable
 {
     private readonly IndexedDbCasDatabase _database;
-    private readonly JsonSerializerOptions _jsonOptions;
-    private readonly ISerializer<T> _serializer;
     private readonly IHashService _hashService;
+    private readonly ILogger<IndexedDbContentAddressableStorage<T>> _logger;
     private readonly Subject<string> _hashNotifications = new();
 
     public IndexedDbContentAddressableStorage(
         IJSRuntime jsRuntime, 
-        ISerializer<T> serializer,
-        IHashService hashService)
+        IHashService hashService,
+        ILogger<IndexedDbContentAddressableStorage<T>> logger)
     {
-        _database = new IndexedDbCasDatabase(jsRuntime);
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _database = new IndexedDbCasDatabase(jsRuntime, logger);
         _hashService = hashService ?? throw new ArgumentNullException(nameof(hashService));
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
+
+        _logger.LogInformation("IndexedDbContentAddressableStorage<{TypeName}> initialized", typeof(T).Name);
     }
 
     public async ValueTask<string> StoreAsync(T entity, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        
+        _logger.LogDebug("StoreAsync called for type {TypeName}", typeof(T).Name);
 
         await EnsureInitializedAsync();
         
         // Generate SHA256 hash
         var hash = await ComputeHash(entity);
+        _logger.LogDebug("Computed hash: {Hash}", hash);
         
         // Check cancellation after computing hash but before database operations
         if (cancellation.IsCancellationRequested)
+        {
+            _logger.LogDebug("StoreAsync cancelled for hash {Hash}", hash);
             throw new TaskCanceledException();
+        }
         
         // Check if already exists
         if (await ExistsAsync(hash, cancellation))
+        {
+            _logger.LogDebug("Entity with hash {Hash} already exists, returning existing hash", hash);
             return hash;
-
+        }
+        
         // Create entry
         var entry = new CasEntry<T>
         {
@@ -60,60 +67,87 @@ public sealed class IndexedDbContentAddressableStorage<T>
             TypeName = typeof(T).FullName!,
             StoredAt = DateTime.UtcNow
         };
-
-        // Store in IndexedDB
-        await _database.CasEntries.AddAsync(entry, hash);
+        
+        // Log the entry structure before storing
+        _logger.LogDebug("Created CasEntry with Hash='{Hash}', TypeName='{TypeName}', Data={Data}, StoredAt={StoredAt}",
+            entry.Hash, entry.TypeName, entry.Data, entry.StoredAt);
+        
+        try
+        {
+            // Store in IndexedDB (using inline key from entry.Hash property)
+            _logger.LogDebug("Attempting to store entry in IndexedDB with hash {Hash}", hash);
+            await _database.CasEntries.AddAsync(entry.Hash, entry);
+            _logger.LogInformation("Successfully stored entity with hash {Hash} in IndexedDB", hash);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to store entity with hash {Hash} in IndexedDB. Entry: {Entry}", hash, entry);
+            throw;
+        }
         
         // Notify observers about the new content hash
         _hashNotifications.OnNext(hash);
+        _logger.LogDebug("Notified observers about new content hash {Hash}", hash);
         
         return hash;
     }
 
     public async ValueTask<T?> GetAsync(string contentHash, CancellationToken cancellation = default)
     {
+        _logger.LogDebug("GetAsync called for hash {Hash}", contentHash);
+        
         var entry = await GetRawAsync(contentHash, cancellation);
-        return entry is null || entry.Data is null
-            ? default
-            : entry.Data;
+        if (entry is null)
+        {
+            _logger.LogDebug("No entry found for hash {Hash}", contentHash);
+            return default;
+        }
+        
+        _logger.LogDebug("Found entry for hash {Hash}, deserializing", contentHash);
+        return entry.Data;
     }
 
     public async ValueTask<bool> ExistsAsync(string contentHash, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(contentHash);
         
+        _logger.LogDebug("ExistsAsync called for hash {Hash}", contentHash);
+        
         await EnsureInitializedAsync();
 
-        return await GetRawAsync(contentHash, cancellation) is not null;
+        var exists = await GetRawAsync(contentHash, cancellation) is not null;
+        _logger.LogDebug("Hash {Hash} exists: {Exists}", contentHash, exists);
+        
+        return exists;
     }
 
     public async ValueTask<bool> DeleteAsync(string contentHash, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(contentHash);
+        
+        _logger.LogDebug("DeleteAsync called for hash {Hash}", contentHash);
 
         await EnsureInitializedAsync();
         
         try
         {
-            if (await ExistsAsync(contentHash))
-            {
-                await _database.CasEntries.DeleteAsync(contentHash);
-                _hashNotifications.OnNext(contentHash);
-                return true;
-            }
-            else
-            { 
-                return false;
-            }
+            // Always attempt delete operation regardless of existence (idempotent behavior)
+            await _database.CasEntries.DeleteAsync(contentHash);
+            _hashNotifications.OnNext(contentHash);
+            _logger.LogInformation("Successfully deleted entry with hash {Hash}", contentHash);
+            // IndexedDB delete operations are idempotent - return true even if item doesn't exist
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to delete entry with hash {Hash}", contentHash);
             return false;
         }
     }
 
     public IAsyncEnumerable<T> All
-        => EnumerateRawAsync().Select(x => x.Data);
+        => EnumerateRawAsync()
+            .Select(x => x.Data);
 
     private async IAsyncEnumerable<CasEntry<T>> EnumerateRawAsync()
     {
@@ -150,23 +184,54 @@ public sealed class IndexedDbContentAddressableStorage<T>
     {
         ArgumentNullException.ThrowIfNull(contentHash);
         
+        _logger.LogDebug("GetRawAsync called for hash {Hash}", contentHash);
+        
         await EnsureInitializedAsync();
         
-        return cancellation.IsCancellationRequested
-            ? throw new TaskCanceledException()
-            : await _database.CasEntries.GetAsync<string, CasEntry<T>>(contentHash);
+        if (cancellation.IsCancellationRequested)
+        {
+            _logger.LogDebug("GetRawAsync cancelled for hash {Hash}", contentHash);
+            throw new TaskCanceledException();
+        }
+        
+        try
+        {
+            var entry = await _database.CasEntries.GetAsync<string, CasEntry<T>>(contentHash);
+            if (entry != null)
+            {
+                _logger.LogDebug("Retrieved entry for hash {Hash}, TypeName: {TypeName}, Data: {Data}",
+                    contentHash, entry.TypeName, entry.Data);
+            }
+            else
+            {
+                _logger.LogDebug("No entry found for hash {Hash}", contentHash);
+            }
+            return entry;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving entry for hash {Hash}", contentHash);
+            throw;
+        }
     }
 
     private async ValueTask EnsureInitializedAsync()
-        => await _database.EnsureIsOpenAsync();
-
-    private async Task<string> ComputeHash(T data)
     {
-        // Serialize the data to bytes for hashing
-        var bytes = _serializer.Serialize(data);
+        _logger.LogDebug("Ensuring database is initialized");
+        await _database.EnsureIsOpenAsync();
+        _logger.LogDebug("Database initialization confirmed");
+    }
+
+    
+    private async Task<string> ComputeHash(T? data)
+    {
+        _logger.LogDebug("Computing hash for type {TypeName}", typeof(T).Name);
         
         // Use the injected hash service (now always returns Base64Url encoding)
-        return await _hashService.HashAsync(bytes);
+        var hash = await _hashService.HashAsync<T>(data);
+        _logger.LogDebug("Computed hash: {Hash}", hash);
+        
+        return hash;
     }
 
     /// <summary>

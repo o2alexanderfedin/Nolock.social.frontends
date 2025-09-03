@@ -12,6 +12,6 @@ namespace NoLock.Social.Core.Hashing
         /// </summary>
         /// <param name="data">The input data to hash.</param>
         /// <returns>A task that represents the asynchronous operation. The task result contains the hash string.</returns>
-        Task<string> HashAsync<T>(T data);
+        ValueTask<string> HashAsync<T>(T? data);
     }
 }

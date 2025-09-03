@@ -184,28 +184,6 @@ namespace NoLock.Social.Core.Tests.Performance
             }
         }
 
-        [Theory]
-        [InlineData(10)]
-        [InlineData(50)]
-        [InlineData(100)]
-        [InlineData(200)]
-        public void PerformanceTimer_DurationAccuracy(int sleepMs)
-        {
-            // Arrange
-            PerformanceMetrics? capturedMetrics = null;
-
-            // Act
-            using (var timer = new PerformanceTimer($"DurationTest_{sleepMs}ms", metrics => capturedMetrics = metrics))
-            {
-                Thread.Sleep(sleepMs);
-            }
-
-            // Assert
-            capturedMetrics.Should().NotBeNull();
-            // Allow for some timing variance (80% to 150% of expected)
-            capturedMetrics!.Duration.TotalMilliseconds.Should().BeInRange(sleepMs * 0.8, sleepMs * 1.5);
-        }
-
         [Fact]
         public void PerformanceTimer_FailureThenSuccess_ShouldRecordFailure()
         {

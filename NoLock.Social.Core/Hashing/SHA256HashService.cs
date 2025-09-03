@@ -13,7 +13,7 @@ namespace NoLock.Social.Core.Hashing
         private readonly IServiceProvider _services = services ?? throw new ArgumentNullException(nameof(services));
 
         /// <inheritdoc/>
-        public async Task<string> HashAsync<T>(T data)
+        public async ValueTask<string> HashAsync<T>(T? data)
         {
             ArgumentNullException.ThrowIfNull(data);
 
