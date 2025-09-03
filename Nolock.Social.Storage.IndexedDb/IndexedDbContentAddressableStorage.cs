@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CloudNimble.BlazorEssentials.IndexedDb;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Hashing;
@@ -16,6 +17,7 @@ namespace Nolock.Social.Storage.IndexedDb;
 public sealed class IndexedDbContentAddressableStorage<T>
     : IContentAddressableStorage<T>, IDisposable
 {
+    //[ObjectStoreAttribute(KeyPath = "hash")]
     private readonly IndexedDbCasDatabase _database;
     private readonly IHashService _hashService;
     private readonly ILogger<IndexedDbContentAddressableStorage<T>> _logger;
@@ -28,7 +30,7 @@ public sealed class IndexedDbContentAddressableStorage<T>
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         // Cast the generic logger to non-generic for the database
-        _database = new IndexedDbCasDatabase(jsRuntime, (ILogger)logger);
+        _database = new IndexedDbCasDatabase(jsRuntime, logger);
         _hashService = hashService ?? throw new ArgumentNullException(nameof(hashService));
 
         _logger.LogInformation("IndexedDbContentAddressableStorage<{TypeName}> initialized", typeof(T).Name);
@@ -77,7 +79,10 @@ public sealed class IndexedDbContentAddressableStorage<T>
         {
             // Store in IndexedDB (using inline key from entry.Hash property)
             _logger.LogDebug("Attempting to store entry in IndexedDB with hash {Hash}", hash);
-            await _database.CasEntries.AddAsync(entry.Hash, entry);
+            var key = await _database.CasEntries.AddAsync<CasEntry<T>, string>(entry);
+            if (key != entry.Hash)
+                throw new InvalidOperationException($"key != entry.Hash: {key} != {entry.Hash}");
+            
             _logger.LogInformation("Successfully stored entity with hash {Hash} in IndexedDB", hash);
         }
         catch (Exception ex)

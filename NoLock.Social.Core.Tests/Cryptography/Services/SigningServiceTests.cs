@@ -373,7 +373,7 @@ namespace NoLock.Social.Core.Tests.Cryptography.Services
         public async Task SignAsync_KeyPair_WithNullKeyPair_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            await _service.Invoking(s => s.SignAsync("test content", (Ed25519KeyPair)null))
+            await _service.Invoking(s => s.SignAsync("test content", null))
                 .Should().ThrowAsync<ArgumentNullException>()
                 .WithParameterName("keyPair");
         }

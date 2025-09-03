@@ -528,7 +528,7 @@ namespace NoLock.Social.Core.Tests.OCR.Services
                     DocumentType = documentType,
                     ConfidenceScore = 0.5 // Below threshold
                 } : 
-                (ProcessedDocument)new ProcessedCheck
+                new ProcessedCheck
                 {
                     DocumentId = Guid.NewGuid().ToString(),
                     DocumentType = documentType,

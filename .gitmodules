@@ -1,0 +1,3 @@
+[submodule "BlazorEssentials"]
+	path = BlazorEssentials
+	url = https://github.com/o2alexanderfedin/BlazorEssentials.git
