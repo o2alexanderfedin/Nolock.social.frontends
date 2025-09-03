@@ -9,6 +9,7 @@ public sealed class IndexedDbCasDatabase : IndexedDbDatabase
     private readonly ILogger _logger;
     
     [ObjectStore(Name = "CasEntries", AutoIncrementKeys = false, KeyPath = "hash")]
+    [Index(Name = "CasEntries", Path = "hash")]
     public IndexedDbObjectStore CasEntries { get; init; } = null!;
 
     public IndexedDbCasDatabase(IJSRuntime jsRuntime, ILogger logger)

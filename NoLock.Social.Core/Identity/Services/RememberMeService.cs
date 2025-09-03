@@ -89,7 +89,7 @@ namespace NoLock.Social.Core.Identity.Services
                 {
                     _logger.LogDebug("No remembered username found");
                     _isUsernameRemembered = false;
-                    return (string?)null;
+                    return null;
                 }
 
                 RememberedUserData? data = null;
@@ -102,14 +102,14 @@ namespace NoLock.Social.Core.Identity.Services
                     _logger.LogWarning(ex, "Failed to deserialize remembered user data - data may be corrupted");
                     // Clear corrupted data
                     await ClearRememberedDataAsync();
-                    return (string?)null;
+                    return null;
                 }
 
                 if (data == null || string.IsNullOrWhiteSpace(data.Username))
                 {
                     _logger.LogWarning("Invalid or corrupted remembered user data");
                     _isUsernameRemembered = false;
-                    return (string?)null;
+                    return null;
                 }
 
                 // Check if the remembered data is too old (configurable expiry)
@@ -118,7 +118,7 @@ namespace NoLock.Social.Core.Identity.Services
                 {
                     _logger.LogInformation("Remembered username expired (last used {Days} days ago)", daysSinceLastUse);
                     await ClearRememberedDataAsync();
-                    return (string?)null;
+                    return null;
                 }
 
                 _logger.LogDebug("Retrieved remembered username: {Username}", data.Username);

@@ -136,23 +136,35 @@ public class IndexedDbContentAddressableStorageTests
             It.IsAny<object[]>()))
             .ReturnsAsync((CasEntry<TestEntity>?)null);
         
-        // Default mock for AddAsync - succeeds
-        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
+        // Default mock for AddAsync - returns the key passed in
+        _jsModuleMock.Setup(js => js.InvokeAsync<string>(
             "add",
             It.IsAny<object[]>()))
-            .ReturnsAsync(Mock.Of<IJSVoidResult>());
+            .Returns<string, object?[]>((identifier, args) =>
+            {
+                // The key is passed as the 4th argument (database name, store name, data, key)
+                if (args != null && args.Length >= 4 && args[3] is string key)
+                    return ValueTask.FromResult(key);
+                return ValueTask.FromResult(string.Empty);
+            });
         
-        // Default mock for DeleteAsync - succeeds (returns void result)
-        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+        // Default mock for DeleteAsync - uses correct method name "deleteRecord"
+        _jsModuleMock.Setup(js => js.InvokeAsync<object?>(
+            "deleteRecord",
             It.IsAny<object[]>()))
-            .ReturnsAsync(Mock.Of<IJSVoidResult>());
+            .ReturnsAsync((object?)null);
         
         // Default mock for GetAllAsync - returns empty array (not null)
         _jsModuleMock.Setup(js => js.InvokeAsync<CasEntry<TestEntity>[]>(
             "getAll",
             It.IsAny<object[]>()))
             .ReturnsAsync([]);
+        
+        // Default mock for ClearStore - returns success string
+        _jsModuleMock.Setup(js => js.InvokeAsync<string>(
+            "clearStore",
+            It.IsAny<object[]>()))
+            .ReturnsAsync("success");
     }
     
     #endregion
@@ -464,7 +476,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup mock for successful deletion
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -476,7 +488,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify DeleteAsync was called with correct hash
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash)),
             Times.Once);
     }
@@ -489,7 +501,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup mock - IndexedDB typically doesn't throw for non-existent keys
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>()); // Returns success even for non-existent items
         
@@ -501,7 +513,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify DeleteAsync was still called
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == nonExistentHash)),
             Times.Once);
     }
@@ -518,7 +530,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify that no database operations were attempted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()),
             Times.Never);
     }
@@ -531,7 +543,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup mock to throw an exception
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash)))
             .ThrowsAsync(new InvalidOperationException("Database error"));
         
@@ -543,7 +555,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify DeleteAsync was attempted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash)),
             Times.Once);
     }
@@ -558,7 +570,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup mock for deletion
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -570,7 +582,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify that delete was still called (cancellation is not checked in DeleteAsync)
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()),
             Times.Once);
     }
@@ -585,7 +597,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup mocks for all deletions
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -601,7 +613,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify all deletions were called
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()),
             Times.Exactly(3));
     }
@@ -952,7 +964,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup DeleteAsync to succeed for each hash
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -961,17 +973,17 @@ public class IndexedDbContentAddressableStorageTests
         
         // Assert - Verify all items were deleted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash1)),
             Times.Once);
         
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash2)),
             Times.Once);
         
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash3)),
             Times.Once);
         
@@ -1007,7 +1019,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Verify DeleteAsync was never called (no items to delete)
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()),
             Times.Never);
     }
@@ -1040,7 +1052,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup DeleteAsync mock - shouldn't be called due to early cancellation
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -1050,7 +1062,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Assert - Verify no deletions occurred due to pre-cancelled token
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()),
             Times.Never); // No deletions should occur with pre-cancelled token
     }
@@ -1085,7 +1097,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup DeleteAsync
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -1094,13 +1106,13 @@ public class IndexedDbContentAddressableStorageTests
         
         // Assert - Only the correct type entry should be deleted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash1)),
             Times.Once);
         
         // Wrong type entry should NOT be deleted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == "wrong-type-hash")),
             Times.Never);
     }
@@ -1126,17 +1138,17 @@ public class IndexedDbContentAddressableStorageTests
         
         // Setup DeleteAsync - second deletion fails
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash1)))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash2)))
             .ThrowsAsync(new InvalidOperationException("Delete failed"));
         
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash3)))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -1146,19 +1158,19 @@ public class IndexedDbContentAddressableStorageTests
         
         // Assert - Verify first deletion was attempted
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash1)),
             Times.Once);
         
         // Verify second deletion was attempted (and failed)
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash2)),
             Times.Once);
         
         // Third deletion should not have been attempted (exception stopped execution)
         _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.Is<object[]>(args => args.Length >= 3 && args[2] != null && args[2].ToString() == hash3)),
             Times.Never);
     }
@@ -1287,7 +1299,7 @@ public class IndexedDbContentAddressableStorageTests
         var receivedHashes = new List<string>();
         
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
@@ -1402,7 +1414,7 @@ public class IndexedDbContentAddressableStorageTests
         SetupGetAsyncMock(hash2, null);
         
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
-            "delete",
+            "deleteRecord",
             It.IsAny<object[]>()))
             .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
