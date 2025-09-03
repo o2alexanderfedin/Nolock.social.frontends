@@ -22,12 +22,13 @@ public sealed class IndexedDbContentAddressableStorage<T>
     private readonly Subject<string> _hashNotifications = new();
 
     public IndexedDbContentAddressableStorage(
-        IJSRuntime jsRuntime, 
+        IJSRuntime jsRuntime,
         IHashService hashService,
         ILogger<IndexedDbContentAddressableStorage<T>> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _database = new IndexedDbCasDatabase(jsRuntime, logger);
+        // Cast the generic logger to non-generic for the database
+        _database = new IndexedDbCasDatabase(jsRuntime, (ILogger)logger);
         _hashService = hashService ?? throw new ArgumentNullException(nameof(hashService));
 
         _logger.LogInformation("IndexedDbContentAddressableStorage<{TypeName}> initialized", typeof(T).Name);

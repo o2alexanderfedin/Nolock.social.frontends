@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NoLock.Social.Core.Storage;
 using NoLock.Social.Core.Hashing;
@@ -19,6 +20,8 @@ public class ServiceCollectionExtensionsTests
         // Add required dependencies first
         services.AddSingleton<IJSRuntime>(new MockJSRuntime());
         services.AddSingleton<IHashService>(Mock.Of<IHashService>());
+        services.AddSingleton<ILogger>(new MockLogger());
+        services.AddSingleton(typeof(ILogger<>), typeof(MockLogger<>));
         
         // Act
         var result = services.AddIndexedDbContentAddressableStorage<string>();
@@ -66,6 +69,8 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IJSRuntime>(new MockJSRuntime());
         services.AddSingleton<IHashService>(Mock.Of<IHashService>());
+        services.AddSingleton<ILogger>(new MockLogger());
+        services.AddSingleton(typeof(ILogger<>), typeof(MockLogger<>));
         
         // Act - Use reflection to call generic method
         var method = typeof(ServiceCollectionExtensions)
@@ -94,6 +99,8 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IJSRuntime>(new MockJSRuntime());
         services.AddSingleton<IHashService>(Mock.Of<IHashService>());
+        services.AddSingleton<ILogger>(new MockLogger());
+        services.AddSingleton(typeof(ILogger<>), typeof(MockLogger<>));
         
         // Act - Call multiple times with different types
         services.AddIndexedDbContentAddressableStorage<string>();
@@ -121,6 +128,8 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IJSRuntime>(new MockJSRuntime());
         services.AddSingleton<IHashService>(Mock.Of<IHashService>());
+        services.AddSingleton<ILogger>(new MockLogger());
+        services.AddSingleton(typeof(ILogger<>), typeof(MockLogger<>));
         
         // Act
         services.AddIndexedDbContentAddressableStorage<string>();
@@ -139,6 +148,8 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IJSRuntime>(new MockJSRuntime());
         services.AddSingleton<IHashService>(Mock.Of<IHashService>());
+        services.AddSingleton<ILogger>(new MockLogger());
+        services.AddSingleton(typeof(ILogger<>), typeof(MockLogger<>));
         
         // Act
         services.AddIndexedDbContentAddressableStorage<string>();
@@ -167,4 +178,18 @@ public class MockJSRuntime : IJSRuntime
     {
         return ValueTask.FromResult(default(TValue)!);
     }
+}
+
+public class MockLogger : ILogger
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
+}
+
+public class MockLogger<T> : ILogger<T>
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
 }

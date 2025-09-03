@@ -417,11 +417,11 @@ namespace NoLock.Social.Components.Tests.Camera
             for (int i = 0; i < 5; i++)
             {
                 await captureButton!.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-                await component.InvokeAsync(() => Task.Delay(20)); // Small delay to let async operations complete
+                await component.InvokeAsync(() => Task.Delay(50)); // Increased delay to let async operations complete
             }
             
             // Wait for all captures to complete
-            await component.InvokeAsync(() => Task.Delay(50));
+            await component.InvokeAsync(() => Task.Delay(100));
 
             // Assert
             captureCount.Should().Be(5);
