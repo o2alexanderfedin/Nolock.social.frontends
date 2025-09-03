@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Extensions;
+using NoLock.Social.Core.Storage;
+using Nolock.Social.Storage.IndexedDb;
 using NoLock.Social.Web;
 using TG.Blazor.IndexedDB;
 
@@ -24,6 +26,9 @@ builder.Services.AddIndexedDB(dbStore =>
 });
 
 builder.Services.AddContentAddressableStorage();
+// Register the IndexedDb implementation for ContentData<byte[]>
+builder.Services.AddScoped<IContentAddressableStorage<ContentData<byte[]>>, 
+    IndexedDbContentAddressableStorage<ContentData<byte[]>>>();
 // Use reactive version of cryptographic services
 builder.Services.AddCryptographicServices(useReactive: true);
 builder.Services.AddSecurityServices();

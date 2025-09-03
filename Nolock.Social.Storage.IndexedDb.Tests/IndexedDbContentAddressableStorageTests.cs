@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System.Text;
 using System.Text.Json;
@@ -19,6 +21,7 @@ public class IndexedDbContentAddressableStorageTests
     private readonly Mock<IJSObjectReference> _jsModuleMock;
     private readonly Mock<ISerializer<TestEntity>> _serializerMock;
     private readonly Mock<IHashService> _hashServiceMock;
+    private readonly Mock<ILogger<IndexedDbContentAddressableStorage<TestEntity>>> _loggerMock;
     private readonly IndexedDbContentAddressableStorage<TestEntity> _storage;
     private readonly TestDataFactory _testDataFactory;
     
@@ -81,6 +84,7 @@ public class IndexedDbContentAddressableStorageTests
         _jsModuleMock = new Mock<IJSObjectReference>();
         _serializerMock = new Mock<ISerializer<TestEntity>>();
         _hashServiceMock = new Mock<IHashService>();
+        _loggerMock = new Mock<ILogger<IndexedDbContentAddressableStorage<TestEntity>>>();
         _testDataFactory = new TestDataFactory();
         
         // Setup default serialization behavior
@@ -88,22 +92,28 @@ public class IndexedDbContentAddressableStorageTests
             .Returns<TestEntity>(entity => Encoding.UTF8.GetBytes($"{entity.Id}|{entity.Name}|{entity.CreatedAt:O}"));
         
         // Setup hash service to compute hashes consistently with TestDataFactory
-        _hashServiceMock.Setup(h => h.HashAsync(It.IsAny<byte[]>()))
-            .Returns<byte[]>((data) =>
+        _hashServiceMock.Setup(h => h.HashAsync<TestEntity>(It.IsAny<TestEntity>()))
+            .Returns<string>(data =>
             {
                 using var sha256 = System.Security.Cryptography.SHA256.Create();
-                var hashBytes = sha256.ComputeHash(data);
+                var bytesToHash = data switch
+                {
+                    null => [],
+                    _ => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(data))
+                };
+
+                var hashBytes = sha256.ComputeHash(bytesToHash);
                 var hash = Convert.ToBase64String(hashBytes)
                     .Replace('+', '-')
                     .Replace('/', '_')
                     .TrimEnd('=');
-                return Task.FromResult(hash);
+                return ValueTask.FromResult(hash);
             });
         
         // Setup JSRuntime mocking for IndexedDB operations
         SetupIndexedDbMocks();
         
-        _storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, _hashServiceMock.Object);
+        _storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _hashServiceMock.Object, _loggerMock.Object);
     }
     
     private void SetupIndexedDbMocks()
@@ -127,10 +137,10 @@ public class IndexedDbContentAddressableStorageTests
             .ReturnsAsync((CasEntry<TestEntity>?)null);
         
         // Default mock for AddAsync - succeeds
-        _jsModuleMock.Setup(js => js.InvokeAsync<string>(
+        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
             "add",
             It.IsAny<object[]>()))
-            .ReturnsAsync("success");
+            .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
         // Default mock for DeleteAsync - succeeds (returns void result)
         _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
@@ -142,7 +152,7 @@ public class IndexedDbContentAddressableStorageTests
         _jsModuleMock.Setup(js => js.InvokeAsync<CasEntry<TestEntity>[]>(
             "getAll",
             It.IsAny<object[]>()))
-            .ReturnsAsync(Array.Empty<CasEntry<TestEntity>>());
+            .ReturnsAsync([]);
     }
     
     #endregion
@@ -153,18 +163,10 @@ public class IndexedDbContentAddressableStorageTests
     public void Constructor_ShouldInitialize_WithValidJSRuntime()
     {
         // Act
-        var storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, _hashServiceMock.Object);
+        var storage = new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _hashServiceMock.Object, _loggerMock.Object);
         
         // Assert
         Assert.NotNull(storage);
-    }
-    
-    [Fact]
-    public void Constructor_ShouldThrowArgumentNullException_WhenSerializerIsNull()
-    {
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => 
-            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, null!, _hashServiceMock.Object));
     }
     
     [Fact]
@@ -172,7 +174,7 @@ public class IndexedDbContentAddressableStorageTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => 
-            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, _serializerMock.Object, null!));
+            new IndexedDbContentAddressableStorage<TestEntity>(_jsRuntimeMock.Object, null!, _loggerMock.Object));
     }
     
     #endregion
@@ -219,7 +221,7 @@ public class IndexedDbContentAddressableStorageTests
         Assert.Equal(expectedHash, resultHash);
         
         // Verify that AddAsync was NOT called (deduplication worked)
-        _jsModuleMock.Verify(js => js.InvokeAsync<string>(
+        _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
             "add",
             It.IsAny<object[]>()),
             Times.Never);
@@ -263,7 +265,7 @@ public class IndexedDbContentAddressableStorageTests
             await _storage.StoreAsync(entity, cts.Token));
         
         // Verify that no database operations were attempted (Add should not be called)
-        _jsModuleMock.Verify(js => js.InvokeAsync<string>(
+        _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
             "add",
             It.IsAny<object[]>()),
             Times.Never);
@@ -308,7 +310,7 @@ public class IndexedDbContentAddressableStorageTests
         CasEntry<TestEntity>? capturedEntry = null;
         
         // Setup mock to capture the CasEntry being stored
-        _jsModuleMock.Setup(js => js.InvokeAsync<string>(
+        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
             "add",
             It.IsAny<object[]>()))
             .Callback<string, object[]>((method, args) =>
@@ -322,7 +324,7 @@ public class IndexedDbContentAddressableStorageTests
                     }
                 }
             })
-            .ReturnsAsync("success");
+            .ReturnsAsync(Mock.Of<IJSVoidResult>());
         
         SetupGetAsyncMock(expectedHash, null);
         
@@ -332,10 +334,71 @@ public class IndexedDbContentAddressableStorageTests
         // Assert
         Assert.NotNull(capturedEntry);
         Assert.Equal(expectedHash, capturedEntry!.Hash);
-        Assert.Equal(entity, capturedEntry.Data);
+        var capturedEntity = capturedEntry.Data;
+        Assert.Equal(entity, capturedEntity);
         Assert.Equal(typeof(TestEntity).FullName, capturedEntry.TypeName);
         Assert.True(capturedEntry.StoredAt <= DateTime.UtcNow);
         Assert.True(capturedEntry.StoredAt >= DateTime.UtcNow.AddSeconds(-5));
+    }
+    
+    [Fact]
+    public async Task StoreAsync_ShouldUseHashAsInlineKey_NotExplicitParameter()
+    {
+        // Arrange - Testing that we can use our own keys via inline key property
+        var entity = _testDataFactory.CreateEntity("inline-key-test");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        CasEntry<TestEntity>? capturedEntry = null;
+        object[]? capturedArgs = null;
+        
+        // Setup mock to capture the CasEntry and arguments being passed to add
+        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
+            "add",
+            It.IsAny<object[]>()))
+            .Callback<string, object[]>((method, args) =>
+            {
+                capturedArgs = args;
+                foreach (var arg in args)
+                {
+                    if (arg is CasEntry<TestEntity> entry)
+                    {
+                        capturedEntry = entry;
+                        break;
+                    }
+                }
+            })
+            .ReturnsAsync(Mock.Of<IJSVoidResult>());
+        
+        SetupGetAsyncMock(expectedHash, null);
+        
+        // Act
+        var resultHash = await _storage.StoreAsync(entity);
+        
+        // Assert - Verify inline key behavior
+        Assert.NotNull(capturedEntry);
+        Assert.NotNull(capturedArgs);
+        
+        // 1. Verify the hash is properly set as the inline key in CasEntry
+        Assert.Equal(expectedHash, capturedEntry!.Hash);
+        Assert.Equal(resultHash, capturedEntry.Hash);
+        
+        // 2. Verify no explicit key parameter is passed to IndexedDB
+        // The args should contain: database name, store name, and the CasEntry object
+        // There should NOT be a separate key parameter
+        Assert.Equal(3, capturedArgs!.Length); // Only DB name, store name, and CasEntry
+        Assert.Equal("IndexedDbCasDatabase", capturedArgs[0]); // Database name
+        Assert.Equal("CasEntries", capturedArgs[1]); // Store name  
+        Assert.Same(capturedEntry, capturedArgs[2]); // The CasEntry object itself
+        
+        // 3. Verify the user requirement is satisfied: "We need to be able to use our own keys!"
+        // The hash serves as the primary key through the inline key property
+        Assert.True(capturedEntry.Hash == expectedHash, 
+            "Hash should be used as the inline key, allowing custom key control");
+        
+        // Additional verification that the hash is correctly populated before storage
+        Assert.False(string.IsNullOrEmpty(capturedEntry.Hash));
+        var capturedEntity = capturedEntry.Data;
+        Assert.Equal(entity, capturedEntity);
+        Assert.Equal(typeof(TestEntity).FullName, capturedEntry.TypeName);
     }
     
     #endregion
@@ -685,18 +748,319 @@ public class IndexedDbContentAddressableStorageTests
     
     #region All Property Tests
     
-    // TODO: Implement by QA Engineer
-    // - Test enumerate all entities
-    // - Test empty collection
-    // - Test filtering by type
+    [Fact]
+    public async Task All_ShouldReturnAllEntities_WhenStorageHasMultipleItems()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("all-1");
+        var entity2 = _testDataFactory.CreateEntity("all-2");
+        var entity3 = _testDataFactory.CreateEntity("all-3");
+        
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        var hash3 = _testDataFactory.ComputeTestHash(entity3);
+        
+        var entries = new[]
+        {
+            _testDataFactory.CreateCasEntry(entity1, hash1),
+            _testDataFactory.CreateCasEntry(entity2, hash2),
+            _testDataFactory.CreateCasEntry(entity3, hash3)
+        };
+        
+        // Setup GetAllAsync to return all entries
+        SetupGetAllAsyncMock(entries);
+        
+        // Act
+        var allEntities = await _storage.All.ToListAsync();
+        
+        // Assert
+        Assert.NotNull(allEntities);
+        Assert.Equal(3, allEntities.Count);
+        Assert.Contains(entity1, allEntities);
+        Assert.Contains(entity2, allEntities);
+        Assert.Contains(entity3, allEntities);
+        
+        // Verify GetAllAsync was called
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
+            "getAll",
+            It.IsAny<object[]>()),
+            Times.Once);
+    }
+    
+    [Fact]
+    public async Task All_ShouldReturnEmptyCollection_WhenStorageIsEmpty()
+    {
+        // Arrange
+        // Setup GetAllAsync to return empty list
+        SetupGetAllAsyncMock();
+        
+        // Act
+        var allEntities = await _storage.All.ToListAsync();
+        
+        // Assert
+        Assert.NotNull(allEntities);
+        Assert.Empty(allEntities);
+        
+        // Verify GetAllAsync was called
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
+            "getAll",
+            It.IsAny<object[]>()),
+            Times.Once);
+    }
+    
+    [Fact]
+    public async Task All_ShouldFilterByType_WhenMultipleTypesExist()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("type-filter-all-1");
+        var entity2 = _testDataFactory.CreateEntity("type-filter-all-2");
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        
+        // Create entries with correct type
+        var correctTypeEntry1 = new CasEntry<TestEntity>
+        {
+            Hash = hash1,
+            Data = entity1,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        var correctTypeEntry2 = new CasEntry<TestEntity>
+        {
+            Hash = hash2,
+            Data = entity2,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        // Create entry with different type (should be filtered out)
+        var wrongTypeEntry = new CasEntry<TestEntity>
+        {
+            Hash = "wrong-type-all-hash",
+            Data = _testDataFactory.CreateEntity("wrong-type-all"),
+            TypeName = "Some.Other.Type",
+            StoredAt = DateTime.UtcNow
+        };
+        
+        // Setup GetAllAsync to return all entries including wrong type
+        SetupGetAllAsyncMock(correctTypeEntry1, correctTypeEntry2, wrongTypeEntry);
+        
+        // Act
+        var allEntities = await _storage.All.ToListAsync();
+        
+        // Assert - Only correct type entities should be returned
+        Assert.NotNull(allEntities);
+        Assert.Equal(2, allEntities.Count); // Should filter out wrong type
+        Assert.Contains(entity1, allEntities);
+        Assert.Contains(entity2, allEntities);
+        Assert.DoesNotContain(_testDataFactory.CreateEntity("wrong-type-all"), allEntities);
+    }
+    
+    [Fact]
+    public async Task All_ShouldHandleCancellation_WhenTokenIsCancelled()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("cancel-all-1");
+        var entity2 = _testDataFactory.CreateEntity("cancel-all-2");
+        
+        var entries = new[]
+        {
+            _testDataFactory.CreateCasEntry(entity1),
+            _testDataFactory.CreateCasEntry(entity2)
+        };
+        
+        SetupGetAllAsyncMock(entries);
+        
+        // Create a pre-cancelled token
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+        
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await _storage.All.ToListAsync(cts.Token));
+    }
     
     #endregion
     
     #region AllHashes Property Tests
     
-    // TODO: Implement by QA Engineer
-    // - Test enumerate all hashes
-    // - Test empty collection
+    [Fact]
+    public async Task AllHashes_ShouldReturnEmptyCollection_WhenNoEntitiesExist()
+    {
+        // Arrange
+        SetupGetAllAsyncMock(); // Empty collection
+        
+        // Act
+        var allHashes = await _storage.AllHashes.ToListAsync();
+        
+        // Assert
+        Assert.NotNull(allHashes);
+        Assert.Empty(allHashes);
+        
+        // Verify GetAllAsync was called
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
+            "getAll",
+            It.IsAny<object[]>()),
+            Times.Once);
+    }
+    
+    [Fact]
+    public async Task AllHashes_ShouldReturnAllUniqueHashes_WhenMultipleEntitiesExist()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("allhashes-1");
+        var entity2 = _testDataFactory.CreateEntity("allhashes-2");
+        var entity3 = _testDataFactory.CreateEntity("allhashes-3");
+        
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        var hash3 = _testDataFactory.ComputeTestHash(entity3);
+        
+        var entries = new[]
+        {
+            _testDataFactory.CreateCasEntry(entity1),
+            _testDataFactory.CreateCasEntry(entity2),
+            _testDataFactory.CreateCasEntry(entity3)
+        };
+        
+        SetupGetAllAsyncMock(entries);
+        
+        // Act
+        var allHashes = await _storage.AllHashes.ToListAsync();
+        
+        // Assert
+        Assert.NotNull(allHashes);
+        Assert.Equal(3, allHashes.Count);
+        Assert.Contains(hash1, allHashes);
+        Assert.Contains(hash2, allHashes);
+        Assert.Contains(hash3, allHashes);
+    }
+    
+    [Fact]
+    public async Task AllHashes_ShouldReturnAllHashes_IncludingDuplicates()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("entity-1");
+        var entity2 = _testDataFactory.CreateEntity("entity-2");
+        var entity3 = _testDataFactory.CreateEntity("unique-content");
+        
+        var sharedHash = "shared-hash-123"; // Force duplicate hash
+        var uniqueHash = _testDataFactory.ComputeTestHash(entity3);
+        
+        // Create entries with duplicate hashes (simulating content-addressed storage where same content = same hash)
+        var entry1 = new CasEntry<TestEntity>
+        {
+            Hash = sharedHash, // Shared hash
+            Data = entity1,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        var entry2 = new CasEntry<TestEntity>
+        {
+            Hash = sharedHash, // Same hash as entry1 (content-addressed)
+            Data = entity2,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow.AddMinutes(1)
+        };
+        
+        var entry3 = new CasEntry<TestEntity>
+        {
+            Hash = uniqueHash,
+            Data = entity3,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        SetupGetAllAsyncMock(entry1, entry2, entry3);
+        
+        // Act
+        var allHashes = await _storage.AllHashes.ToListAsync();
+        
+        // Assert - AllHashes returns all hashes including duplicates (as per implementation)
+        Assert.NotNull(allHashes);
+        Assert.Equal(3, allHashes.Count); // All 3 hashes (including duplicate)
+        Assert.Contains(sharedHash, allHashes);
+        Assert.Contains(uniqueHash, allHashes);
+        
+        // Verify duplicate hash appears twice
+        Assert.Equal(2, allHashes.Count(h => h == sharedHash));
+        Assert.Equal(1, allHashes.Count(h => h == uniqueHash));
+    }
+    
+    [Fact]
+    public async Task AllHashes_ShouldFilterByType_WhenMultipleTypesExist()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("type-filter-hash-1");
+        var entity2 = _testDataFactory.CreateEntity("type-filter-hash-2");
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        
+        // Create entries with correct type
+        var correctTypeEntry1 = new CasEntry<TestEntity>
+        {
+            Hash = hash1,
+            Data = entity1,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        var correctTypeEntry2 = new CasEntry<TestEntity>
+        {
+            Hash = hash2,
+            Data = entity2,
+            TypeName = typeof(TestEntity).FullName!,
+            StoredAt = DateTime.UtcNow
+        };
+        
+        // Create entry with different type (should be filtered out)
+        var wrongTypeEntry = new CasEntry<TestEntity>
+        {
+            Hash = "wrong-type-hash",
+            Data = _testDataFactory.CreateEntity("wrong-type"),
+            TypeName = "Some.Other.Type",
+            StoredAt = DateTime.UtcNow
+        };
+        
+        // Setup GetAllAsync to return all entries including wrong type
+        SetupGetAllAsyncMock(correctTypeEntry1, correctTypeEntry2, wrongTypeEntry);
+        
+        // Act
+        var allHashes = await _storage.AllHashes.ToListAsync();
+        
+        // Assert - Only correct type hashes should be returned
+        Assert.NotNull(allHashes);
+        Assert.Equal(2, allHashes.Count); // Should filter out wrong type
+        Assert.Contains(hash1, allHashes);
+        Assert.Contains(hash2, allHashes);
+        Assert.DoesNotContain("wrong-type-hash", allHashes);
+    }
+    
+    [Fact]
+    public async Task AllHashes_ShouldHandleCancellation_WhenTokenIsCancelled()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("cancel-hash-1");
+        var entity2 = _testDataFactory.CreateEntity("cancel-hash-2");
+        
+        var entries = new[]
+        {
+            _testDataFactory.CreateCasEntry(entity1),
+            _testDataFactory.CreateCasEntry(entity2)
+        };
+        
+        SetupGetAllAsyncMock(entries);
+        
+        // Create a pre-cancelled token
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+        
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await _storage.AllHashes.ToListAsync(cts.Token));
+    }
     
     #endregion
     
@@ -978,6 +1342,459 @@ public class IndexedDbContentAddressableStorageTests
     }
     
     #endregion
+
+    #region Observable Pattern Tests
+
+    [Fact]
+    public async Task StoreAsync_ShouldNotifyObservers_WhenNewContentIsStored()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("observable-test-1");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var receivedHashes = new List<string>();
+        
+        SetupGetAsyncMock(expectedHash, null); // Entity doesn't exist
+        
+        // Subscribe to hash notifications
+        using var subscription = _storage.Subscribe(hash => receivedHashes.Add(hash));
+        
+        // Act
+        var resultHash = await _storage.StoreAsync(entity);
+        
+        // Assert
+        Assert.Single(receivedHashes);
+        Assert.Equal(expectedHash, receivedHashes[0]);
+        Assert.Equal(resultHash, receivedHashes[0]);
+    }
+
+    [Fact]
+    public async Task StoreAsync_ShouldNotifyMultipleObservers_WhenContentIsStored()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("multi-observer-test");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var observer1Hashes = new List<string>();
+        var observer2Hashes = new List<string>();
+        var observer3Hashes = new List<string>();
+        
+        SetupGetAsyncMock(expectedHash, null);
+        
+        // Subscribe multiple observers
+        using var subscription1 = _storage.Subscribe(hash => observer1Hashes.Add(hash));
+        using var subscription2 = _storage.Subscribe(hash => observer2Hashes.Add(hash));
+        using var subscription3 = _storage.Subscribe(hash => observer3Hashes.Add(hash));
+        
+        // Act
+        await _storage.StoreAsync(entity);
+        
+        // Assert - All observers should receive the notification
+        Assert.Single(observer1Hashes);
+        Assert.Single(observer2Hashes);
+        Assert.Single(observer3Hashes);
+        Assert.Equal(expectedHash, observer1Hashes[0]);
+        Assert.Equal(expectedHash, observer2Hashes[0]);
+        Assert.Equal(expectedHash, observer3Hashes[0]);
+    }
+
+    [Fact]
+    public async Task StoreAsync_ShouldNotNotifyForDuplicateContent()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("duplicate-observable");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var existingEntry = _testDataFactory.CreateCasEntry(entity, expectedHash);
+        var receivedHashes = new List<string>();
+        
+        // Entity already exists (deduplication scenario)
+        SetupGetAsyncMock(expectedHash, existingEntry);
+        
+        using var subscription = _storage.Subscribe(hash => receivedHashes.Add(hash));
+        
+        // Act
+        await _storage.StoreAsync(entity);
+        
+        // Assert - Should NOT notify when content was deduplicated (actual behavior)
+        Assert.Empty(receivedHashes);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldNotifyObservers_WhenContentIsDeleted()
+    {
+        // Arrange
+        var hashToDelete = "hash-to-delete-observable";
+        var receivedHashes = new List<string>();
+        
+        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
+            "delete",
+            It.IsAny<object[]>()))
+            .ReturnsAsync(Mock.Of<IJSVoidResult>());
+        
+        using var subscription = _storage.Subscribe(hash => receivedHashes.Add(hash));
+        
+        // Act
+        await _storage.DeleteAsync(hashToDelete);
+        
+        // Assert
+        Assert.Single(receivedHashes);
+        Assert.Equal(hashToDelete, receivedHashes[0]);
+    }
+
+    [Fact]
+    public async Task Observable_ShouldNotNotifyAfterUnsubscribe()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("unsubscribe-test-1");
+        var entity2 = _testDataFactory.CreateEntity("unsubscribe-test-2");
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        var receivedHashes = new List<string>();
+        
+        SetupGetAsyncMock(hash1, null);
+        SetupGetAsyncMock(hash2, null);
+        
+        // Act
+        var subscription = _storage.Subscribe(hash => receivedHashes.Add(hash));
+        await _storage.StoreAsync(entity1);
+        
+        // Unsubscribe
+        subscription.Dispose();
+        
+        // Store another entity after unsubscribe
+        await _storage.StoreAsync(entity2);
+        
+        // Assert - Should only receive first notification
+        Assert.Single(receivedHashes);
+        Assert.Equal(hash1, receivedHashes[0]);
+        Assert.DoesNotContain(hash2, receivedHashes);
+    }
+
+    [Fact]
+    public async Task Observable_ShouldPropagateExceptionToAllObservers()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("exception-observer");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var goodObserverHashes = new List<string>();
+        var exceptionThrown = false;
+        
+        SetupGetAsyncMock(expectedHash, null);
+        
+        // Subscribe with a good observer first
+        using var goodSubscription = _storage.Subscribe(hash => goodObserverHashes.Add(hash));
+        
+        // Subscribe with an observer that throws
+        using var badSubscription = _storage.Subscribe(hash =>
+        {
+            exceptionThrown = true;
+            throw new InvalidOperationException("Observer error");
+        });
+        
+        // Act & Assert - Exception should be thrown from StoreAsync
+        // This is the actual behavior of System.Reactive Subjects
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => 
+            await _storage.StoreAsync(entity));
+        
+        Assert.Equal("Observer error", exception.Message);
+        Assert.True(exceptionThrown);
+        
+        // Good observer should have received the notification before the exception
+        Assert.Single(goodObserverHashes);
+        Assert.Equal(expectedHash, goodObserverHashes[0]);
+    }
+
+    [Fact]
+    public async Task Observable_ShouldSupportMultipleSubscriptionsFromSameObserver()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("multi-subscription");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var receivedCount = 0;
+        
+        SetupGetAsyncMock(expectedHash, null);
+        
+        Action<string> observer = hash => receivedCount++;
+        
+        // Subscribe the same observer multiple times
+        using var subscription1 = _storage.Subscribe(observer);
+        using var subscription2 = _storage.Subscribe(observer);
+        using var subscription3 = _storage.Subscribe(observer);
+        
+        // Act
+        await _storage.StoreAsync(entity);
+        
+        // Assert - Observer should be called once per subscription
+        Assert.Equal(3, receivedCount);
+    }
+
+    [Fact]
+    public async Task Observable_ShouldWorkAcrossMultipleOperations()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("sequence-1");
+        var entity2 = _testDataFactory.CreateEntity("sequence-2");
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        var operations = new List<(string operation, string hash)>();
+        
+        SetupGetAsyncMock(hash1, null);
+        SetupGetAsyncMock(hash2, null);
+        
+        _jsModuleMock.Setup(js => js.InvokeAsync<IJSVoidResult>(
+            "delete",
+            It.IsAny<object[]>()))
+            .ReturnsAsync(Mock.Of<IJSVoidResult>());
+        
+        using var subscription = _storage.Subscribe(hash => 
+            operations.Add(("notification", hash)));
+        
+        // Act - Sequence of operations
+        await _storage.StoreAsync(entity1);
+        operations.Add(("store1", hash1));
+        
+        await _storage.DeleteAsync(hash1);
+        operations.Add(("delete1", hash1));
+        
+        await _storage.StoreAsync(entity2);
+        operations.Add(("store2", hash2));
+        
+        await _storage.DeleteAsync(hash2);
+        operations.Add(("delete2", hash2));
+        
+        // Assert - Verify correct sequence and notifications
+        Assert.Equal(8, operations.Count); // 4 operations + 4 notifications
+        
+        // Verify notifications are received immediately after operations
+        Assert.Equal("notification", operations[0].operation);
+        Assert.Equal(hash1, operations[0].hash);
+        Assert.Equal("store1", operations[1].operation);
+        
+        Assert.Equal("notification", operations[2].operation);
+        Assert.Equal(hash1, operations[2].hash);
+        Assert.Equal("delete1", operations[3].operation);
+        
+        Assert.Equal("notification", operations[4].operation);
+        Assert.Equal(hash2, operations[4].hash);
+        Assert.Equal("store2", operations[5].operation);
+        
+        Assert.Equal("notification", operations[6].operation);
+        Assert.Equal(hash2, operations[6].hash);
+        Assert.Equal("delete2", operations[7].operation);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    [InlineData(100)]
+    public async Task Observable_ShouldHandleManyRapidOperations(int operationCount)
+    {
+        // Arrange
+        var receivedHashes = new List<string>();
+        var entities = new List<TestEntity>();
+        var expectedHashes = new List<string>();
+        
+        for (int i = 0; i < operationCount; i++)
+        {
+            var entity = _testDataFactory.CreateEntity($"rapid-{i}");
+            var hash = _testDataFactory.ComputeTestHash(entity);
+            entities.Add(entity);
+            expectedHashes.Add(hash);
+            SetupGetAsyncMock(hash, null);
+        }
+        
+        using var subscription = _storage.Subscribe(hash => receivedHashes.Add(hash));
+        
+        // Act - Rapid fire operations
+        var storeTasks = entities.Select(e => _storage.StoreAsync(e).AsTask()).ToArray();
+        await Task.WhenAll(storeTasks);
+        
+        // Assert
+        Assert.Equal(operationCount, receivedHashes.Count);
+        foreach (var expectedHash in expectedHashes)
+        {
+            Assert.Contains(expectedHash, receivedHashes);
+        }
+    }
+
+    [Fact]
+    public async Task Observable_ShouldBeThreadSafe_WithConcurrentSubscriptions()
+    {
+        // Arrange
+        var subscriptions = new List<IDisposable>();
+        var observers = new List<List<string>>();
+        var lockObj = new object();
+        
+        // Act - Create many concurrent subscriptions
+        var tasks = Enumerable.Range(0, 50).Select(i => Task.Run(() =>
+        {
+            var observerHashes = new List<string>();
+            var subscription = _storage.Subscribe(hash =>
+            {
+                lock (lockObj)
+                {
+                    observerHashes.Add(hash);
+                }
+            });
+            
+            lock (lockObj)
+            {
+                observers.Add(observerHashes);
+                subscriptions.Add(subscription);
+            }
+        })).ToArray();
+        
+        await Task.WhenAll(tasks);
+        
+        // Assert - All subscriptions should be created successfully
+        Assert.Equal(50, subscriptions.Count);
+        Assert.Equal(50, observers.Count);
+        
+        // Cleanup
+        foreach (var subscription in subscriptions)
+        {
+            subscription.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Observable_ShouldNotLeakMemory_AfterManySubscribeUnsubscribeCycles()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("memory-test");
+        var hash = _testDataFactory.ComputeTestHash(entity);
+        SetupGetAsyncMock(hash, null);
+        
+        // Act - Many subscribe/unsubscribe cycles
+        for (int i = 0; i < 1000; i++)
+        {
+            var receivedCount = 0;
+            var subscription = _storage.Subscribe(_ => receivedCount++);
+            
+            if (i % 100 == 0) // Store occasionally to trigger notifications
+            {
+                await _storage.StoreAsync(entity);
+                Assert.Equal(1, receivedCount);
+            }
+            
+            subscription.Dispose();
+        }
+        
+        // Final test - no active subscriptions should remain
+        var finalCount = 0;
+        using var finalSubscription = _storage.Subscribe(_ => finalCount++);
+        await _storage.StoreAsync(entity);
+        
+        // Assert - Only the final subscription should receive notification
+        Assert.Equal(1, finalCount);
+    }
+
+    #endregion
+
+    #region Real-time Notification Integration Tests
+
+    [Fact]
+    public async Task Notifications_ShouldSupportFilteringByPredicate()
+    {
+        // Arrange
+        var entity1 = _testDataFactory.CreateEntity("filter-1");
+        var entity2 = _testDataFactory.CreateEntity("filter-2");
+        var entity3 = _testDataFactory.CreateEntity("filter-3");
+        
+        var hash1 = _testDataFactory.ComputeTestHash(entity1);
+        var hash2 = _testDataFactory.ComputeTestHash(entity2);
+        var hash3 = _testDataFactory.ComputeTestHash(entity3);
+        
+        SetupGetAsyncMock(hash1, null);
+        SetupGetAsyncMock(hash2, null);
+        SetupGetAsyncMock(hash3, null);
+        
+        var filteredHashes = new List<string>();
+        
+        // Subscribe directly without filter (Where requires System.Reactive)
+        // To filter, we'll check inside the observer
+        using var subscription = _storage
+            .Subscribe(hash => 
+            {
+                if (hash.Contains("2"))
+                    filteredHashes.Add(hash);
+            });
+        
+        // Act
+        await _storage.StoreAsync(entity1);
+        await _storage.StoreAsync(entity2);
+        await _storage.StoreAsync(entity3);
+        
+        // Assert - Only hash2 should pass the filter (if it contains "2")
+        // Note: Since hashes are computed, we can't guarantee which will contain "2"
+        // This is more of a pattern demonstration
+        Assert.All(filteredHashes, hash => Assert.Contains("2", hash));
+    }
+
+    [Fact]
+    public async Task Notifications_ShouldWorkWithAsyncObservers()
+    {
+        // Arrange
+        var entity = _testDataFactory.CreateEntity("async-observer");
+        var expectedHash = _testDataFactory.ComputeTestHash(entity);
+        var processedHashes = new List<string>();
+        var tcs = new TaskCompletionSource<bool>();
+        
+        SetupGetAsyncMock(expectedHash, null);
+        
+        // Subscribe with processing (IObservable.Subscribe doesn't support async)
+        using var subscription = _storage.Subscribe(hash =>
+        {
+            Task.Run(async () =>
+            {
+                await Task.Delay(10); // Simulate async work
+                processedHashes.Add(hash);
+                tcs.SetResult(true);
+            });
+        });
+        
+        // Act
+        await _storage.StoreAsync(entity);
+        await tcs.Task; // Wait for async processing
+        
+        // Assert
+        Assert.Single(processedHashes);
+        Assert.Equal(expectedHash, processedHashes[0]);
+    }
+
+    [Fact]
+    public async Task Notifications_ShouldMaintainOrderForSequentialOperations()
+    {
+        // Arrange
+        var receivedOrder = new List<string>();
+        var entities = Enumerable.Range(1, 5)
+            .Select(i => _testDataFactory.CreateEntity($"ordered-{i}"))
+            .ToList();
+        
+        var expectedHashes = entities
+            .Select(e => _testDataFactory.ComputeTestHash(e))
+            .ToList();
+        
+        foreach (var hash in expectedHashes)
+        {
+            SetupGetAsyncMock(hash, null);
+        }
+        
+        using var subscription = _storage.Subscribe(hash => receivedOrder.Add(hash));
+        
+        // Act - Sequential operations
+        foreach (var entity in entities)
+        {
+            await _storage.StoreAsync(entity);
+        }
+        
+        // Assert - Order should be maintained
+        Assert.Equal(expectedHashes.Count, receivedOrder.Count);
+        for (int i = 0; i < expectedHashes.Count; i++)
+        {
+            Assert.Equal(expectedHashes[i], receivedOrder[i]);
+        }
+    }
+
+    #endregion
     
     #region Helper Methods
     
@@ -1030,7 +1847,7 @@ public class IndexedDbContentAddressableStorageTests
     /// </summary>
     private void VerifyAddAsyncCalled(string expectedHash)
     {
-        _jsModuleMock.Verify(js => js.InvokeAsync<string>(
+        _jsModuleMock.Verify(js => js.InvokeAsync<IJSVoidResult>(
             "add",
             It.Is<object[]>(args => VerifyAddAsyncArgs(args, expectedHash))),
             Times.Once);

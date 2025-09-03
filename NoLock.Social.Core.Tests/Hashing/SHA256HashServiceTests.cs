@@ -102,7 +102,7 @@ public class SHA256HashServiceTests
     public async Task HashAsync_WithNullInput_ThrowsArgumentNullException()
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => _sut.HashAsync<string>(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await _sut.HashAsync<string>(null!));
         _mockHashAlgorithm.Verify(x => x.ComputeHashAsync(It.IsAny<byte[]>()), Times.Never);
     }
 
@@ -159,7 +159,7 @@ public class SHA256HashServiceTests
             .Returns((object)null!);
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.HashAsync(customObject));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.HashAsync(customObject));
     }
 
     public class TestObject

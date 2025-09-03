@@ -139,11 +139,11 @@
                                      MaxLength="@fieldInfo.MaxLength"
                                      MinValue="@fieldInfo.MinValue"
                                      MaxValue="@fieldInfo.MaxValue"
-                                     OnFieldChanged="@((args) => HandleFieldChanged(args))"
-                                     OnFieldEdit="@((fieldName) => HandleFieldEdit(fieldName))"
-                                     OnFieldSave="@((fieldName) => HandleFieldSave(fieldName))"
-                                     OnFieldCancel="@((fieldName) => HandleFieldCancel(fieldName))"
-                                     OnFieldRevert="@((fieldName) => HandleFieldRevert(fieldName))" />
+                                     OnFieldChanged="@(args => HandleFieldChanged(args))"
+                                     OnFieldEdit="@(fieldName => HandleFieldEdit(fieldName))"
+                                     OnFieldSave="@(fieldName => HandleFieldSave(fieldName))"
+                                     OnFieldCancel="@(fieldName => HandleFieldCancel(fieldName))"
+                                     OnFieldRevert="@(fieldName => HandleFieldRevert(fieldName))" />
                     </div>
                 }
 
