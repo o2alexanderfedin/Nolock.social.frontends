@@ -151,7 +151,7 @@ public sealed class IndexedDbContentAddressableStorage<T>
         }
     }
 
-    public IAsyncEnumerable<T> All
+    public IAsyncEnumerable<T?> All
         => EnumerateRawAsync()
             .Select(x => x.Data);
 
@@ -159,9 +159,12 @@ public sealed class IndexedDbContentAddressableStorage<T>
     {
         await EnsureInitializedAsync();
 
-        var items = (await _database.CasEntries.GetAllAsync<CasEntry<T>>())
+        var items = (await _database.CasEntries.GetAllKeysAsync<string>())
             .ToAsyncEnumerable()
-            .Where(e => e.TypeName == typeof(T).FullName);
+            .SelectAwait(async key => await GetRawAsync(key, CancellationToken.None))
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .Where(x => x.TypeName == typeof(T).FullName);
         await foreach (var item in items)
         {
             yield return item;
