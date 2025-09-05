@@ -293,8 +293,16 @@ namespace NoLock.Social.Core.Tests.OCR.Services
 
             await Task.WhenAll(tasks);
             
-            // Wait a bit for the stop operation to fully complete
-            await Task.Delay(100);
+            // Wait for the stop operation to fully complete with proper polling
+            var timeoutMs = 5000; // 5 second timeout
+            var pollingIntervalMs = 10; // 10ms polling interval
+            var startTime = DateTime.UtcNow;
+            
+            while (queue.CurrentState != QueueState.Stopped && 
+                   (DateTime.UtcNow - startTime).TotalMilliseconds < timeoutMs)
+            {
+                await Task.Delay(pollingIntervalMs);
+            }
 
             // Assert
             stateChanges.Should().NotBeEmpty();

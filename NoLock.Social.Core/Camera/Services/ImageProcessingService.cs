@@ -1,7 +1,12 @@
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Storage;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using CoreImageProcessingException = NoLock.Social.Core.Camera.Interfaces.ImageProcessingException;
 
 namespace NoLock.Social.Core.Camera.Services;
 
@@ -33,7 +38,7 @@ public class ImageProcessingService : IImageProcessingService
     /// </summary>
     /// <param name="capturedImage">The image captured from the camera component</param>
     /// <returns>Result containing the content hash and quality assessment</returns>
-    /// <exception cref="ImageProcessingException">Thrown when processing fails due to conversion, storage, or assessment errors</exception>
+    /// <exception cref="CoreImageProcessingException">Thrown when processing fails due to conversion, storage, or assessment errors</exception>
     public async Task<ImageProcessingResult> ProcessAsync(CapturedImage capturedImage)
     {
         _logger.LogInformation("Starting image processing workflow");
@@ -68,7 +73,7 @@ public class ImageProcessingService : IImageProcessingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Image processing workflow failed");
-            throw new ImageProcessingException("Failed to process captured image", ex);
+            throw new CoreImageProcessingException("Failed to process captured image", ex);
         }
     }
     
@@ -101,12 +106,12 @@ public class ImageProcessingService : IImageProcessingService
         catch (FormatException ex)
         {
             _logger.LogError(ex, "Invalid base64 format in image data");
-            throw new ImageProcessingException("Invalid base64 image data format", ex);
+            throw new CoreImageProcessingException("Invalid base64 image data format", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to convert image data");
-            throw new ImageProcessingException("Image data conversion failed", ex);
+            throw new CoreImageProcessingException("Image data conversion failed", ex);
         }
     }
     
@@ -147,7 +152,7 @@ public class ImageProcessingService : IImageProcessingService
     /// </summary>
     /// <param name="contentData">The image content data to store</param>
     /// <returns>Content hash identifying the stored image</returns>
-    /// <exception cref="ImageProcessingException">Thrown when storage operation fails</exception>
+    /// <exception cref="CoreImageProcessingException">Thrown when storage operation fails</exception>
     private async Task<string> StoreImage(ContentData<byte[]> contentData)
     {
         try
@@ -164,44 +169,54 @@ public class ImageProcessingService : IImageProcessingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to store image in content-addressable storage");
-            throw new ImageProcessingException("Image storage operation failed", ex);
+            throw new CoreImageProcessingException("Image storage operation failed", ex);
         }
     }
     
     /// <summary>
-    /// Assesses the quality of a captured image using basic metrics.
-    /// Applies KISS principle with simple quality calculation based on available data.
-    /// YAGNI: Uses basic assessment for now, can be enhanced with computer vision later.
+    /// Assesses the quality of a captured image using real computer vision algorithms.
+    /// Uses SixLabors.ImageSharp for proper blur detection, lighting analysis, and edge detection.
     /// </summary>
     private ImageQualityResult AssessQuality(CapturedImage capturedImage)
     {
-        _logger.LogDebug("Starting quality assessment for captured image");
+        _logger.LogDebug("Starting quality assessment for captured image using ImageSharp");
         
         var result = new ImageQualityResult();
         
         try
         {
-            // Use component's quality score if available, otherwise calculate basic score
-            var baseScore = capturedImage.Quality > 0 ? capturedImage.Quality : 80;
+            // Extract image bytes from base64 data
+            var imageBytes = ExtractImageBytes(capturedImage.ImageData);
             
-            // Apply KISS: Basic quality assessment using available data
-            result.OverallScore = Math.Max(0, Math.Min(100, baseScore));
+            using var image = Image.Load<Rgb24>(imageBytes);
+            _logger.LogDebug("Loaded image: {Width}x{Height} pixels", image.Width, image.Height);
             
-            // Basic blur assessment (YAGNI: simple heuristic for now)
-            // Larger images tend to have better quality for document capture
-            var imageSizeScore = Math.Min(1.0, capturedImage.ImageData.Length / 100000.0);
-            result.BlurScore = Math.Max(0.5, Math.Min(1.0, 0.7 + imageSizeScore * 0.3));
+            // Real blur detection using edge detection variance
+            result.BlurScore = CalculateSharpnessScore(image);
             
-            // Basic lighting assessment (KISS: reasonable default with minor variation)
-            result.LightingScore = Math.Max(0.6, Math.Min(1.0, 0.8 + (result.OverallScore - 80) * 0.002));
+            // Real lighting assessment using histogram analysis
+            result.LightingScore = CalculateLightingScore(image);
             
-            // Basic edge detection score (YAGNI: simple calculation for now)
-            result.EdgeDetectionScore = Math.Max(0.5, Math.Min(1.0, result.BlurScore * 0.9));
+            // Real edge detection using gradient analysis
+            result.EdgeDetectionScore = CalculateEdgeScore(image);
             
-            // Assess quality issues based on scores (DRY: centralized issue detection)
+            // Use provided quality score if available, otherwise calculate from component scores
+            if (capturedImage.Quality > 0)
+            {
+                result.OverallScore = capturedImage.Quality;
+            }
+            else
+            {
+                // Calculate overall score from component scores when no input quality is provided
+                result.OverallScore = (int)Math.Round(
+                    (result.BlurScore * 40 + result.LightingScore * 30 + result.EdgeDetectionScore * 30) * 100
+                );
+            }
+            
+            // Assess quality issues based on actual measurements
             AssessQualityIssues(result);
             
-            _logger.LogDebug("Quality assessment completed. OverallScore: {Score}, BlurScore: {Blur}, LightingScore: {Lighting}, EdgeDetectionScore: {Edge}",
+            _logger.LogDebug("Quality assessment completed. OverallScore: {Score}, BlurScore: {Blur:F3}, LightingScore: {Lighting:F3}, EdgeDetectionScore: {Edge:F3}",
                 result.OverallScore, result.BlurScore, result.LightingScore, result.EdgeDetectionScore);
             
             return result;
@@ -220,6 +235,199 @@ public class ImageProcessingService : IImageProcessingService
                 Issues = { "Quality assessment failed, using default values" }
             };
         }
+    }
+    
+    /// <summary>
+    /// Extracts raw image bytes from base64 data URL or raw base64 string.
+    /// </summary>
+    private byte[] ExtractImageBytes(string imageData)
+    {
+        var (_, base64Data) = ExtractMimeTypeAndData(imageData);
+        return Convert.FromBase64String(base64Data);
+    }
+    
+    /// <summary>
+    /// Calculates image sharpness using gradient magnitude variance.
+    /// Higher variance indicates sharper image (more edges).
+    /// Based on pixel intensity differences - simplified but effective method.
+    /// </summary>
+    private double CalculateSharpnessScore(Image<Rgb24> image)
+    {
+        try
+        {
+            // Convert to grayscale for edge detection
+            using var grayscale = image.CloneAs<L8>();
+            var pixels = new byte[grayscale.Width * grayscale.Height];
+            grayscale.CopyPixelDataTo(pixels);
+            
+            var width = grayscale.Width;
+            var height = grayscale.Height;
+            var gradientMagnitudes = new List<double>();
+            
+            // Calculate gradient magnitude using simple difference method
+            for (int y = 1; y < height - 1; y++)
+            {
+                for (int x = 1; x < width - 1; x++)
+                {
+                    var index = y * width + x;
+                    var current = pixels[index];
+                    
+                    // Calculate horizontal and vertical gradients
+                    var gx = Math.Abs(pixels[index + 1] - pixels[index - 1]) / 2.0;
+                    var gy = Math.Abs(pixels[(y + 1) * width + x] - pixels[(y - 1) * width + x]) / 2.0;
+                    
+                    // Gradient magnitude
+                    var magnitude = Math.Sqrt(gx * gx + gy * gy);
+                    gradientMagnitudes.Add(magnitude);
+                }
+            }
+            
+            var variance = CalculateVarianceFromDoubles(gradientMagnitudes);
+            
+            // Normalize variance to 0-1 score (typical range: 0-500 for good images)
+            var normalizedScore = Math.Min(1.0, Math.Max(0.0, variance / 300.0));
+            
+            _logger.LogDebug("Sharpness calculation: variance={Variance:F2}, normalized={Score:F3}", variance, normalizedScore);
+            return normalizedScore;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to calculate sharpness score, returning default");
+            return 0.7; // Default reasonable sharpness
+        }
+    }
+    
+    /// <summary>
+    /// Calculates lighting quality using histogram analysis.
+    /// Analyzes brightness distribution to detect over/under-exposure.
+    /// </summary>
+    private double CalculateLightingScore(Image<Rgb24> image)
+    {
+        try
+        {
+            using var grayscale = image.CloneAs<L8>();
+            var pixels = new byte[grayscale.Width * grayscale.Height];
+            grayscale.CopyPixelDataTo(pixels);
+            
+            // Calculate histogram
+            var histogram = new int[256];
+            foreach (var pixel in pixels)
+            {
+                histogram[pixel]++;
+            }
+            
+            var totalPixels = pixels.Length;
+            
+            // Check for over-exposure (too many bright pixels)
+            var overExposed = histogram.Skip(240).Sum() / (double)totalPixels;
+            
+            // Check for under-exposure (too many dark pixels)
+            var underExposed = histogram.Take(15).Sum() / (double)totalPixels;
+            
+            // Calculate mean brightness
+            var meanBrightness = pixels.Average(p => (double)p);
+            
+            // Ideal brightness range: 80-180, with good distribution
+            var brightnessScore = 1.0 - Math.Abs(meanBrightness - 128) / 128.0;
+            brightnessScore = Math.Max(0.0, brightnessScore);
+            
+            // Penalize over/under-exposure
+            var exposureScore = 1.0 - Math.Max(overExposed, underExposed) * 2.0;
+            exposureScore = Math.Max(0.0, exposureScore);
+            
+            var lightingScore = (brightnessScore + exposureScore) / 2.0;
+            
+            _logger.LogDebug("Lighting analysis: mean={Mean:F1}, overExposed={Over:P1}, underExposed={Under:P1}, score={Score:F3}", 
+                meanBrightness, overExposed, underExposed, lightingScore);
+            
+            return lightingScore;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to calculate lighting score, returning default");
+            return 0.7; // Default reasonable lighting
+        }
+    }
+    
+    /// <summary>
+    /// Calculates edge detection quality using simple gradient analysis.
+    /// Measures the strength and consistency of edges in the image.
+    /// </summary>
+    private double CalculateEdgeScore(Image<Rgb24> image)
+    {
+        try
+        {
+            using var grayscale = image.CloneAs<L8>();
+            var pixels = new byte[grayscale.Width * grayscale.Height];
+            grayscale.CopyPixelDataTo(pixels);
+            
+            var width = grayscale.Width;
+            var height = grayscale.Height;
+            var edgeStrengths = new List<double>();
+            
+            // Simple edge detection using intensity differences
+            for (int y = 1; y < height - 1; y++)
+            {
+                for (int x = 1; x < width - 1; x++)
+                {
+                    var index = y * width + x;
+                    var center = pixels[index];
+                    
+                    // Check differences with neighbors (simplified Sobel-like approach)
+                    var left = pixels[index - 1];
+                    var right = pixels[index + 1];
+                    var top = pixels[(y - 1) * width + x];
+                    var bottom = pixels[(y + 1) * width + x];
+                    
+                    // Calculate edge strength as maximum intensity difference
+                    var horizontalDiff = Math.Abs(right - left);
+                    var verticalDiff = Math.Abs(bottom - top);
+                    var edgeStrength = Math.Max(horizontalDiff, verticalDiff);
+                    
+                    edgeStrengths.Add(edgeStrength);
+                }
+            }
+            
+            var averageEdgeStrength = edgeStrengths.Average();
+            
+            // Normalize to 0-1 score (typical range: 0-60 for good document edges)
+            var normalizedScore = Math.Min(1.0, Math.Max(0.0, averageEdgeStrength / 40.0));
+            
+            _logger.LogDebug("Edge detection: average strength={Strength:F2}, normalized={Score:F3}", averageEdgeStrength, normalizedScore);
+            return normalizedScore;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to calculate edge score, returning default");
+            return 0.7; // Default reasonable edge score
+        }
+    }
+    
+    /// <summary>
+    /// Calculates variance of pixel values for sharpness assessment.
+    /// Higher variance indicates more detail and sharpness.
+    /// </summary>
+    private double CalculateVariance(byte[] pixels)
+    {
+        if (pixels.Length == 0) return 0;
+        
+        var mean = pixels.Average(p => (double)p);
+        var variance = pixels.Select(p => Math.Pow(p - mean, 2)).Average();
+        
+        return variance;
+    }
+    
+    /// <summary>
+    /// Calculates variance of double values for gradient magnitude analysis.
+    /// </summary>
+    private double CalculateVarianceFromDoubles(List<double> values)
+    {
+        if (values.Count == 0) return 0;
+        
+        var mean = values.Average();
+        var variance = values.Select(v => Math.Pow(v - mean, 2)).Average();
+        
+        return variance;
     }
     
     /// <summary>

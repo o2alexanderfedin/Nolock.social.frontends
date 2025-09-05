@@ -71,19 +71,25 @@ public class PerformanceMonitoringServiceTests
     }
     
     [Fact]
-    public async Task MultipleOperations_CalculatesStatisticsCorrectly()
+    public void MultipleOperations_CalculatesStatisticsCorrectly()
     {
         // Arrange
         const string operationName = "MultiOperation";
         var durations = new List<int> { 10, 20, 30, 40, 50 };
         
-        // Act
+        // Act - Use deterministic PerformanceMetrics instead of Task.Delay timing
         foreach (var duration in durations)
         {
-            using (var timer = _service.StartOperation(operationName))
+            var metrics = new PerformanceMetrics
             {
-                await Task.Delay(duration);
-            }
+                OperationName = operationName,
+                StartTime = DateTime.UtcNow.AddMilliseconds(-duration),
+                EndTime = DateTime.UtcNow,
+                Duration = TimeSpan.FromMilliseconds(duration),
+                Success = true,
+                MemoryUsedBytes = 1024 * duration // Vary memory usage too
+            };
+            _service.RecordMetric(metrics);
         }
         
         // Assert
@@ -93,13 +99,13 @@ public class PerformanceMonitoringServiceTests
         stats.TotalExecutions.Should().Be(5, "we executed 5 operations");
         stats.SuccessfulExecutions.Should().Be(5, "all operations completed successfully");
         stats.FailedExecutions.Should().Be(0, "no operations failed");
-        stats.MinDuration.TotalMilliseconds.Should().BeGreaterThanOrEqualTo(9, "minimum delay was ~10ms (allowing for timing variance)");
-        stats.MaxDuration.TotalMilliseconds.Should().BeGreaterThanOrEqualTo(50, "maximum delay was 50ms");
+        stats.MinDuration.TotalMilliseconds.Should().Be(10, "minimum duration was exactly 10ms");
+        stats.MaxDuration.TotalMilliseconds.Should().Be(50, "maximum duration was exactly 50ms");
         stats.SuccessRate.Should().Be(100.0, "all operations succeeded (100%)");
         
         // Additional FluentAssertions capabilities
         stats.AverageDuration.Should().BePositive("average duration should be calculated");
-        stats.AverageDuration.TotalMilliseconds.Should().BeInRange(10, 50, "average should be between min and max");
+        stats.AverageDuration.TotalMilliseconds.Should().Be(30, "average of 10,20,30,40,50 is 30");
         stats.Should().BeEquivalentTo(new 
         {
             OperationName = operationName,

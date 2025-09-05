@@ -2,6 +2,7 @@
 @using NoLock.Social.Core.Camera.Models
 @using NoLock.Social.Core.Camera.Interfaces
 @using NoLock.Social.Core.OCR.Interfaces
+@using NoLock.Social.Core.OCR.Models
 @using NoLock.Social.Core.Identity.Interfaces
 @using NoLock.Social.Core.Storage
 @using NoLock.Social.Components.Camera
@@ -312,7 +313,25 @@
             {
                 try
                 {
-                    await ImageProcessingService.ProcessAsync(capturedImage);
+                    // Process the image first to get storage hash and quality
+                    var processingResult = await ImageProcessingService.ProcessAsync(capturedImage);
+                    
+                    // Retrieve the stored image data for OCR submission
+                    var storedImageData = await StorageService.GetAsync(processingResult.ContentHash);
+                    if (storedImageData?.Data == null)
+                    {
+                        Logger.LogWarning("Could not retrieve image data for hash {Hash}", processingResult.ContentHash);
+                        continue;
+                    }
+
+                    // Submit to OCR service
+                    var ocrRequest = new OCRSubmissionRequest
+                    {
+                        DocumentType = selectedDocumentType,
+                        ImageData = storedImageData.Data
+                    };
+
+                    await OCRService.SubmitDocumentAsync(ocrRequest);
                     errorMessage = null;
                 }
                 catch (HttpRequestException error) when (error.Message.Contains("Failed to fetch"))
@@ -326,6 +345,9 @@
                     Logger.LogError(error, "Error calling OCR API: {ErrorMessage}", errorMessage);
                 }
             }
+
+            // Navigate to home after successful processing
+            Navigation.NavigateTo("/");
         }
         catch (Exception ex)
         {
@@ -359,7 +381,8 @@
             capturedImages.Add(capturedImage);
             AddDebugLog($"HandleCameraImageCaptured: Added to pages list. Total pages: {capturedImages.Count}");
 
-            lastQualityResult = await CameraService.ValidateImageQualityAsync(capturedImage);
+            var processingResult = await ImageProcessingService.ProcessAsync(capturedImage);
+            lastQualityResult = processingResult.QualityResult;
             
             // Clear any previous error messages on successful capture
             errorMessage = null;
