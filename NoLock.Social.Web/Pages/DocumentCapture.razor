@@ -1,6 +1,6 @@
 @page "/document-capture"
-@using NoLock.Social.Core.Camera.Interfaces
 @using NoLock.Social.Core.Camera.Models
+@using NoLock.Social.Core.Camera.Interfaces
 @using NoLock.Social.Core.OCR.Interfaces
 @using NoLock.Social.Core.Identity.Interfaces
 @using NoLock.Social.Core.Storage
@@ -8,13 +8,13 @@
 @using System
 @using Microsoft.Extensions.Logging
 @using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType
-@inject ICameraService CameraService
 @inject IOCRService OCRService
+@inject ICameraService CameraService
 @inject ILoginAdapterService LoginService
 @inject NavigationManager Navigation
-@inject IJSRuntime JSRuntime
 @inject ILogger<DocumentCapture> Logger
 @inject IContentAddressableStorage<ContentData<byte[]>> StorageService
+@inject IImageProcessingService ImageProcessingService
 @implements IDisposable
 
 <PageTitle>Document Capture</PageTitle>
@@ -49,21 +49,21 @@
                 </div>
                 
                 <!-- Captured Pages -->
-                @if (capturedPages.Any())
+                @if (capturedImages.Any())
                 {
                     <div class="card mt-3">
                         <div class="card-header">
                             <h5 class="mb-0">
-                                <i class="bi bi-images"></i> Captured Pages (@capturedPages.Count)
+                                <i class="bi bi-images"></i> Captured Pages (@capturedImages.Count)
                             </h5>
                         </div>
                         <div class="card-body">
                             <div class="row g-2">
-                                @foreach (var (capturedPage, index) in capturedPages.Select((p, i) => (p, i)))
+                                @foreach (var (capturedPage, index) in capturedImages.Select((p, i) => (p, i)))
                                 {
                                     <div class="col-md-3">
                                         <div class="captured-page-thumbnail">
-                                            <img src="@(GetImageUrlAsync(capturedPage))" class="img-fluid" alt="Page @(index + 1)" />
+                                            <img src="@(capturedPage.ImageUrl)" class="img-fluid" alt="Page @(index + 1)" />
                                             <div class="page-actions">
                                                 <span class="badge bg-primary">Page @(index + 1)</span>
                                                 <button class="btn btn-sm btn-danger" @onclick="() => RemovePage(index)">
@@ -181,7 +181,7 @@
                     </div>
                     <div class="card-body">
                         <button class="btn btn-success w-100 mb-2" @onclick="ProcessDocument" 
-                                disabled="@(!capturedPages.Any() || isProcessing)">
+                                disabled="@(!capturedImages.Any() || isProcessing)">
                             @if (isProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
@@ -189,7 +189,7 @@
                             <i class="bi bi-play-fill"></i> Process Document
                         </button>
                         <button class="btn btn-warning w-100 mb-2" @onclick="ClearSession" 
-                                disabled="@(!capturedPages.Any())">
+                                disabled="@(!capturedImages.Any())">
                             <i class="bi bi-trash"></i> Clear All Pages
                         </button>
                         <button class="btn btn-secondary w-100" @onclick="() => showDebugPanel = !showDebugPanel">
@@ -239,7 +239,7 @@
     private string? errorMessage;
     private OCRDocumentType selectedDocumentType = OCRDocumentType.Receipt;
     
-    private List<string> capturedPages = new(); // Store content hashes instead of CapturedImage objects
+    private List<CapturedImage> capturedImages = new(); // Store content hashes instead of CapturedImage objects
     private ImageQualityResult? lastQualityResult;
     
     private IDisposable? loginStateSubscription;
@@ -283,23 +283,23 @@
 
     private void RemovePage(int index)
     {
-        if (index >= 0 && index < capturedPages.Count)
+        if (index >= 0 && index < capturedImages.Count)
         {
-            capturedPages.RemoveAt(index);
+            capturedImages.RemoveAt(index);
             StateHasChanged();
         }
     }
 
     private void ClearSession()
     {
-        capturedPages.Clear();
+        capturedImages.Clear();
         lastQualityResult = null;
         StateHasChanged();
     }
 
     private async Task ProcessDocument()
     {
-        if (!capturedPages.Any())
+        if (!capturedImages.Any())
             return;
 
         try
@@ -308,29 +308,11 @@
             StateHasChanged();
 
             // Process each page individually (OCRService expects single images)
-            foreach (var contentHash in capturedPages)
+            foreach (var capturedImage in capturedImages.ToList())
             {
-                // Retrieve image data from storage using hash
-                var contentData = await StorageService.GetAsync(contentHash);
-                if (contentData?.Data == null)
-                {
-                    Logger.LogWarning("Could not retrieve image data for hash {Hash}", contentHash);
-                    continue;
-                }
-                var imageBytes = contentData.Data;
-
-                // Create OCR submission request
-                var submission = new Core.OCR.Models.OCRSubmissionRequest
-                {
-                    DocumentType = selectedDocumentType,
-                    ImageData = imageBytes
-                };
-
-                // Submit for OCR processing
                 try
                 {
-                    await OCRService.SubmitDocumentAsync(submission);
-                    // If successful, show success message
+                    await ImageProcessingService.ProcessAsync(capturedImage);
                     errorMessage = null;
                 }
                 catch (HttpRequestException error) when (error.Message.Contains("Failed to fetch"))
@@ -343,14 +325,6 @@
                     errorMessage = $"Error processing document: {error.Message}";
                     Logger.LogError(error, "Error calling OCR API: {ErrorMessage}", errorMessage);
                 }
-            }
-            
-            // Only clear session and navigate if there was no error
-            if (string.IsNullOrEmpty(errorMessage))
-            {
-                ClearSession();
-                // Navigate to home or results page
-                Navigation.NavigateTo("/");
             }
         }
         catch (Exception ex)
@@ -381,43 +355,16 @@
         {
             AddDebugLog("HandleCameraImageCaptured: Starting image capture processing");
             
-            // Convert captured image data to ContentData for storage
-            var contentData = ConvertToContentData(capturedImage.ImageData);
-            AddDebugLog($"HandleCameraImageCaptured: Converted to ContentData - MimeType: {contentData.MimeType}, DataLength: {contentData.Data?.Length ?? 0} bytes");
-            
-            // Log the ContentData structure that will be stored
-            var contentDataJson = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                DataLength = contentData.Data?.Length ?? 0,
-                MimeType = contentData.MimeType,
-                DataPreview = contentData.Data != null && contentData.Data.Length > 0 
-                    ? Convert.ToBase64String(contentData.Data.Take(50).ToArray()) + "..." 
-                    : "null"
-            });
-            AddDebugLog($"HandleCameraImageCaptured: ContentData structure: {contentDataJson}");
-            
-            // Store the image in content-addressable storage and get hash
-            AddDebugLog("HandleCameraImageCaptured: Calling StorageService.StoreAsync");
-            var hash = await StorageService.StoreAsync(contentData);
-            AddDebugLog($"HandleCameraImageCaptured: Successfully stored with hash: {hash}");
-            
             // Add the hash to the pages list
-            capturedPages.Add(hash);
-            AddDebugLog($"HandleCameraImageCaptured: Added to pages list. Total pages: {capturedPages.Count}");
-            
-            // Create quality result for display (maintaining original functionality)
-            lastQualityResult = new ImageQualityResult
-            {
-                OverallScore = capturedImage.Quality > 0 ? capturedImage.Quality : 80, // Use component's quality or default
-                BlurScore = 0.8, // Default values as in original
-                LightingScore = 0.75
-            };
+            capturedImages.Add(capturedImage);
+            AddDebugLog($"HandleCameraImageCaptured: Added to pages list. Total pages: {capturedImages.Count}");
+
+            lastQualityResult = await CameraService.ValidateImageQualityAsync(capturedImage);
             
             // Clear any previous error messages on successful capture
             errorMessage = null;
             
-            Logger.LogInformation("Image captured and stored successfully. Hash: {Hash}, Total pages: {PageCount}", hash, capturedPages.Count);
-            AddDebugLog($"HandleCameraImageCaptured: Completed successfully. Hash: {hash}");
+            AddDebugLog($"HandleCameraImageCaptured: Completed successfully.");
         }
         catch (Exception ex)
         {
@@ -435,55 +382,6 @@
         }
     }
 
-    private ContentData<byte[]> ConvertToContentData(string base64DataUrl)
-    {
-        AddDebugLog($"ConvertToContentData: Input length: {base64DataUrl.Length} chars");
-        
-        // Extract MIME type and base64 data from data URL
-        var (mimeType, base64Data) = ExtractMimeTypeAndData(base64DataUrl);
-        AddDebugLog($"ConvertToContentData: Extracted MimeType: {mimeType}, Base64 length: {base64Data.Length} chars");
-        
-        // Convert base64 to byte array
-        var bytes = Convert.FromBase64String(base64Data);
-        AddDebugLog($"ConvertToContentData: Converted to {bytes.Length} bytes");
-        
-        // Create ContentData object
-        var result = new ContentData<byte[]>
-        {
-            Data = bytes,
-            MimeType = mimeType
-        };
-        
-        AddDebugLog($"ConvertToContentData: Created ContentData with MimeType={result.MimeType}, DataLength={result.Data.Length}");
-        
-        return result;
-    }
-
-    private (string mimeType, string base64Data) ExtractMimeTypeAndData(string dataUrl)
-    {
-        // Handle data URL format: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA..."
-        if (dataUrl.StartsWith("data:"))
-        {
-            var parts = dataUrl.Split(',');
-            if (parts.Length == 2)
-            {
-                // Extract MIME type from header part
-                var header = parts[0]; // "data:image/jpeg;base64"
-                var mimeType = header.Substring(5); // Remove "data:"
-                
-                // Remove encoding specification if present
-                if (mimeType.Contains(";"))
-                {
-                    mimeType = mimeType.Split(';')[0];
-                }
-                
-                return (mimeType, parts[1]);
-            }
-        }
-        
-        // Fallback for raw base64 data without data URL prefix
-        return ("image/jpeg", dataUrl);
-    }
 
     private async ValueTask<string> GetImageUrlAsync(string contentHash)
     {

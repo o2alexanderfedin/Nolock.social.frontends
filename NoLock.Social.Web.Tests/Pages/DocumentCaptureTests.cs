@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Models;
+using NoLock.Social.Core.Camera.Services;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
 using NoLock.Social.Core.OCR.Interfaces;
@@ -30,6 +31,7 @@ namespace NoLock.Social.Web.Tests.Pages
         private readonly Mock<ILoginAdapterService> _mockLoginService;
         private readonly FakeNavigationManager _navigationManager;
         private readonly Mock<ILogger<DocumentCapture>> _mockLogger;
+        private readonly Mock<ILogger<ImageProcessingService>> _mockImageProcessingLogger;
         private readonly Mock<IContentAddressableStorage<ContentData<byte[]>>> _mockStorageService;
         private readonly Subject<LoginStateChange> _loginStateSubject;
 
@@ -40,6 +42,7 @@ namespace NoLock.Social.Web.Tests.Pages
             _mockOCRService = new Mock<IOCRService>();
             _mockLoginService = new Mock<ILoginAdapterService>();
             _mockLogger = new Mock<ILogger<DocumentCapture>>();
+            _mockImageProcessingLogger = new Mock<ILogger<ImageProcessingService>>();
             _mockStorageService = new Mock<IContentAddressableStorage<ContentData<byte[]>>>();
             _loginStateSubject = new Subject<LoginStateChange>();
 
@@ -51,7 +54,11 @@ namespace NoLock.Social.Web.Tests.Pages
             Services.AddSingleton(_mockOCRService.Object);
             Services.AddSingleton(_mockLoginService.Object);
             Services.AddSingleton(_mockLogger.Object);
+            Services.AddSingleton(_mockImageProcessingLogger.Object);
             Services.AddSingleton(_mockStorageService.Object);
+            
+            // Register the real ImageProcessingService with dependency injection
+            Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
             
             // Get FakeNavigationManager AFTER all services are registered
             _navigationManager = Services.GetRequiredService<FakeNavigationManager>();

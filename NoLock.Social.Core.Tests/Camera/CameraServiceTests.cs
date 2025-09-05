@@ -58,7 +58,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public async Task InitializeAsync_ShouldCompleteSuccessfully()
         {
             // Act
-            var action = () => _sut.InitializeAsync();
+            var action = () => _sut.InitializeAsync().AsTask();
 
             // Assert
             await action.Should().NotThrowAsync();
@@ -253,7 +253,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public async Task StopStreamAsync_WithoutActiveStream_DoesNothing()
         {
             // Act
-            var action = () => _sut.StopStreamAsync();
+            var action = () => _sut.StopStreamAsync().AsTask();
 
             // Assert
             await action.Should().NotThrowAsync();
