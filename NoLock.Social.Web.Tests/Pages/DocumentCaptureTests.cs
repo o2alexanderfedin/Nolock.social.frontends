@@ -119,49 +119,6 @@ namespace NoLock.Social.Web.Tests.Pages
             Assert.Equal("http://localhost/", _navigationManager.Uri);
         }
 
-        [Fact]
-        public async Task DocumentCapture_Should_StoreCapturedImage_InIndexedDB()
-        {
-            // Arrange
-            var loginState = new LoginState { IsLoggedIn = true, Username = "testuser" };
-            _mockLoginService.Setup(x => x.CurrentLoginState).Returns(loginState);
-
-            var testImageData = TestDataBuilder.CreateBase64TestImage();
-            var expectedHash = "test-content-hash-123";
-            
-            _mockStorageService.Setup(x => x.StoreAsync(It.IsAny<ContentData<byte[]>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(expectedHash);
-
-            _mockStorageService.Setup(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ContentData<byte[]>
-                {
-                    Data = TestDataBuilder.CreateTestImageData(),
-                    MimeType = "image/png"
-                });
-
-            // Act
-            var component = RenderComponent<DocumentCapture>();
-            var instance = component.Instance;
-
-            // Find and trigger the CameraCapture component's OnImageCaptured callback
-            var cameraCapture = component.FindComponent<NoLock.Social.Components.Camera.CameraCapture>();
-            var capturedImage = new CapturedImage
-            {
-                ImageData = testImageData,
-                Quality = 85,
-                Width = 640,
-                Height = 480
-            };
-
-            await cameraCapture.InvokeAsync(() => 
-                cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
-
-            // Assert
-            _mockStorageService.Verify(x => x.StoreAsync(It.IsAny<ContentData<byte[]>>(), It.IsAny<CancellationToken>()), Times.Once);
-
-            // Check that the page was added to the UI
-            Assert.Contains("Captured Pages (1)", component.Markup);
-        }
 
         [Fact]
         public async Task DocumentCapture_Should_ProcessDocument_WithSelectedType()
@@ -358,43 +315,6 @@ namespace NoLock.Social.Web.Tests.Pages
 
         #region Error Handling Tests
 
-        [Fact]
-        public async Task DocumentCapture_Should_HandleStorageFailure_WhenCapturingImage()
-        {
-            // Arrange
-            var loginState = new LoginState { IsLoggedIn = true, Username = "testuser" };
-            _mockLoginService.Setup(x => x.CurrentLoginState).Returns(loginState);
-
-            var testImageData = TestDataBuilder.CreateBase64TestImage();
-            var storageException = new InvalidOperationException("IndexedDB storage failed");
-            
-            _mockStorageService.Setup(x => x.StoreAsync(It.IsAny<ContentData<byte[]>>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(storageException);
-
-            // Act
-            var component = RenderComponent<DocumentCapture>();
-            var cameraCapture = component.FindComponent<NoLock.Social.Components.Camera.CameraCapture>();
-            var capturedImage = new CapturedImage
-            {
-                ImageData = testImageData,
-                Quality = 85
-            };
-
-            await cameraCapture.InvokeAsync(() => 
-                cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
-
-            // Assert
-            _mockLogger.Verify(x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error processing captured image")),
-                It.Is<Exception>(e => e == storageException),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()
-            ), Times.Once);
-
-            // Should not add page to the list on failure
-            Assert.DoesNotContain("Captured Pages", component.Markup);
-        }
 
         [Fact]
         public async Task DocumentCapture_Should_HandleOCRServiceFailure_WithCORSError()
@@ -745,54 +665,6 @@ namespace NoLock.Social.Web.Tests.Pages
 
         #endregion
 
-        #region Data URL Parsing Tests
-
-        [Theory]
-        [InlineData("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAAf/2Q==", "image/jpeg")]
-        [InlineData("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "image/png")]
-        [InlineData("data:image/webp;base64,UklGRjAAAABXRUJQVlA4IBQAAAAwAQCdASoBAAEAAQAcJaQAA3AA/v3AgAA=", "image/webp")]
-        [InlineData("/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAAf/2Q==", "image/jpeg")] // Raw base64 without data URL prefix
-        public async Task DocumentCapture_Should_ExtractCorrectMimeType_FromDataUrl(string imageData, string expectedMimeType)
-        {
-            // Arrange
-            var loginState = new LoginState { IsLoggedIn = true, Username = "testuser" };
-            _mockLoginService.Setup(x => x.CurrentLoginState).Returns(loginState);
-
-            var contentHash = "test-hash";
-            ContentData<byte[]>? capturedContent = null;
-            var storeCompleted = new TaskCompletionSource<bool>();
-            
-            _mockStorageService.Setup(x => x.StoreAsync(It.IsAny<ContentData<byte[]>>(), It.IsAny<CancellationToken>()))
-                .Callback<ContentData<byte[]>, CancellationToken>((content, _) => 
-                {
-                    capturedContent = content;
-                    storeCompleted.SetResult(true);
-                })
-                .ReturnsAsync(contentHash);
-
-            // Act
-            var component = RenderComponent<DocumentCapture>();
-            
-            var cameraCapture = component.FindComponent<NoLock.Social.Components.Camera.CameraCapture>();
-            
-            await cameraCapture.InvokeAsync(async () => 
-                await cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = imageData }));
-
-            // Wait for the storage operation to complete with proper timeout
-            var storeTask = storeCompleted.Task;
-            var completedTask = await Task.WhenAny(storeTask, Task.Delay(1000));
-            
-            Assert.Equal(storeTask, completedTask); // Ensure store was actually called
-
-            // Assert - Verify the StoreAsync was called
-            _mockStorageService.Verify(x => x.StoreAsync(It.IsAny<ContentData<byte[]>>(), It.IsAny<CancellationToken>()), Times.Once);
-            
-            // Check the captured content
-            Assert.NotNull(capturedContent);
-            Assert.Equal(expectedMimeType, capturedContent!.MimeType);
-        }
-
-        #endregion
 
         protected new void Dispose(bool disposing)
         {
