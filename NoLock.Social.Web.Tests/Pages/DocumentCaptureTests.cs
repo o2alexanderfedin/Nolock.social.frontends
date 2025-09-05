@@ -204,12 +204,13 @@ namespace NoLock.Social.Web.Tests.Pages
             await cameraCapture.InvokeAsync(async () => 
                 await cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
 
-            // Find and click the remove button for the first page
-            var removeButton = component.Find(".page-actions button.btn-danger");
+            // Find and click the remove button for the first page (now in CapturedImagesPreview)
+            var removeButton = component.Find(".captured-images-preview button.btn-danger");
             removeButton.Click();
 
             // Assert
-            Assert.DoesNotContain("Captured Pages", component.Markup);
+            Assert.DoesNotContain("Captured Pages (1)", component.Markup);
+            Assert.Contains("Captured Pages (0)", component.Markup);
         }
 
         [Fact]
@@ -282,7 +283,8 @@ namespace NoLock.Social.Web.Tests.Pages
             clearButton.Click();
 
             // Assert
-            Assert.DoesNotContain("Captured Pages", component.Markup);
+            Assert.DoesNotContain("Captured Pages (2)", component.Markup);
+            Assert.Contains("Captured Pages (0)", component.Markup);
             Assert.DoesNotContain("Image Quality", component.Markup);
         }
 

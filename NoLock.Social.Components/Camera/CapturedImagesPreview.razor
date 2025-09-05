@@ -1,0 +1,104 @@
+@namespace NoLock.Social.Components.Camera
+
+<div class="captured-images-preview">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <h6 class="mb-3">@Title (@(CapturedImages?.Count() ?? 0))</h6>
+    }
+    
+    @if (CapturedImages?.Any() == true)
+    {
+        <div class="row g-2">
+            @foreach (var (image, index) in CapturedImages.Select((img, i) => (img, i)))
+            {
+                <div class="col-4 col-sm-3 col-md-2">
+                    <div class="card">
+                        <div class="position-relative">
+                            <img src="@image.DataUrl" 
+                                 class="card-img-top captured-image-thumbnail" 
+                                 alt="Captured image @(index + 1)" />
+                            
+                            @if (AllowRemove)
+                            {
+                                <button type="button" 
+                                        class="btn btn-danger delete-btn-circular position-absolute top-0 end-0 m-1"
+                                        @onclick="() => HandleRemoveImage(index)"
+                                        title="Remove image">
+                                    <i class="bi bi-x" style="font-size: 0.75rem;"></i>
+                                </button>
+                            }
+                        </div>
+                        
+                        <div class="card-body p-2">
+                            @if (image.Width > 0 && image.Height > 0)
+                            {
+                                <small class="text-muted d-block">
+                                    Size: @($"{image.Width}x{image.Height}")
+                                </small>
+                            }
+                            <small class="text-muted d-block">
+                                Taken At: @image.Timestamp.ToString("G")
+                            </small>
+                            @if (image.Quality > 0)
+                            {
+                                <small class="text-muted d-block">
+                                    Quality: @($"{image.Quality}")
+                                </small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="text-center text-muted py-3">
+            <i class="bi bi-camera" style="font-size: 2rem;"></i>
+            <p class="mb-0">No images captured yet</p>
+        </div>
+    }
+</div>
+
+<style>
+    .captured-image-thumbnail {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+    
+    .captured-images-preview .card {
+        border: 1px solid #dee2e6;
+        transition: box-shadow 0.15s ease-in-out;
+    }
+    
+    .captured-images-preview .card:hover {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    
+    .delete-btn-circular {
+        width: 28px !important;
+        height: 28px !important;
+        padding: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50% !important;
+    }
+</style>
+
+@code {
+    [Parameter] public IEnumerable<CapturedImage>? CapturedImages { get; set; }
+    [Parameter] public EventCallback<int> OnRemoveImage { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool AllowRemove { get; set; } = true;
+    
+    private async Task HandleRemoveImage(int index)
+    {
+        if (OnRemoveImage.HasDelegate)
+        {
+            await OnRemoveImage.InvokeAsync(index);
+        }
+    }
+}
