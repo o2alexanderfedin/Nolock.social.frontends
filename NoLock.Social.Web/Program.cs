@@ -6,6 +6,8 @@ using NoLock.Social.Core.Storage;
 using Nolock.Social.Storage.IndexedDb;
 using NoLock.Social.Web;
 using TG.Blazor.IndexedDB;
+using NoLock.Social.Core.Camera.Interfaces;
+using NoLock.Social.Core.Camera.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -37,6 +39,7 @@ builder.Services.AddPerformanceMonitoring();
 builder.Services.AddLoginServices();
 // Add camera and accessibility services
 builder.Services.AddCameraServices();
+builder.Services.AddScoped<IImageProcessingService, ImageProcessingService>();
 builder.Services.AddAccessibilityServices();
 // Add OCR services for document processing
 builder.Services.AddMinimalOCRServices();

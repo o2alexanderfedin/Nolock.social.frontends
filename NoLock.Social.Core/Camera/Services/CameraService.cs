@@ -99,7 +99,7 @@ namespace NoLock.Social.Core.Camera.Services
             }
 
             // Use ExecuteWithLogging for error handling
-            var result = await (_logger ?? NullLogger<CameraService>.Instance)
+            var result = await _logger
                 .ExecuteWithLogging(async () =>
                 {
                     // Call JavaScript to stop the camera stream
@@ -157,7 +157,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<bool> ToggleTorchAsync(bool enabled)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Check if torch is supported before attempting to toggle
                 if (!await IsTorchSupportedAsync())
@@ -184,7 +184,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<bool> IsTorchSupportedAsync()
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to check torch support
                 var supported = await _jsRuntime.InvokeAsync<bool>("camera.getTorchSupport");
@@ -209,7 +209,7 @@ namespace NoLock.Social.Core.Camera.Services
         // Placeholder implementations for remaining interface methods
         public async ValueTask<bool> SwitchCameraAsync(string deviceId)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Stop current stream before switching
                 await StopStreamAsync();
@@ -236,7 +236,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<bool> SetZoomAsync(double zoomLevel)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 if (!await IsZoomLevelValidAsync(zoomLevel))
                     return false;
@@ -257,7 +257,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<double> GetZoomAsync()
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to get current zoom level
                 var zoomLevel = await _jsRuntime.InvokeAsync<double>("camera.getZoom");
@@ -275,7 +275,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<string[]> GetAvailableCamerasAsync()
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to enumerate available camera devices
                 var devices = await _jsRuntime.InvokeAsync<string[]>("camera.getAvailableCameras");
@@ -290,7 +290,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<bool> IsZoomSupportedAsync()
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to check zoom support
                 var supported = await _jsRuntime.InvokeAsync<bool>("camera.getZoomSupport");
@@ -314,7 +314,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<double> GetMaxZoomAsync()
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript to get maximum zoom level
                 var maxZoom = await _jsRuntime.InvokeAsync<double>("camera.getMaxZoom");
@@ -334,7 +334,7 @@ namespace NoLock.Social.Core.Camera.Services
         {
             ValidateImageInput(capturedImage);
 
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 var qualityAnalysis = await PerformQualityAnalysisAsync(capturedImage.ImageData);
                 var qualityResult = CreateQualityResult(qualityAnalysis);
@@ -355,7 +355,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<BlurDetectionResult> DetectBlurAsync(string imageData)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript blur detection function
                 var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectBlur", imageData);
@@ -388,7 +388,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<LightingQualityResult> AssessLightingAsync(string imageData)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript lighting assessment function
                 var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.assessLighting", imageData);
@@ -424,7 +424,7 @@ namespace NoLock.Social.Core.Camera.Services
 
         public async ValueTask<EdgeDetectionResult> DetectDocumentEdgesAsync(string imageData)
         {
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
+            var result = await _logger.ExecuteWithLogging(async () =>
             {
                 // Call JavaScript edge detection function
                 var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectEdges", imageData);
