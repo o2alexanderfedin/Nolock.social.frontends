@@ -318,7 +318,7 @@ namespace NoLock.Social.Core.Tests.Accessibility.Services
             
             _cameraServiceMock
                 .Setup(x => x.StopStreamAsync())
-                .Returns(Task.CompletedTask);
+                .Returns(ValueTask.CompletedTask);
 
             // Act
             await stopCommand();

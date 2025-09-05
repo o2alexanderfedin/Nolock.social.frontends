@@ -207,8 +207,8 @@ namespace NoLock.Social.Core.OCR.Models
         public static QueuedDocument CreateFromRequest(
             OCRSubmissionRequest request,
             QueuePriority priority = QueuePriority.Normal,
-            Dictionary<string, object> metadata = null,
-            string sourceIdentifier = null)
+            Dictionary<string, object>? metadata = null,
+            string? sourceIdentifier = null)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -229,7 +229,7 @@ namespace NoLock.Social.Core.OCR.Models
         /// <param name="newStatus">The new status to set.</param>
         /// <param name="errorMessage">Optional error message if status indicates failure.</param>
         /// <param name="errorCode">Optional error code for categorizing the error.</param>
-        public void UpdateStatus(QueuedDocumentStatus newStatus, string errorMessage = null, string errorCode = null)
+        public void UpdateStatus(QueuedDocumentStatus newStatus, string? errorMessage = null, string? errorCode = null)
         {
             var previousStatus = Status;
             Status = newStatus;

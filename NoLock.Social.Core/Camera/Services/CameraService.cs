@@ -15,52 +15,46 @@ namespace NoLock.Social.Core.Camera.Services
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<CameraService> _logger;
         private CameraPermissionState _currentPermissionState = CameraPermissionState.Prompt;
-        private CameraStream _currentStream;
+        private CameraStream? _currentStream;
         private CameraControlSettings _controlSettings = new CameraControlSettings();
         private readonly Dictionary<string, DocumentSession> _activeSessions = new();
         private bool _disposed;
 
         public CameraService(
             IJSRuntime jsRuntime,
-            ILogger<CameraService> logger = null)
+            ILogger<CameraService> logger
+        )
         {
             _jsRuntime = Guard.AgainstNull(jsRuntime);
             _logger = logger;
         }
 
-        public async Task InitializeAsync()
+        public async ValueTask InitializeAsync()
         {
             ThrowIfDisposed();
-            
-            var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(
-                async () =>
-                {
-                    // Initialize service - currently no persistent storage
-                    // Sessions are kept in memory only
-                    _logger?.LogInformation("Camera service initialized");
-                },
-                "InitializeAsync"
-            );
+            _logger.LogInformation("Camera service initialized");
             
             // Result is always successful due to graceful error handling, but we maintain the pattern
             // for consistency and potential future use of the result information
+            
+            await ValueTask.CompletedTask;
         }
 
-        public async Task<CameraPermissionState> GetPermissionStateAsync()
+        public async ValueTask<CameraPermissionState> GetPermissionStateAsync()
         {
             var result = await _jsRuntime.InvokeAsync<string>("cameraPermissions.getState");
             _currentPermissionState = ParsePermissionStateResult(result, CameraPermissionState.NotRequested);
             return _currentPermissionState;
         }
 
-        public async Task<CameraPermissionState> RequestPermission()
+        public async ValueTask<CameraPermissionState> RequestPermission()
         {
             var result = await _jsRuntime.InvokeAsync<string>("cameraPermissions.request");
             _currentPermissionState = ParsePermissionStateResult(result, CameraPermissionState.Denied);
             return _currentPermissionState;
         }
 
-        public async Task<CameraStream> StartStreamAsync()
+        public async ValueTask<CameraStream> StartStreamAsync()
         {
             // Check if stream is already active
             if (_currentStream != null)
@@ -95,7 +89,7 @@ namespace NoLock.Social.Core.Camera.Services
             return _currentStream;
         }
 
-        public async Task StopStreamAsync()
+        public async ValueTask StopStreamAsync()
         {
             // Check if there is an active stream to stop
             if (_currentStream == null)
@@ -118,7 +112,7 @@ namespace NoLock.Social.Core.Camera.Services
             _currentStream = null;
         }
 
-        public async Task<CapturedImage> CaptureImageAsync()
+        public async ValueTask<CapturedImage> CaptureImageAsync()
         {
             // Check if there is an active stream
             if (_currentStream == null || !_currentStream.IsActive)
@@ -152,7 +146,7 @@ namespace NoLock.Social.Core.Camera.Services
             return capturedImage;
         }
 
-        public async Task<bool> CheckPermissionsAsync()
+        public async ValueTask<bool> CheckPermissionsAsync()
         {
             // Get current permission state
             var permissionState = await GetPermissionStateAsync();
@@ -161,7 +155,7 @@ namespace NoLock.Social.Core.Camera.Services
             return permissionState == CameraPermissionState.Granted;
         }
 
-        public async Task<bool> ToggleTorchAsync(bool enabled)
+        public async ValueTask<bool> ToggleTorchAsync(bool enabled)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -188,7 +182,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : false;
         }
 
-        public async Task<bool> IsTorchSupportedAsync()
+        public async ValueTask<bool> IsTorchSupportedAsync()
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -213,7 +207,7 @@ namespace NoLock.Social.Core.Camera.Services
         }
 
         // Placeholder implementations for remaining interface methods
-        public async Task<bool> SwitchCameraAsync(string deviceId)
+        public async ValueTask<bool> SwitchCameraAsync(string deviceId)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -240,7 +234,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : false;
         }
 
-        public async Task<bool> SetZoomAsync(double zoomLevel)
+        public async ValueTask<bool> SetZoomAsync(double zoomLevel)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -261,7 +255,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : false;
         }
 
-        public async Task<double> GetZoomAsync()
+        public async ValueTask<double> GetZoomAsync()
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -279,7 +273,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : 1.0;
         }
 
-        public async Task<string[]> GetAvailableCamerasAsync()
+        public async ValueTask<string[]> GetAvailableCamerasAsync()
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -294,7 +288,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : new string[0];
         }
 
-        public async Task<bool> IsZoomSupportedAsync()
+        public async ValueTask<bool> IsZoomSupportedAsync()
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -318,7 +312,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.Value;
         }
 
-        public async Task<double> GetMaxZoomAsync()
+        public async ValueTask<double> GetMaxZoomAsync()
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -336,7 +330,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.IsSuccess ? result.Value : 3.0;
         }
 
-        public async Task<ImageQualityResult> ValidateImageQualityAsync(CapturedImage capturedImage)
+        public async ValueTask<ImageQualityResult> ValidateImageQualityAsync(CapturedImage capturedImage)
         {
             ValidateImageInput(capturedImage);
 
@@ -359,7 +353,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.Value;
         }
 
-        public async Task<BlurDetectionResult> DetectBlurAsync(string imageData)
+        public async ValueTask<BlurDetectionResult> DetectBlurAsync(string imageData)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -392,7 +386,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.Value;
         }
 
-        public async Task<LightingQualityResult> AssessLightingAsync(string imageData)
+        public async ValueTask<LightingQualityResult> AssessLightingAsync(string imageData)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -428,7 +422,7 @@ namespace NoLock.Social.Core.Camera.Services
             return result.Value;
         }
 
-        public async Task<EdgeDetectionResult> DetectDocumentEdgesAsync(string imageData)
+        public async ValueTask<EdgeDetectionResult> DetectDocumentEdgesAsync(string imageData)
         {
             var result = await (_logger ?? NullLogger<CameraService>.Instance).ExecuteWithLogging(async () =>
             {
@@ -465,9 +459,10 @@ namespace NoLock.Social.Core.Camera.Services
         }
 
         // Multi-Page Document Session Management
-        public async Task<string> CreateDocumentSessionAsync()
+        public async ValueTask<string> CreateDocumentSessionAsync()
         {
             ThrowIfDisposed();
+            await Task.Yield();
             
             var sessionId = Guid.NewGuid().ToString();
             var session = new DocumentSession
@@ -484,9 +479,10 @@ namespace NoLock.Social.Core.Camera.Services
             return sessionId;
         }
 
-        public async Task AddPageToSessionAsync(string sessionId, CapturedImage capturedImage)
+        public async ValueTask AddPageToSessionAsync(string sessionId, CapturedImage capturedImage)
         {
             ThrowIfDisposed();
+            await Task.Yield();
             var session = ValidateAndGetSession(sessionId);
             
             if (capturedImage == null)
@@ -500,10 +496,11 @@ namespace NoLock.Social.Core.Camera.Services
             // Page added to session in memory only - no persistent storage
         }
 
-        public async Task<CapturedImage[]> GetSessionPagesAsync(string sessionId)
+        public async ValueTask<CapturedImage[]> GetSessionPagesAsync(string sessionId)
         {
             ThrowIfDisposed();
-            
+            await Task.Yield();
+
             Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
@@ -513,10 +510,11 @@ namespace NoLock.Social.Core.Camera.Services
             return session.Pages.ToArray();
         }
 
-        public async Task<DocumentSession> GetDocumentSessionAsync(string sessionId)
+        public async ValueTask<DocumentSession> GetDocumentSessionAsync(string sessionId)
         {
             ThrowIfDisposed();
-            
+            await Task.Yield();
+
             Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
                 
             if (!_activeSessions.TryGetValue(sessionId, out var session))
@@ -526,7 +524,7 @@ namespace NoLock.Social.Core.Camera.Services
             return session;
         }
 
-        public async Task RemovePageFromSessionAsync(string sessionId, int pageIndex)
+        public async ValueTask RemovePageFromSessionAsync(string sessionId, int pageIndex)
         {
             ThrowIfDisposed();
             
@@ -555,7 +553,7 @@ namespace NoLock.Social.Core.Camera.Services
             // Page removed from session in memory only - no persistent storage
         }
 
-        public async Task ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex)
+        public async ValueTask ReorderPagesInSessionAsync(string sessionId, int fromIndex, int toIndex)
         {
             ThrowIfDisposed();
             var session = ValidateAndGetSession(sessionId);
@@ -567,7 +565,7 @@ namespace NoLock.Social.Core.Camera.Services
             session.UpdateActivity();
         }
 
-        public async Task ClearDocumentSessionAsync(string sessionId)
+        public async ValueTask ClearDocumentSessionAsync(string sessionId)
         {
             ThrowIfDisposed();
             
@@ -582,7 +580,7 @@ namespace NoLock.Social.Core.Camera.Services
         }
 
         // Session Cleanup and Disposal Implementation
-        public async Task DisposeDocumentSessionAsync(string sessionId)
+        public async ValueTask DisposeDocumentSessionAsync(string sessionId)
         {
             Guard.AgainstNullOrEmpty(sessionId, ValidationMessages.SessionIdRequired);
 
@@ -599,7 +597,7 @@ namespace NoLock.Social.Core.Camera.Services
             }
         }
 
-        public async Task CleanupInactiveSessionsAsync()
+        public async ValueTask CleanupInactiveSessionsAsync()
         {
             var expiredSessionIds = _activeSessions
                 .Where(kvp => kvp.Value.IsExpired)
@@ -612,7 +610,7 @@ namespace NoLock.Social.Core.Camera.Services
             }
         }
 
-        public async Task<bool> IsSessionActiveAsync(string sessionId)
+        public async ValueTask<bool> IsSessionActiveAsync(string sessionId)
         {
             if (string.IsNullOrEmpty(sessionId))
                 return false;
@@ -694,7 +692,7 @@ namespace NoLock.Social.Core.Camera.Services
         }
 
         // Helper methods for camera controls
-        private async Task<bool> IsZoomLevelValidAsync(double zoomLevel)
+        private async ValueTask<bool> IsZoomLevelValidAsync(double zoomLevel)
         {
             if (zoomLevel < 1.0) return false;
             
@@ -756,7 +754,7 @@ namespace NoLock.Social.Core.Camera.Services
             }
         }
 
-        private async Task<QualityAnalysisData> PerformQualityAnalysisAsync(string imageData)
+        private async ValueTask<QualityAnalysisData> PerformQualityAnalysisAsync(string imageData)
         {
             // Call the methods directly without the defensive error handling - let exceptions bubble up
             var blurResult = await DetectBlurDirectAsync(imageData);
@@ -766,7 +764,7 @@ namespace NoLock.Social.Core.Camera.Services
             return new QualityAnalysisData(blurResult, lightingResult, edgeResult);
         }
 
-        private async Task<BlurDetectionResult> DetectBlurDirectAsync(string imageData)
+        private async ValueTask<BlurDetectionResult> DetectBlurDirectAsync(string imageData)
         {
             var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectBlur", imageData);
             
@@ -781,7 +779,7 @@ namespace NoLock.Social.Core.Camera.Services
             };
         }
 
-        private async Task<LightingQualityResult> AssessLightingDirectAsync(string imageData)
+        private async ValueTask<LightingQualityResult> AssessLightingDirectAsync(string imageData)
         {
             var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.assessLighting", imageData);
             
@@ -798,7 +796,7 @@ namespace NoLock.Social.Core.Camera.Services
             };
         }
 
-        private async Task<EdgeDetectionResult> DetectDocumentEdgesDirectAsync(string imageData)
+        private async ValueTask<EdgeDetectionResult> DetectDocumentEdgesDirectAsync(string imageData)
         {
             var jsResult = await _jsRuntime.InvokeAsync<dynamic>("imageQuality.detectEdges", imageData);
             

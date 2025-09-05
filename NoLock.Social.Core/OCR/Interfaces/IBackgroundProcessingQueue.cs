@@ -65,7 +65,7 @@ namespace NoLock.Social.Core.OCR.Interfaces
         Task<string> EnqueueDocumentAsync(
             OCRSubmissionRequest request,
             QueuePriority priority = QueuePriority.Normal,
-            Dictionary<string, object> metadata = null,
+            Dictionary<string, object>? metadata = null,
             CancellationToken cancellation = default);
 
         /// <summary>

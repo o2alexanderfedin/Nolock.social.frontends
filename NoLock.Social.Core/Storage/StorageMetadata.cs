@@ -5,15 +5,15 @@ namespace NoLock.Social.Core.Storage
 {
     public class StorageMetadata
     {
-        public string Id { get; set; }
-        public string ContentHash { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-        public Dictionary<string, string> Tags { get; set; }
-        public long Size { get; set; }
-        public string ContentType { get; set; }
-        public string Algorithm { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string ContentAddress { get; set; }
+        public required string Id { get; init; } = null!;
+        public required string ContentHash { get; init; } = null!;  
+        public required DateTime CreatedAt { get; init; }
+        public required DateTime UpdatedAt { get; init; }
+        public Dictionary<string, string>? Tags { get; init; } = null;
+        public required long Size { get; init; } = 0;
+        public required string ContentType { get; init; } = null!;
+        public required string Algorithm { get; init; } = null!;
+        public required DateTime Timestamp { get; init; }
+        public required string ContentAddress { get; init; }
     }
 }

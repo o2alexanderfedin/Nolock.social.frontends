@@ -9,7 +9,7 @@ public sealed class CasEntry<T>
     public required string Hash { get; init; }
     
     [JsonPropertyName("data")]
-    public required T? Data { get; init; }
+    public required T Data { get; init; }
     
     [JsonPropertyName("typeName")]
     public required string TypeName { get; init; }
