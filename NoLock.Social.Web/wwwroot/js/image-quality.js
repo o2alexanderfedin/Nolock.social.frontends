@@ -25,7 +25,7 @@ window.imageQuality = {
             
             return {
                 blurScore: Math.round(blurScore * 100) / 100,
-                confidence: Math.round(confidence * 100) / 100,
+                threshold: Math.round(confidence * 100) / 100,
                 isSharp: isSharp
             };
             
@@ -75,7 +75,7 @@ window.imageQuality = {
     /**
      * Detects edges in an image for document boundary analysis
      * @param {ImageData|HTMLCanvasElement|string} imageData - Image data, canvas element, or base64 string
-     * @returns {Promise<{edgeScore: number, edgeDensity: number, hasRectangle: boolean, cornerSharpness: number}>}
+     * @returns {Promise<{edgeScore: number, edgeCount: number, hasRectangle: boolean, confidence: number}>}
      */
     async detectEdges(imageData) {
         try {
@@ -106,9 +106,9 @@ window.imageQuality = {
             
             return {
                 edgeScore: Math.round(edgeScore * 100) / 100,
-                edgeDensity: Math.round(edgeDensity * 100) / 100,
+                edgeCount: Math.round(edgeDensity * 100) / 100,
                 hasRectangle: hasRectangle,
-                cornerSharpness: Math.round(cornerSharpness * 100) / 100
+                confidence: Math.round(cornerSharpness * 100) / 100
             };
             
         } catch (error) {
