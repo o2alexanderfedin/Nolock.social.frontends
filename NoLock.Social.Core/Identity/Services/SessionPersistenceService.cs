@@ -69,7 +69,7 @@ namespace NoLock.Social.Core.Identity.Services
         }
 
         /// <inheritdoc />
-        public async Task<EncryptedSessionData?> GetPersistedSessionAsync()
+        public async ValueTask<EncryptedSessionData?> GetPersistedSessionAsync()
         {
             var result = await _logger.ExecuteWithLogging(async () =>
             {
@@ -100,7 +100,7 @@ namespace NoLock.Social.Core.Identity.Services
 
             return result.Match(
                 onSuccess: session => session,
-                onFailure: _ => null);
+                onFailure: _ => null)!;
         }
 
         /// <inheritdoc />

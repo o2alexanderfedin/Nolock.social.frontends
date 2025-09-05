@@ -63,7 +63,7 @@
                                 {
                                     <div class="col-md-3">
                                         <div class="captured-page-thumbnail">
-                                            <img src="@(GetImageUrl(capturedPage))" class="img-fluid" alt="Page @(index + 1)" />
+                                            <img src="@(GetImageUrlAsync(capturedPage))" class="img-fluid" alt="Page @(index + 1)" />
                                             <div class="page-actions">
                                                 <span class="badge bg-primary">Page @(index + 1)</span>
                                                 <button class="btn btn-sm btn-danger" @onclick="() => RemovePage(index)">
@@ -437,11 +437,11 @@
 
     private ContentData<byte[]> ConvertToContentData(string base64DataUrl)
     {
-        AddDebugLog($"ConvertToContentData: Input length: {base64DataUrl?.Length ?? 0} chars");
+        AddDebugLog($"ConvertToContentData: Input length: {base64DataUrl.Length} chars");
         
         // Extract MIME type and base64 data from data URL
         var (mimeType, base64Data) = ExtractMimeTypeAndData(base64DataUrl);
-        AddDebugLog($"ConvertToContentData: Extracted MimeType: {mimeType}, Base64 length: {base64Data?.Length ?? 0} chars");
+        AddDebugLog($"ConvertToContentData: Extracted MimeType: {mimeType}, Base64 length: {base64Data.Length} chars");
         
         // Convert base64 to byte array
         var bytes = Convert.FromBase64String(base64Data);
@@ -454,7 +454,7 @@
             MimeType = mimeType
         };
         
-        AddDebugLog($"ConvertToContentData: Created ContentData with MimeType={result.MimeType}, DataLength={result.Data?.Length ?? 0}");
+        AddDebugLog($"ConvertToContentData: Created ContentData with MimeType={result.MimeType}, DataLength={result.Data.Length}");
         
         return result;
     }
@@ -485,12 +485,12 @@
         return ("image/jpeg", dataUrl);
     }
 
-    private string GetImageUrl(string contentHash)
+    private async ValueTask<string> GetImageUrlAsync(string contentHash)
     {
         try
         {
             // Retrieve content from storage using hash
-            var contentData = StorageService.GetAsync(contentHash).GetAwaiter().GetResult();
+            var contentData = await StorageService.GetAsync(contentHash);
             if (contentData?.Data != null)
             {
                 // Convert back to data URL for display

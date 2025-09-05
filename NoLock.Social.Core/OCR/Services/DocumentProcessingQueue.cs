@@ -91,7 +91,7 @@ namespace NoLock.Social.Core.OCR.Services
         public async Task<string> EnqueueDocumentAsync(
             OCRSubmissionRequest request,
             QueuePriority priority = QueuePriority.Normal,
-            Dictionary<string, object> metadata = null,
+            Dictionary<string, object>? metadata = null,
             CancellationToken cancellation = default)
         {
             ValidateEnqueueRequest(request);
@@ -312,9 +312,9 @@ namespace NoLock.Social.Core.OCR.Services
         internal async Task<bool> UpdateDocumentStatusAsync(
             string queueId,
             QueuedDocumentStatus status,
-            OCRStatusResponse ocrStatus = null,
-            string errorMessage = null,
-            string errorCode = null,
+            OCRStatusResponse? ocrStatus = null,
+            string? errorMessage = null,
+            string? errorCode = null,
             CancellationToken cancellation = default)
         {
             if (!TryGetDocumentForUpdate(queueId, out var document))

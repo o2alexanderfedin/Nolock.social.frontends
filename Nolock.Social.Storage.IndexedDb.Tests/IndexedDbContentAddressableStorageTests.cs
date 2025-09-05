@@ -156,7 +156,7 @@ public class IndexedDbContentAddressableStorageTests
         
         // Default mock for GetAllAsync - returns empty array (not null)
         _jsModuleMock.Setup(js => js.InvokeAsync<CasEntry<TestEntity>[]>(
-            "getAll",
+            "getAllKeys",
             It.IsAny<object[]>()))
             .ReturnsAsync([]);
         
@@ -655,8 +655,8 @@ public class IndexedDbContentAddressableStorageTests
         Assert.Contains(entity3, allEntities);
         
         // Verify GetAllAsync was called
-        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()),
             Times.Once);
     }
@@ -676,8 +676,8 @@ public class IndexedDbContentAddressableStorageTests
         Assert.Empty(allEntities);
         
         // Verify GetAllAsync was called
-        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()),
             Times.Once);
     }
@@ -773,8 +773,8 @@ public class IndexedDbContentAddressableStorageTests
         Assert.Empty(allHashes);
         
         // Verify GetAllAsync was called
-        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()),
             Times.Once);
     }
@@ -988,8 +988,8 @@ public class IndexedDbContentAddressableStorageTests
             Times.Once);
         
         // Verify GetAllAsync was called to enumerate items
-        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()),
             Times.Once);
     }
@@ -1000,10 +1000,10 @@ public class IndexedDbContentAddressableStorageTests
         // Arrange
         // Setup GetAllAsync to return empty list - matching runtime expectation
         var emptyList = new List<CasEntry<TestEntity>>();
-        _jsModuleMock.Setup(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Setup(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()))
-            .ReturnsAsync(emptyList);
+            .ReturnsAsync(new List<string>());
         
         // Act
         var exception = await Record.ExceptionAsync(async () => await _storage.ClearAsync());
@@ -1012,8 +1012,8 @@ public class IndexedDbContentAddressableStorageTests
         Assert.Null(exception); // Should not throw any exception
         
         // Verify GetAllAsync was called
-        _jsModuleMock.Verify(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Verify(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()),
             Times.Once);
         
@@ -1699,10 +1699,19 @@ public class IndexedDbContentAddressableStorageTests
     private void SetupGetAllAsyncMock(params CasEntry<TestEntity>[] entries)
     {
         // The runtime actually expects List<CasEntry<TestEntity>> not an array
-        _jsModuleMock.Setup(js => js.InvokeAsync<List<CasEntry<TestEntity>>>(
-            "getAll",
+        _jsModuleMock.Setup(js => js.InvokeAsync<List<string>>(
+            "getAllKeys",
             It.IsAny<object[]>()))
-            .ReturnsAsync(entries.ToList());
+            .ReturnsAsync(entries.Select(e => e.Hash).ToList());
+            
+        // Also mock individual get calls for each entry
+        foreach (var entry in entries)
+        {
+            _jsModuleMock.Setup(js => js.InvokeAsync<CasEntry<TestEntity>?>(
+                "get",
+                It.Is<object[]>(args => args.Length > 0 && args.Any(arg => arg != null && arg.ToString() == entry.Hash))))
+                .ReturnsAsync(entry);
+        }
     }
     
     /// <summary>

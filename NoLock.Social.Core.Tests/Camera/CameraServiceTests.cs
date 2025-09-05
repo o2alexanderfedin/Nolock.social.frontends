@@ -44,7 +44,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public void Constructor_WithValidJSRuntime_CreatesInstance()
         {
             // Act
-            var service = new CameraService(_jsRuntimeMock.Object);
+            var service = new CameraService(_jsRuntimeMock.Object, _loggerMock.Object);
 
             // Assert
             service.Should().NotBeNull();
@@ -71,7 +71,7 @@ namespace NoLock.Social.Core.Tests.Camera
             _sut.Dispose();
 
             // Act & Assert
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => _sut.InitializeAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => await _sut.InitializeAsync());
         }
 
         #endregion
@@ -220,7 +220,7 @@ namespace NoLock.Social.Core.Tests.Camera
                 .ReturnsAsync(stateString);
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.StartStreamAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.StartStreamAsync());
         }
 
         [Fact]
@@ -246,7 +246,7 @@ namespace NoLock.Social.Core.Tests.Camera
 
             // Assert
             // After stopping, trying to capture should fail since there's no active stream
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.CaptureImageAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.CaptureImageAsync());
         }
 
         [Fact]
@@ -298,7 +298,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public async Task CaptureImageAsync_WithoutActiveStream_ThrowsInvalidOperationException()
         {
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.CaptureImageAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.CaptureImageAsync());
         }
 
         #endregion
@@ -434,7 +434,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public async Task ValidateImageQualityAsync_WithNullImage_ThrowsArgumentException()
         {
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentException>(() => _sut.ValidateImageQualityAsync(null));
+            await Assert.ThrowsAsync<ArgumentException>(async () => await _sut.ValidateImageQualityAsync(null));
         }
 
         [Fact]
@@ -444,7 +444,7 @@ namespace NoLock.Social.Core.Tests.Camera
             var image = new CapturedImage { ImageData = "" };
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentException>(() => _sut.ValidateImageQualityAsync(image));
+            await Assert.ThrowsAsync<ArgumentException>(async () => await _sut.ValidateImageQualityAsync(image));
         }
 
         [Fact]
@@ -519,7 +519,7 @@ namespace NoLock.Social.Core.Tests.Camera
             _sut.Dispose();
 
             // Act & Assert
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => _sut.CreateDocumentSessionAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => await _sut.CreateDocumentSessionAsync());
         }
 
         [Fact]
@@ -547,8 +547,7 @@ namespace NoLock.Social.Core.Tests.Camera
             var image = new CapturedImage { ImageData = "base64data" };
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentException>(() => 
-                _sut.AddPageToSessionAsync(invalidSessionId, image));
+            await Assert.ThrowsAsync<ArgumentException>(async () => await _sut.AddPageToSessionAsync(invalidSessionId, image));
         }
 
         [Fact]
@@ -558,8 +557,7 @@ namespace NoLock.Social.Core.Tests.Camera
             var image = new CapturedImage { ImageData = "base64data" };
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => 
-                _sut.AddPageToSessionAsync("nonexistent", image));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.AddPageToSessionAsync("nonexistent", image));
         }
 
         [Fact]
@@ -595,8 +593,7 @@ namespace NoLock.Social.Core.Tests.Camera
             await _sut.AddPageToSessionAsync(sessionId, new CapturedImage { ImageData = "data" });
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => 
-                _sut.RemovePageFromSessionAsync(sessionId, invalidIndex));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await _sut.RemovePageFromSessionAsync(sessionId, invalidIndex));
         }
 
         [Fact]
@@ -689,7 +686,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public void Dispose_CleansUpResources()
         {
             // Arrange
-            var service = new CameraService(_jsRuntimeMock.Object);
+            var service = new CameraService(_jsRuntimeMock.Object, _loggerMock.Object);
 
             // Act
             service.Dispose();
@@ -712,7 +709,7 @@ namespace NoLock.Social.Core.Tests.Camera
             // Since InvokeVoidAsync is an extension method, we cannot verify it directly
             // The test verifies that dispose doesn't throw and the stream is cleaned up
             // Additional verification can be done by checking the service state after disposal
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => _sut.CreateDocumentSessionAsync());
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => await _sut.CreateDocumentSessionAsync());
         }
 
         #endregion
@@ -856,8 +853,7 @@ namespace NoLock.Social.Core.Tests.Camera
         public async Task GetDocumentSessionAsync_WithInvalidSession_ThrowsInvalidOperationException()
         {
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => 
-                _sut.GetDocumentSessionAsync("nonexistent"));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.GetDocumentSessionAsync("nonexistent"));
         }
 
         [Fact]
@@ -899,7 +895,7 @@ namespace NoLock.Social.Core.Tests.Camera
                 .ThrowsAsync(new JSException("Camera initialization failed"));
 
             // Act & Assert
-            await Assert.ThrowsAsync<JSException>(() => _sut.StartStreamAsync());
+            await Assert.ThrowsAsync<JSException>(async () => await _sut.StartStreamAsync());
         }
 
         [Fact]
@@ -913,7 +909,7 @@ namespace NoLock.Social.Core.Tests.Camera
                 .ThrowsAsync(new JSException("Capture failed"));
 
             // Act & Assert
-            await Assert.ThrowsAsync<JSException>(() => _sut.CaptureImageAsync());
+            await Assert.ThrowsAsync<JSException>(async () => await _sut.CaptureImageAsync());
         }
 
         [Theory]
@@ -971,7 +967,7 @@ namespace NoLock.Social.Core.Tests.Camera
                 .ThrowsAsync(new JSException("Quality analysis failed"));
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.ValidateImageQualityAsync(image));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.ValidateImageQualityAsync(image));
         }
 
         [Fact]
@@ -987,7 +983,7 @@ namespace NoLock.Social.Core.Tests.Camera
                 .ReturnsAsync((object)null!);
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.StartStreamAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.StartStreamAsync());
         }
 
         [Theory]
@@ -1020,14 +1016,12 @@ namespace NoLock.Social.Core.Tests.Camera
             // Act & Assert - These should throw ArgumentException for invalid session IDs
             if (string.IsNullOrWhiteSpace(invalidSessionId))
             {
-                await Assert.ThrowsAsync<ArgumentException>(() => 
-                    _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
+                await Assert.ThrowsAsync<ArgumentException>(async () => await _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
             }
             else
             {
                 // For nonexistent session, should throw InvalidOperationException
-                await Assert.ThrowsAsync<InvalidOperationException>(() => 
-                    _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
+                await Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.AddPageToSessionAsync(invalidSessionId, new CapturedImage()));
             }
         }
 

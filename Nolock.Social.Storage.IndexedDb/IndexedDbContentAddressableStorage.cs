@@ -79,9 +79,9 @@ public sealed class IndexedDbContentAddressableStorage<T>
         {
             // Store in IndexedDB (using inline key from entry.Hash property)
             _logger.LogDebug("Attempting to store entry in IndexedDB with hash {Hash}", hash);
-            var key = await _database.CasEntries.AddAsync<CasEntry<T>, string>(entry);
-            if (key != entry.Hash)
-                throw new InvalidOperationException($"key != entry.Hash: {key} != {entry.Hash}");
+            await _database.CasEntries.AddAsync<CasEntry<T>, string>(entry);
+            // Note: When using inline keys (KeyPath = "hash"), AddAsync returns null/empty
+            // The actual key is taken from entry.Hash property automatically
             
             _logger.LogInformation("Successfully stored entity with hash {Hash} in IndexedDB", hash);
         }
@@ -151,25 +151,9 @@ public sealed class IndexedDbContentAddressableStorage<T>
         }
     }
 
-    public IAsyncEnumerable<T?> All
+    public IAsyncEnumerable<T> All
         => EnumerateRawAsync()
             .Select(x => x.Data);
-
-    private async IAsyncEnumerable<CasEntry<T>> EnumerateRawAsync()
-    {
-        await EnsureInitializedAsync();
-
-        var items = (await _database.CasEntries.GetAllKeysAsync<string>())
-            .ToAsyncEnumerable()
-            .SelectAwait(async key => await GetRawAsync(key, CancellationToken.None))
-            .Where(x => x is not null)
-            .Select(x => x!)
-            .Where(x => x.TypeName == typeof(T).FullName);
-        await foreach (var item in items)
-        {
-            yield return item;
-        }
-    }
 
     public IAsyncEnumerable<string> AllHashes
         => EnumerateRawAsync()
@@ -189,13 +173,26 @@ public sealed class IndexedDbContentAddressableStorage<T>
         }
     }
 
+    private async IAsyncEnumerable<CasEntry<T>> EnumerateRawAsync()
+    {
+        var keys = await _database.CasEntries.GetAllKeysAsync<string>() ?? new List<string>();
+        var items = keys
+            .ToAsyncEnumerable()
+            .SelectAwait(async key => await GetRawAsync(key, CancellationToken.None))
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .Where(x => x.TypeName == typeof(T).FullName);
+        await foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
     private async ValueTask<CasEntry<T>?> GetRawAsync(string contentHash, CancellationToken cancellation)
     {
         ArgumentNullException.ThrowIfNull(contentHash);
         
         _logger.LogDebug("GetRawAsync called for hash {Hash}", contentHash);
-        
-        await EnsureInitializedAsync();
         
         if (cancellation.IsCancellationRequested)
         {

@@ -14,7 +14,8 @@ namespace NoLock.Social.Core.Identity.Services
     /// The actual keys are re-derived from the passphrase when needed.
     /// This approach is more secure as we never store private keys, even encrypted.
     /// </summary>
-    public class SecureSessionPersistenceService : ISessionPersistenceService
+    public class SecureSessionPersistenceService
+        : ISessionPersistenceService
     {
         private readonly IJSRuntime _jsRuntime;
         private readonly IWebCryptoService _webCryptoService;
@@ -83,7 +84,7 @@ namespace NoLock.Social.Core.Identity.Services
         }
 
         /// <inheritdoc />
-        public async Task<EncryptedSessionData?> GetPersistedSessionAsync()
+        public async ValueTask<EncryptedSessionData?> GetPersistedSessionAsync()
         {
             var result = await _logger.ExecuteWithLogging(async () =>
             {

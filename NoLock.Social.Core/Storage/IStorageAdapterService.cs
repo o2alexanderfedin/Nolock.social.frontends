@@ -16,7 +16,7 @@ namespace NoLock.Social.Core.Storage
         /// <param name="signedContent">The signed content to store</param>
         /// <param name="metadata">Optional metadata for the content</param>
         /// <returns>Storage identifier for the stored content</returns>
-        Task<string> StoreSignedContentAsync(SignedTarget signedContent, StorageMetadata metadata = null);
+        Task<string> StoreSignedContentAsync(SignedTarget signedContent, StorageMetadata? metadata = null);
 
         /// <summary>
         /// Retrieves signed content from storage
@@ -37,6 +37,6 @@ namespace NoLock.Social.Core.Storage
         /// </summary>
         /// <param name="filter">Optional filter criteria</param>
         /// <returns>Collection of storage entries</returns>
-        Task<IEnumerable<StorageMetadata>> ListAllContentAsync(string filter = null);
+        Task<IEnumerable<StorageMetadata>> ListAllContentAsync(string? filter = null);
     }
 }

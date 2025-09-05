@@ -22,7 +22,7 @@ namespace NoLock.Social.Core.Identity.Interfaces
         /// Restore a persisted session from secure storage.
         /// </summary>
         /// <returns>The encrypted session data if found and valid, null otherwise</returns>
-        Task<EncryptedSessionData?> GetPersistedSessionAsync();
+        ValueTask<EncryptedSessionData?> GetPersistedSessionAsync();
 
         /// <summary>
         /// Decrypt and restore a session using the provided decryption key.

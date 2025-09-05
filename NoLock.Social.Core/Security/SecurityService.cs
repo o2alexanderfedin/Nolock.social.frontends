@@ -51,7 +51,7 @@ public class SecurityService : ISecurityService
     
     public async Task ApplySecurityHeadersAsync()
     {
-        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Applying security headers");
             
@@ -85,7 +85,7 @@ public class SecurityService : ISecurityService
     
     public async Task ConfigureSecureCookiesAsync()
     {
-        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Configuring secure cookie settings");
             
@@ -139,7 +139,7 @@ public class SecurityService : ISecurityService
     
     public async Task<bool> ValidateCspAsync()
     {
-        var result = await (_logger ?? NullLogger<SecurityService>.Instance).ExecuteWithLogging(async () =>
+        var result = await _logger.ExecuteWithLogging(async () =>
         {
             _logger.LogInformation("Validating Content Security Policy");
             
