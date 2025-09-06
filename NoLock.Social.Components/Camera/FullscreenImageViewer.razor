@@ -1,0 +1,180 @@
+@namespace NoLock.Social.Components.Camera
+@using BlazorPro.BlazorSize
+@using Microsoft.Extensions.Logging
+@using NoLock.Social.Core.Camera.Models
+@implements IAsyncDisposable
+@inject IResizeListener ResizeListener
+@inject ILogger<FullscreenImageViewer>? Logger
+
+@if (IsVisible && CurrentImage != null)
+{
+    <div class="modal-backdrop fullscreen-backdrop @VisibilityClass" 
+         @onclick="HandleBackdropClick"
+         @ontouchstart="HandleTouchStart" 
+         @ontouchend="HandleTouchEnd"
+         @onkeydown="HandleKeyDown"
+         tabindex="-1">
+         
+        <div class="fullscreen-container @OrientationClass" @onclick:stopPropagation="true">
+            <img src="@CurrentImage.DataUrl" 
+                 class="fullscreen-image" 
+                 alt="Fullscreen preview of captured image"
+                 @onload="OnImageLoaded"
+                 @onerror="OnImageError" />
+            
+            <button class="btn-close-viewer" 
+                    @onclick="CloseAsync" 
+                    title="Close (ESC)"
+                    aria-label="Close fullscreen image">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback OnClosed { get; set; }
+    
+    // State Management
+    private CapturedImage? CurrentImage;
+    private bool IsVisible;
+    private bool IsLandscape;
+    private bool ImageLoaded;
+    private bool ImageError;
+    
+    // Touch handling
+    private bool _touchStarted;
+    private double _touchStartY;
+    
+    // Computed properties
+    private string VisibilityClass => IsVisible ? "show" : "hide";
+    private string OrientationClass => IsLandscape ? "landscape" : "portrait";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            ResizeListener.OnResized += OnBrowserResize;
+        }
+    }
+
+    // Public API
+    public async Task ShowAsync(CapturedImage image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        
+        CurrentImage = image;
+        IsVisible = true;
+        ImageLoaded = false;
+        ImageError = false;
+        
+        await InvokeAsync(StateHasChanged);
+        
+        // Focus for keyboard navigation
+        await Task.Delay(100); // Allow render
+        // Focus will be handled by CSS tabindex
+    }
+
+    public async Task CloseAsync()
+    {
+        IsVisible = false;
+        CurrentImage = null;
+        ImageLoaded = false;
+        ImageError = false;
+        
+        await InvokeAsync(StateHasChanged);
+        await OnClosed.InvokeAsync();
+    }
+
+    // Event Handlers
+    private async void OnBrowserResize(object? sender, BrowserWindowSize window)
+    {
+        try
+        {
+            var wasLandscape = IsLandscape;
+            IsLandscape = window.Width > window.Height;
+            
+            if (wasLandscape != IsLandscape)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error handling browser resize");
+        }
+    }
+
+    private async Task HandleBackdropClick()
+    {
+        await CloseAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await CloseAsync();
+        }
+    }
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length > 0)
+        {
+            _touchStarted = true;
+            _touchStartY = e.Touches[0].ClientY;
+        }
+    }
+
+    private async Task HandleTouchEnd(TouchEventArgs e)
+    {
+        if (!_touchStarted || e.ChangedTouches.Length == 0) return;
+        
+        try
+        {
+            var swipeDistance = e.ChangedTouches[0].ClientY - _touchStartY;
+            
+            // Simple swipe down to close (100px threshold)
+            if (swipeDistance > 100)
+            {
+                await CloseAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error handling touch end");
+        }
+        finally
+        {
+            _touchStarted = false;
+        }
+    }
+
+    private void OnImageLoaded()
+    {
+        ImageLoaded = true;
+        ImageError = false;
+        StateHasChanged();
+    }
+
+    private void OnImageError()
+    {
+        ImageError = true;
+        ImageLoaded = false;
+        StateHasChanged();
+    }
+
+    // Cleanup
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            ResizeListener.OnResized -= OnBrowserResize;
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error disposing FullscreenImageViewer");
+        }
+    }
+}
