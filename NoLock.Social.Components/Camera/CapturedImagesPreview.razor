@@ -1,5 +1,7 @@
 @namespace NoLock.Social.Components.Camera
 
+<FullscreenImageViewer @ref="fullscreenViewer" OnClosed="OnFullscreenClosed" />
+
 <div class="captured-images-preview">
     @if (!string.IsNullOrEmpty(Title))
     {
@@ -15,8 +17,11 @@
                     <div class="card">
                         <div class="position-relative">
                             <img src="@image.DataUrl" 
-                                 class="card-img-top captured-image-thumbnail" 
-                                 alt="Captured image @(index + 1)" />
+                                 class="card-img-top captured-image-thumbnail cursor-pointer" 
+                                 alt="Captured image @(index + 1)"
+                                 @onclick="() => ShowFullscreen(image)" 
+                                 @onkeydown="@((e) => HandleThumbnailKeyDown(e, image))"
+                                 tabindex="0" />
                             
                             @if (AllowRemove)
                             {
@@ -86,6 +91,15 @@
         justify-content: center;
         border-radius: 50% !important;
     }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+    .captured-image-thumbnail:focus {
+        outline: 2px solid #007bff;
+        outline-offset: 2px;
+    }
 </style>
 
 @code {
@@ -93,6 +107,30 @@
     [Parameter] public EventCallback<int> OnRemoveImage { get; set; }
     [Parameter] public string? Title { get; set; }
     [Parameter] public bool AllowRemove { get; set; } = true;
+    
+    private FullscreenImageViewer? fullscreenViewer;
+
+    private async Task ShowFullscreen(CapturedImage image)
+    {
+        if (fullscreenViewer != null)
+        {
+            await fullscreenViewer.ShowAsync(image);
+        }
+    }
+
+    private async Task HandleThumbnailKeyDown(KeyboardEventArgs e, CapturedImage image)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ShowFullscreen(image);
+        }
+    }
+
+    private Task OnFullscreenClosed()
+    {
+        // Optional: Handle post-close logic
+        return Task.CompletedTask;
+    }
     
     private async Task HandleRemoveImage(int index)
     {
