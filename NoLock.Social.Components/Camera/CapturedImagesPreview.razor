@@ -14,14 +14,22 @@
             @foreach (var (image, index) in CapturedImages.Select((img, i) => (img, i)))
             {
                 <div class="col-4 col-sm-3 col-md-2">
-                    <div class="card">
+                    <div class="card @(GetSelectionCssClass(image))">
                         <div class="position-relative">
                             <img src="@image.DataUrl" 
                                  class="card-img-top captured-image-thumbnail cursor-pointer" 
                                  alt="Captured image @(index + 1)"
-                                 @onclick="() => ShowFullscreen(image)" 
-                                 @onkeydown="@((e) => HandleThumbnailKeyDown(e, image))"
+                                 @onclick="() => HandleImageClick(image)"
+                                 @ondblclick="() => HandleImageDoubleClick(image)"
+                                 @onkeydown="@((e) => HandleImageKeyDown(e, image))"
                                  tabindex="0" />
+                            
+                            @if (OnImageSelectionToggled.HasValue && IsImageSelected?.Invoke(image) == true)
+                            {
+                                <div class="selection-indicator">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </div>
+                            }
                             
                             @if (AllowRemove)
                             {
@@ -100,6 +108,68 @@
         outline: 2px solid #007bff;
         outline-offset: 2px;
     }
+
+    /* Selection visual feedback - only active when selection parameters provided */
+    .captured-images-preview .card.selected {
+        border-color: #28a745;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.25);
+        transform: scale(0.98);  /* Hardware accelerated */
+        transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+
+    .captured-images-preview .card.selected:hover {
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.35), 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+
+    /* Selection indicator styling */
+    .selection-indicator {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: rgba(40, 167, 69, 0.9);
+        color: white;
+        border-radius: 50%;
+        padding: 2px;
+        font-size: 1rem;
+        line-height: 1;
+        z-index: 10;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Mobile optimization */
+    @@media (max-width: 768px) {
+        .selection-indicator {
+            top: 2px;
+            right: 2px;
+            font-size: 0.85rem;
+            padding: 1px;
+        }
+        
+        .captured-images-preview .card.selected {
+            transform: scale(0.99); /* Less aggressive scaling on mobile */
+        }
+    }
+
+    /* Accessibility enhancements */
+    @@media (prefers-reduced-motion: reduce) {
+        .captured-images-preview .card.selected {
+            transition: none;
+            transform: none;
+        }
+    }
+
+    /* High contrast support */
+    @@media (prefers-contrast: high) {
+        .captured-images-preview .card.selected {
+            border-width: 2px;
+            border-color: #28a745;
+        }
+        
+        .selection-indicator {
+            background: #28a745;
+            border: 1px solid white;
+        }
+    }
 </style>
 
 @code {
@@ -107,6 +177,18 @@
     [Parameter] public EventCallback<int> OnRemoveImage { get; set; }
     [Parameter] public string? Title { get; set; }
     [Parameter] public bool AllowRemove { get; set; } = true;
+    
+    /// <summary>
+    /// Optional delegate to determine if an image is currently selected.
+    /// When provided, enables selection mode with visual feedback.
+    /// </summary>
+    [Parameter] public Func<CapturedImage, bool>? IsImageSelected { get; set; }
+
+    /// <summary>
+    /// Optional callback invoked when image selection is toggled.
+    /// When provided with IsImageSelected, enables selection mode.
+    /// </summary>
+    [Parameter] public EventCallback<CapturedImage>? OnImageSelectionToggled { get; set; }
     
     private FullscreenImageViewer? fullscreenViewer;
 
@@ -130,6 +212,43 @@
     {
         // Optional: Handle post-close logic
         return Task.CompletedTask;
+    }
+
+    private async Task HandleImageClick(CapturedImage image)
+    {
+        // PATTERN: Single click for selection when selection mode is active
+        if (OnImageSelectionToggled.HasValue && OnImageSelectionToggled.Value.HasDelegate)
+        {
+            await OnImageSelectionToggled.Value.InvokeAsync(image);
+        }
+        else
+        {
+            // FALLBACK: Default behavior maintains backward compatibility
+            await ShowFullscreen(image);
+        }
+    }
+
+    private async Task HandleImageDoubleClick(CapturedImage image)
+    {
+        // PATTERN: Double-click always opens fullscreen preview
+        // This allows both selection and fullscreen to coexist
+        await ShowFullscreen(image);
+    }
+
+    private async Task HandleImageKeyDown(KeyboardEventArgs e, CapturedImage image)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await HandleImageClick(image);
+        }
+    }
+
+    private string GetSelectionCssClass(CapturedImage image)
+    {
+        // PATTERN: Follow conditional CSS pattern from DocumentManager.razor
+        if (OnImageSelectionToggled.HasValue && IsImageSelected?.Invoke(image) == true)
+            return "selected";
+        return "";
     }
     
     private async Task HandleRemoveImage(int index)

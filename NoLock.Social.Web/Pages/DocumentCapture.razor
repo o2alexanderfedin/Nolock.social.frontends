@@ -63,7 +63,9 @@
                             Title="Captured Pages"
                             CapturedImages="capturedImages"
                             OnRemoveImage="HandleRemoveImage"
-                            AllowRemove="true" />
+                            AllowRemove="true"
+                            IsImageSelected="IsImageSelected"
+                            OnImageSelectionToggled="EventCallback.Factory.Create<CapturedImage>(this, ToggleImageSelection)" />
                     </div>
                 </div>
             </div>
@@ -169,13 +171,24 @@
                         </h5>
                     </div>
                     <div class="card-body">
+                        @if (selectedImage != null)
+                        {
+                            <button class="btn btn-primary w-100 mb-2" @onclick="ProcessSelectedImages" 
+                                    disabled="@(selectedImage == null || isProcessing)">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                <i class="bi bi-check-circle"></i> Process Selected (1)
+                            </button>
+                        }
                         <button class="btn btn-success w-100 mb-2" @onclick="ProcessDocument" 
                                 disabled="@(!capturedImages.Any() || isProcessing)">
                             @if (isProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
                             }
-                            <i class="bi bi-play-fill"></i> Process Document
+                            <i class="bi bi-play-fill"></i> Process All Pages
                         </button>
                         <button class="btn btn-warning w-100 mb-2" @onclick="ClearSession" 
                                 disabled="@(!capturedImages.Any())">
@@ -231,6 +244,9 @@
     private List<CapturedImage> capturedImages = new(); // Store content hashes instead of CapturedImage objects
     private ImageQualityResult? lastQualityResult;
     
+    // Selection state management
+    private CapturedImage? selectedImage = null;
+    
     private IDisposable? loginStateSubscription;
     
     // Debug logging
@@ -248,6 +264,18 @@
             debugLogs.RemoveRange(100, debugLogs.Count - 100);
         }
         
+        StateHasChanged();
+    }
+    
+    // Selection helper methods
+    private bool IsImageSelected(CapturedImage image) => selectedImage?.Id == image.Id;
+    
+    private void ToggleImageSelection(CapturedImage image)
+    {
+        if (selectedImage?.Id == image.Id)
+            selectedImage = null;  // Deselect if clicking selected image
+        else
+            selectedImage = image;  // Select new image (switches selection)
         StateHasChanged();
     }
 
@@ -292,18 +320,31 @@
         StateHasChanged();
     }
 
+    private async Task ProcessSelectedImages()
+    {
+        if (selectedImage == null)
+            return;
+
+        await ProcessImages(new List<CapturedImage> { selectedImage });
+    }
+
     private async Task ProcessDocument()
     {
         if (!capturedImages.Any())
             return;
 
+        await ProcessImages(capturedImages.ToList());
+    }
+
+    private async Task ProcessImages(List<CapturedImage> imagesToProcess)
+    {
         try
         {
             isProcessing = true;
             StateHasChanged();
 
             // Process each page individually (OCRService expects single images)
-            foreach (var capturedImage in capturedImages.ToList())
+            foreach (var capturedImage in imagesToProcess)
             {
                 try
                 {
@@ -367,65 +408,15 @@
 
     private async Task HandleCameraImageCaptured(CapturedImage capturedImage)
     {
-        try
-        {
-            AddDebugLog("HandleCameraImageCaptured: Starting image capture processing");
-            
-            // Add the hash to the pages list
-            capturedImages.Add(capturedImage);
-            AddDebugLog($"HandleCameraImageCaptured: Added to pages list. Total pages: {capturedImages.Count}");
-
-            var processingResult = await ImageProcessingService.ProcessAsync(capturedImage);
-            lastQualityResult = processingResult.QualityResult;
-            
-            // Clear any previous error messages on successful capture
-            errorMessage = null;
-            
-            AddDebugLog($"HandleCameraImageCaptured: Completed successfully.");
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to process captured image: {ex.Message}";
-            Logger.LogError(ex, "Error processing captured image");
-            AddDebugLog($"HandleCameraImageCaptured: ERROR - {ex.GetType().Name}: {ex.Message}");
-            if (ex.InnerException != null)
-            {
-                AddDebugLog($"HandleCameraImageCaptured: INNER ERROR - {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-            }
-        }
-        finally
-        {
-            StateHasChanged();
-        }
-    }
-
-
-    private async ValueTask<string> GetImageUrlAsync(string contentHash)
-    {
-        try
-        {
-            // Retrieve content from storage using hash
-            var contentData = await StorageService.GetAsync(contentHash);
-            if (contentData?.Data != null)
-            {
-                // Convert back to data URL for display
-                var base64 = Convert.ToBase64String(contentData.Data);
-                return $"data:{contentData.MimeType};base64,{base64}";
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to retrieve image with hash {Hash}", contentHash);
-        }
-        
-        // Return a placeholder or empty image URL if retrieval fails
-        return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVycm9yPC90ZXh0Pjwvc3ZnPg==";
+        capturedImages.Add(capturedImage);
+        selectedImage = capturedImage; // Auto-select newly captured image
+        StateHasChanged();
     }
 
     private void HandleCameraError(string error)
     {
         // Update error message from camera component
-        this.errorMessage = error;
+        errorMessage = error;
         
         // Reset quality result on error
         lastQualityResult = null;
