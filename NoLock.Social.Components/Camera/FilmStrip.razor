@@ -1,4 +1,5 @@
 @namespace NoLock.Social.Components.Camera
+@implements IDisposable
 
 <FullscreenImageViewer @ref="fullscreenViewer" OnClosed="OnFullscreenClosed" />
 
@@ -20,16 +21,8 @@
                                  class="film-thumbnail cursor-pointer" 
                                  alt="Captured image @(index + 1)"
                                  @onclick="() => HandleImageClick(image)"
-                                 @ondblclick="() => HandleImageDoubleClick(image)"
                                  @onkeydown="@((e) => HandleImageKeyDown(e, image))"
                                  tabindex="0" />
-                            
-                            @if (OnImageSelectionToggled.HasValue && IsImageSelected?.Invoke(image) == true)
-                            {
-                                <div class="selection-indicator">
-                                    <i class="bi bi-check-circle-fill"></i>
-                                </div>
-                            }
                             
                             @if (AllowRemove)
                             {
@@ -39,6 +32,18 @@
                                         title="Remove image">
                                     <i class="bi bi-x" style="font-size: 0.75rem;"></i>
                                 </button>
+                            }
+                            
+                            @if (OnImageSelectionToggled.HasValue && OnImageSelectionToggled.Value.HasDelegate)
+                            {
+                                <div class="selection-checkbox-container">
+                                    <input type="checkbox" 
+                                           class="form-check-input selection-checkbox"
+                                           checked="@(IsImageSelected?.Invoke(image) == true)"
+                                           @onclick="() => HandleCheckboxClick(image)"
+                                           @onclick:stopPropagation="true"
+                                           title="Select image" />
+                                </div>
                             }
                         </div>
                         
@@ -135,6 +140,25 @@
         z-index: 10;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     }
+    
+    /* Selection checkbox styling */
+    .selection-checkbox-container {
+        position: absolute;
+        bottom: 4px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 4px;
+        padding: 2px;
+    }
+    
+    .selection-checkbox {
+        cursor: pointer;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+    }
 
     /* Mobile optimization */
     @@media (max-width: 768px) {
@@ -143,6 +167,16 @@
             right: 2px;
             font-size: 0.85rem;
             padding: 1px;
+        }
+        
+        .selection-checkbox-container {
+            bottom: 2px;
+            padding: 1px;
+        }
+        
+        .selection-checkbox {
+            width: 18px;
+            height: 18px;
         }
         
         .captured-images-preview .card.selected {
@@ -211,27 +245,14 @@
     private Task OnFullscreenClosed()
     {
         // Optional: Handle post-close logic
+        // Selection state is automatically preserved
         return Task.CompletedTask;
     }
 
     private async Task HandleImageClick(CapturedImage image)
     {
-        // PATTERN: Single click for selection when selection mode is active
-        if (OnImageSelectionToggled.HasValue && OnImageSelectionToggled.Value.HasDelegate)
-        {
-            await OnImageSelectionToggled.Value.InvokeAsync(image);
-        }
-        else
-        {
-            // FALLBACK: Default behavior maintains backward compatibility
-            await ShowFullscreen(image);
-        }
-    }
-
-    private async Task HandleImageDoubleClick(CapturedImage image)
-    {
-        // PATTERN: Double-click always opens fullscreen preview
-        // This allows both selection and fullscreen to coexist
+        // SIMPLIFIED: Single click always opens fullscreen
+        // Selection is now handled exclusively by the checkbox
         await ShowFullscreen(image);
     }
 
@@ -251,11 +272,25 @@
         return "";
     }
     
+    private async Task HandleCheckboxClick(CapturedImage image)
+    {
+        // PATTERN: Simple checkbox toggle for selection
+        if (OnImageSelectionToggled.HasValue && OnImageSelectionToggled.Value.HasDelegate)
+        {
+            await OnImageSelectionToggled.Value.InvokeAsync(image);
+        }
+    }
+    
     private async Task HandleRemoveImage(int index)
     {
         if (OnRemoveImage.HasDelegate)
         {
             await OnRemoveImage.InvokeAsync(index);
         }
+    }
+    
+    public void Dispose()
+    {
+        // Clean up resources if needed
     }
 }
