@@ -80,15 +80,18 @@ namespace NoLock.Social.Components.Tests.Camera
                         selectedImages.Add(img.Id);
                 })));
 
-            // Trigger click event
-            var imageElement = component.Find(".film-thumbnail");
-            imageElement.Click();
+            // Verify checkbox is present
+            var checkbox = component.Find(".selection-checkbox");
+            checkbox.Should().NotBeNull("Checkbox should be present when selection handlers are provided");
+            
+            // Trigger checkbox click event (not image click)
+            checkbox.Click();
 
-            // Assert - Should trigger selection, not fullscreen
+            // Assert - Should trigger selection via checkbox
             selectionToggled.Should().BeTrue("Selection callback should be invoked");
             toggledImage.Should().NotBeNull("Toggled image should be provided to callback");
             toggledImage!.Id.Should().Be("1", "Correct image should be passed to callback");
-            selectedImages.Should().Contain("1", "Image should be selected after click");
+            selectedImages.Should().Contain("1", "Image should be selected after checkbox click");
         }
 
         [Fact]
@@ -104,12 +107,10 @@ namespace NoLock.Social.Components.Tests.Camera
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
 
-            // Assert
-            var selectionIndicator = component.Find(".selection-indicator");
-            selectionIndicator.Should().NotBeNull("Selected image should show selection indicator");
-            
-            var icon = selectionIndicator.QuerySelector("i.bi-check-circle-fill");
-            icon.Should().NotBeNull("Selection indicator should contain check circle icon");
+            // Assert - Check for checkbox being checked
+            var checkbox = component.Find(".selection-checkbox");
+            checkbox.Should().NotBeNull("Checkbox should be present");
+            checkbox.GetAttribute("checked").Should().NotBeNull("Checkbox should be checked for selected image");
 
             var cardElement = component.Find(".card");
             var cardClasses = cardElement.GetAttribute("class");
@@ -129,9 +130,10 @@ namespace NoLock.Social.Components.Tests.Camera
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
 
-            // Assert
-            var selectionIndicators = component.FindAll(".selection-indicator");
-            selectionIndicators.Should().BeEmpty("Unselected image should not show selection indicator");
+            // Assert - Check for unchecked checkbox
+            var checkbox = component.Find(".selection-checkbox");
+            checkbox.Should().NotBeNull("Checkbox should be present");
+            checkbox.GetAttribute("checked").Should().BeNull("Checkbox should not be checked for unselected image");
 
             var cardElement = component.Find(".card");
             var cardClasses = cardElement.GetAttribute("class");
@@ -139,49 +141,41 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void FilmStrip_KeyboardInteraction_TriggersSelection()
+        public void FilmStrip_KeyboardInteraction_OpensFullscreen()
         {
             // Arrange
             var images = _testImages.Take(1);
-            var selectionToggled = false;
-
             var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => false)
-                .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
-                {
-                    selectionToggled = true;
-                })));
+                .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
 
-            // Act - Simulate Enter key press
+            // Act - Simulate Enter key press on image
             var imageElement = component.Find(".film-thumbnail");
             imageElement.KeyDown(new KeyboardEventArgs { Key = "Enter" });
 
-            // Assert
-            selectionToggled.Should().BeTrue("Enter key should trigger selection");
+            // Assert - Should open fullscreen (keyboard nav on image opens fullscreen)
+            var fullscreenViewer = component.Find(".fullscreen-backdrop");
+            fullscreenViewer.Should().NotBeNull("Enter key on image should open fullscreen viewer");
         }
 
         [Fact]
-        public void FilmStrip_SpaceKeyInteraction_TriggersSelection()
+        public void FilmStrip_SpaceKeyInteraction_OpensFullscreen()
         {
             // Arrange
             var images = _testImages.Take(1);
-            var selectionToggled = false;
-
             var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => false)
-                .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
-                {
-                    selectionToggled = true;
-                })));
+                .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
 
-            // Act - Simulate Space key press
+            // Act - Simulate Space key press on image
             var imageElement = component.Find(".film-thumbnail");
             imageElement.KeyDown(new KeyboardEventArgs { Key = " " });
 
-            // Assert
-            selectionToggled.Should().BeTrue("Space key should trigger selection");
+            // Assert - Should open fullscreen (keyboard nav on image opens fullscreen)
+            var fullscreenViewer = component.Find(".fullscreen-backdrop");
+            fullscreenViewer.Should().NotBeNull("Space key on image should open fullscreen viewer");
         }
 
         [Fact]
@@ -199,23 +193,24 @@ namespace NoLock.Social.Components.Tests.Camera
                     toggleCalls.Add(img.Id);
                 })));
 
-            // Assert - Only second image should be visually selected
-            var selectionIndicators = component.FindAll(".selection-indicator");
-            selectionIndicators.Should().HaveCount(1, "Only one image should be selected");
+            // Assert - Only second image checkbox should be checked
+            var checkboxes = component.FindAll(".selection-checkbox");
+            checkboxes.Should().HaveCount(3, "All images should have checkboxes");
+            checkboxes[1].GetAttribute("checked").Should().NotBeNull("Second checkbox should be checked");
+            checkboxes[0].GetAttribute("checked").Should().BeNull("First checkbox should not be checked");
 
             var selectedCards = component.FindAll(".card.selected");
             selectedCards.Should().HaveCount(1, "Only one card should have selected class");
 
-            // Act - Click first image
-            var allImages = component.FindAll(".film-thumbnail");
-            allImages[0].Click();
+            // Act - Click first checkbox to select it
+            checkboxes[0].Click();
 
             // Assert - First image callback should be triggered
-            toggleCalls.Should().Contain("1", "First image toggle should be called");
+            toggleCalls.Should().Contain("1", "First image toggle should be called via checkbox");
         }
 
         [Fact]
-        public void FilmStrip_WithoutOnImageSelectionToggled_DoesNotShowSelectionIndicator()
+        public void FilmStrip_WithoutOnImageSelectionToggled_DoesNotShowCheckbox()
         {
             // Arrange - Only IsImageSelected provided, but no OnImageSelectionToggled
             var images = _testImages.Take(1);
@@ -224,9 +219,9 @@ namespace NoLock.Social.Components.Tests.Camera
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => true)); // No OnImageSelectionToggled provided
 
-            // Assert - Should not show selection indicator without both parameters
-            var selectionIndicators = component.FindAll(".selection-indicator");
-            selectionIndicators.Should().BeEmpty("Selection indicator should not appear without OnImageSelectionToggled");
+            // Assert - Should not show checkbox without both parameters
+            var checkboxes = component.FindAll(".selection-checkbox");
+            checkboxes.Should().BeEmpty("Checkbox should not appear without OnImageSelectionToggled");
 
             var cardElement = component.Find(".card");
             var cardClasses = cardElement.GetAttribute("class");
