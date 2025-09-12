@@ -9,7 +9,9 @@ using NoLock.Social.Core.Camera.Models;
 using NoLock.Social.Core.Camera.Services;
 using NoLock.Social.Core.Identity.Interfaces;
 using NoLock.Social.Core.Identity.Models;
+using NoLock.Social.Core.Storage;
 using NoLock.Social.Core.OCR.Interfaces;
+using BlazorPro.BlazorSize;
 using NoLock.Social.Core.OCR.Models;
 using OCRDocumentType = NoLock.Social.Core.OCR.Models.DocumentType;
 using NoLock.Social.Core.Storage;
@@ -33,9 +35,10 @@ namespace NoLock.Social.Web.Tests.Pages
         private readonly Mock<ILogger<DocumentCapture>> _mockLogger;
         private readonly Mock<ILogger<ImageProcessingService>> _mockImageProcessingLogger;
         private readonly Mock<IContentAddressableStorage<ContentData<byte[]>>> _mockStorageService;
+        private readonly Mock<IResizeListener> _mockResizeListener;
         private readonly Subject<LoginStateChange> _loginStateSubject;
 
-        public DocumentCaptureTests()
+        public DocumentCaptureTests() : base()
         {
             // Initialize all mocks
             _mockCameraService = new Mock<ICameraService>();
@@ -44,6 +47,7 @@ namespace NoLock.Social.Web.Tests.Pages
             _mockLogger = new Mock<ILogger<DocumentCapture>>();
             _mockImageProcessingLogger = new Mock<ILogger<ImageProcessingService>>();
             _mockStorageService = new Mock<IContentAddressableStorage<ContentData<byte[]>>>();
+            _mockResizeListener = new Mock<IResizeListener>();
             _loginStateSubject = new Subject<LoginStateChange>();
 
             // Setup login service with observable
@@ -56,6 +60,7 @@ namespace NoLock.Social.Web.Tests.Pages
             Services.AddSingleton(_mockLogger.Object);
             Services.AddSingleton(_mockImageProcessingLogger.Object);
             Services.AddSingleton(_mockStorageService.Object);
+            Services.AddSingleton(_mockResizeListener.Object);
             
             // Register the real ImageProcessingService with dependency injection
             Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
@@ -160,9 +165,10 @@ namespace NoLock.Social.Web.Tests.Pages
             };
             await cameraCapture.InvokeAsync(() => 
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render();
 
-            // Find and click the Process Document button
-            var processButton = component.Find("button:contains('Process Document')");
+            // Find and click the Process All Pages button
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
@@ -203,9 +209,10 @@ namespace NoLock.Social.Web.Tests.Pages
             var capturedImage = new CapturedImage { ImageData = testImageData };
             await cameraCapture.InvokeAsync(async () => 
                 await cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render();
 
-            // Find and click the remove button for the first page (now in CapturedImagesPreview)
-            var removeButton = component.Find(".captured-images-preview button.btn-danger");
+            // Find and click the remove button for the first page (now in FilmStrip)
+            var removeButton = component.Find(".film-strip button.btn-danger");
             removeButton.Click();
 
             // Assert
@@ -239,6 +246,7 @@ namespace NoLock.Social.Web.Tests.Pages
 
             await cameraCapture.InvokeAsync(async () => 
                 await cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render();
 
             // Assert
             Assert.Contains("Image Quality", component.Markup);
@@ -275,8 +283,10 @@ namespace NoLock.Social.Web.Tests.Pages
             var capturedImage = new CapturedImage { ImageData = testImageData };
             await cameraCapture.InvokeAsync(async () => 
                 await cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render();
             await cameraCapture.InvokeAsync(async () => 
                 await cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render();
 
             // Find and click the Clear All Pages button
             var clearButton = component.Find("button:contains('Clear All Pages')");
@@ -351,7 +361,7 @@ namespace NoLock.Social.Web.Tests.Pages
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = testImageData }));
 
             // Process the document
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert - CORS error should be logged with specific message
@@ -400,7 +410,7 @@ namespace NoLock.Social.Web.Tests.Pages
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = testImageData }));
 
             // Process the document
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
@@ -439,7 +449,7 @@ namespace NoLock.Social.Web.Tests.Pages
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = testImageData }));
 
             // Process the document
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
@@ -497,7 +507,7 @@ namespace NoLock.Social.Web.Tests.Pages
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = testImageData }));
 
             // Process the document
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
@@ -553,7 +563,7 @@ namespace NoLock.Social.Web.Tests.Pages
             Assert.Contains("Captured Pages (2)", component.Markup);
 
             // Process the documents
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             await processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Assert
@@ -573,7 +583,7 @@ namespace NoLock.Social.Web.Tests.Pages
             var component = RenderComponent<DocumentCapture>();
 
             // Assert
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             Assert.True(processButton.HasAttribute("disabled"));
         }
 
@@ -611,13 +621,13 @@ namespace NoLock.Social.Web.Tests.Pages
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(new CapturedImage { ImageData = testImageData }));
 
             // Start processing
-            var processButton = component.Find("button:contains('Process Document')");
+            var processButton = component.Find("button:contains('Process All Pages')");
             var processTask = processButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
             // Check button state while processing
             component.WaitForAssertion(() =>
             {
-                var button = component.Find("button:contains('Process Document')");
+                var button = component.Find("button:contains('Process All Pages')");
                 Assert.True(button.HasAttribute("disabled"));
                 Assert.Contains("spinner-border", button.InnerHtml);
             });
@@ -632,10 +642,10 @@ namespace NoLock.Social.Web.Tests.Pages
         #region Image Quality Tests
 
         [Theory]
-        [InlineData(95, "bg-success")]
-        [InlineData(70, "bg-warning")]
-        [InlineData(50, "bg-danger")]
-        public async Task DocumentCapture_Should_DisplayCorrectQualityClass_BasedOnScore(int qualityScore, string expectedClass)
+        [InlineData(95)]
+        [InlineData(70)]
+        [InlineData(50)]
+        public async Task DocumentCapture_Should_DisplayQualityScore_InFilmStrip(int qualityScore)
         {
             // Arrange
             var loginState = new LoginState { IsLoggedIn = true, Username = "testuser" };
@@ -659,10 +669,10 @@ namespace NoLock.Social.Web.Tests.Pages
 
             await cameraCapture.InvokeAsync(() => 
                 cameraCapture.Instance.OnImageCaptured.InvokeAsync(capturedImage));
+            component.Render(); // Force re-render after async operation
 
-            // Assert
-            Assert.Contains(expectedClass, component.Markup);
-            Assert.Contains("Image Quality", component.Markup);
+            // Assert - FilmStrip displays quality as text, not CSS classes
+            Assert.Contains($"Quality: {qualityScore}", component.Markup);
         }
 
         #endregion

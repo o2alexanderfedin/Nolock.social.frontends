@@ -311,7 +311,9 @@ namespace NoLock.Social.Components.Tests.Camera
             var component = RenderComponent<CameraCapture>(parameters => parameters
                 .Add(p => p.AutoStart, true));
 
-            await component.InvokeAsync(() => Task.Delay(50));
+            // Wait for component to initialize and load cameras
+            await component.InvokeAsync(async () => await Task.Delay(100));
+            component.Render(); // Force re-render after initialization
 
             // Find the camera select and change selection
             var cameraSelect = component.FindAll("select").FirstOrDefault(e => e.Id == "cameraSelect");
@@ -320,8 +322,8 @@ namespace NoLock.Social.Components.Tests.Camera
                 await cameraSelect.ChangeAsync(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = "Rear Camera" });
             }
 
-            // Assert
-            _mockJSRuntime.Verify(x => x.InvokeAsync<object?>("switchCamera", It.IsAny<object[]>()), Times.Once);
+            // Assert - InvokeVoidAsync is an extension method that calls InvokeAsync<IJSVoidResult>
+            _mockJSRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("switchCamera", It.IsAny<object[]>()), Times.Once);
         }
 
         [Fact]
@@ -346,7 +348,7 @@ namespace NoLock.Social.Components.Tests.Camera
                 .ReturnsAsync(cameras);
 
             _mockJSRuntime
-                .Setup(x => x.InvokeAsync<object?>("switchCamera", It.Is<object[]>(args => args[0].ToString() == "camera2")))
+                .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("switchCamera", It.Is<object[]>(args => args[0].ToString() == "camera2")))
                 .ThrowsAsync(new InvalidOperationException("Camera switch failed"));
 
             var errorMessage = string.Empty;
