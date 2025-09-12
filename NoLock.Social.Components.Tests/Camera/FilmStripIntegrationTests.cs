@@ -9,11 +9,11 @@ using Xunit;
 
 namespace NoLock.Social.Components.Tests.Camera
 {
-    public class CapturedImagesPreviewIntegrationTests : TestContext
+    public class FilmStripIntegrationTests : TestContext
     {
         private readonly Mock<IResizeListener> _mockResizeListener;
 
-        public CapturedImagesPreviewIntegrationTests()
+        public FilmStripIntegrationTests()
         {
             _mockResizeListener = new Mock<IResizeListener>();
             Services.AddSingleton(_mockResizeListener.Object);
@@ -29,12 +29,12 @@ namespace NoLock.Social.Components.Tests.Camera
                 new() { Id = "2", ImageUrl = "test2.jpg", Width = 1024, Height = 768 }
             };
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.AllowRemove, true));
 
             // Act
-            var thumbnail = component.Find(".captured-image-thumbnail");
+            var thumbnail = component.Find(".film-thumbnail");
             await thumbnail.ClickAsync(new MouseEventArgs());
 
             // Assert

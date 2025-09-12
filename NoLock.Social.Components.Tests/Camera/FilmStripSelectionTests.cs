@@ -15,15 +15,16 @@ using Xunit;
 namespace NoLock.Social.Components.Tests.Camera
 {
     /// <summary>
-    /// Comprehensive tests for CapturedImagesPreview selection enhancement.
+    /// Comprehensive tests for FilmStrip (digital filmstrip) selection enhancement.
     /// Tests both backward compatibility and new selection functionality.
+    /// The FilmStrip component displays captured images as a digital filmstrip.
     /// </summary>
-    public class CapturedImagesPreviewSelectionTests : TestContext
+    public class FilmStripSelectionTests : TestContext
     {
         private readonly List<CapturedImage> _testImages;
         private readonly Mock<IResizeListener> _mockResizeListener;
 
-        public CapturedImagesPreviewSelectionTests()
+        public FilmStripSelectionTests()
         {
             _mockResizeListener = new Mock<IResizeListener>();
             Services.AddSingleton(_mockResizeListener.Object);
@@ -37,13 +38,13 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_WithoutSelectionParameters_ShowsFullscreen()
+        public void FilmStrip_WithoutSelectionParameters_ShowsFullscreen()
         {
             // Arrange
             var images = _testImages.Take(1);
 
             // Act - No selection parameters provided (backward compatibility)
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images));
 
             // Assert - Should not show selection indicator without selection parameters
@@ -57,7 +58,7 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_WithSelectionParameters_EnablesSelection()
+        public void FilmStrip_WithSelectionParameters_EnablesSelection()
         {
             // Arrange
             var images = _testImages.Take(1);
@@ -66,7 +67,7 @@ namespace NoLock.Social.Components.Tests.Camera
             CapturedImage? toggledImage = null;
 
             // Act - With selection parameters provided
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
@@ -80,7 +81,7 @@ namespace NoLock.Social.Components.Tests.Camera
                 })));
 
             // Trigger click event
-            var imageElement = component.Find(".captured-image-thumbnail");
+            var imageElement = component.Find(".film-thumbnail");
             imageElement.Click();
 
             // Assert - Should trigger selection, not fullscreen
@@ -91,14 +92,14 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_SelectedImage_ShowsSelectionIndicator()
+        public void FilmStrip_SelectedImage_ShowsSelectionIndicator()
         {
             // Arrange
             var images = _testImages.Take(1);
             var selectedImages = new HashSet<string> { "1" }; // Pre-select image
 
             // Act
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
@@ -116,14 +117,14 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_UnselectedImage_DoesNotShowSelectionIndicator()
+        public void FilmStrip_UnselectedImage_DoesNotShowSelectionIndicator()
         {
             // Arrange
             var images = _testImages.Take(1);
             var selectedImages = new HashSet<string>(); // No images selected
 
             // Act
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img => { })));
@@ -138,13 +139,13 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_KeyboardInteraction_TriggersSelection()
+        public void FilmStrip_KeyboardInteraction_TriggersSelection()
         {
             // Arrange
             var images = _testImages.Take(1);
             var selectionToggled = false;
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => false)
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
@@ -153,7 +154,7 @@ namespace NoLock.Social.Components.Tests.Camera
                 })));
 
             // Act - Simulate Enter key press
-            var imageElement = component.Find(".captured-image-thumbnail");
+            var imageElement = component.Find(".film-thumbnail");
             imageElement.KeyDown(new KeyboardEventArgs { Key = "Enter" });
 
             // Assert
@@ -161,13 +162,13 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_SpaceKeyInteraction_TriggersSelection()
+        public void FilmStrip_SpaceKeyInteraction_TriggersSelection()
         {
             // Arrange
             var images = _testImages.Take(1);
             var selectionToggled = false;
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => false)
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
@@ -176,7 +177,7 @@ namespace NoLock.Social.Components.Tests.Camera
                 })));
 
             // Act - Simulate Space key press
-            var imageElement = component.Find(".captured-image-thumbnail");
+            var imageElement = component.Find(".film-thumbnail");
             imageElement.KeyDown(new KeyboardEventArgs { Key = " " });
 
             // Assert
@@ -184,13 +185,13 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_MultipleImages_IndependentSelection()
+        public void FilmStrip_MultipleImages_IndependentSelection()
         {
             // Arrange
             var selectedImages = new HashSet<string> { "2" }; // Pre-select second image
             var toggleCalls = new List<string>();
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, _testImages)
                 .Add(p => p.IsImageSelected, img => selectedImages.Contains(img.Id))
                 .Add(p => p.OnImageSelectionToggled, EventCallback.Factory.Create<CapturedImage>(this, img =>
@@ -206,7 +207,7 @@ namespace NoLock.Social.Components.Tests.Camera
             selectedCards.Should().HaveCount(1, "Only one card should have selected class");
 
             // Act - Click first image
-            var allImages = component.FindAll(".captured-image-thumbnail");
+            var allImages = component.FindAll(".film-thumbnail");
             allImages[0].Click();
 
             // Assert - First image callback should be triggered
@@ -214,12 +215,12 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_WithoutOnImageSelectionToggled_DoesNotShowSelectionIndicator()
+        public void FilmStrip_WithoutOnImageSelectionToggled_DoesNotShowSelectionIndicator()
         {
             // Arrange - Only IsImageSelected provided, but no OnImageSelectionToggled
             var images = _testImages.Take(1);
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.IsImageSelected, img => true)); // No OnImageSelectionToggled provided
 
@@ -233,13 +234,13 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_ExistingFeatures_StillWork()
+        public void FilmStrip_ExistingFeatures_StillWork()
         {
             // Arrange
             var images = _testImages.Take(1);
             var removeCallbackTriggered = false;
 
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, images)
                 .Add(p => p.Title, "Test Gallery")
                 .Add(p => p.AllowRemove, true)
@@ -264,10 +265,10 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_EmptyCollection_ShowsEmptyState()
+        public void FilmStrip_EmptyCollection_ShowsEmptyState()
         {
             // Arrange
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, new List<CapturedImage>()));
 
             // Assert
@@ -282,10 +283,10 @@ namespace NoLock.Social.Components.Tests.Camera
         }
 
         [Fact]
-        public void CapturedImagesPreview_NullCollection_ShowsEmptyState()
+        public void FilmStrip_NullCollection_ShowsEmptyState()
         {
             // Arrange
-            var component = RenderComponent<CapturedImagesPreview>(parameters => parameters
+            var component = RenderComponent<FilmStrip>(parameters => parameters
                 .Add(p => p.CapturedImages, (IEnumerable<CapturedImage>?)null));
 
             // Assert

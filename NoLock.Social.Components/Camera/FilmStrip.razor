@@ -2,7 +2,7 @@
 
 <FullscreenImageViewer @ref="fullscreenViewer" OnClosed="OnFullscreenClosed" />
 
-<div class="captured-images-preview">
+<div class="film-strip">
     @if (!string.IsNullOrEmpty(Title))
     {
         <h6 class="mb-3">@Title (@(CapturedImages?.Count() ?? 0))</h6>
@@ -17,7 +17,7 @@
                     <div class="card @(GetSelectionCssClass(image))">
                         <div class="position-relative">
                             <img src="@image.DataUrl" 
-                                 class="card-img-top captured-image-thumbnail cursor-pointer" 
+                                 class="film-thumbnail cursor-pointer" 
                                  alt="Captured image @(index + 1)"
                                  @onclick="() => HandleImageClick(image)"
                                  @ondblclick="() => HandleImageDoubleClick(image)"
@@ -74,14 +74,14 @@
 </div>
 
 <style>
-    .captured-image-thumbnail {
+    .film-thumbnail {
         width: 100%;
         height: 120px;
         object-fit: cover;
         border-radius: 4px;
     }
     
-    .captured-images-preview .card {
+    .film-strip .card {
         border: 1px solid #dee2e6;
         transition: box-shadow 0.15s ease-in-out;
     }
