@@ -367,3 +367,6 @@ coverage.runsettings
 # Code Analytics Reports
 .coverage/
 .complexity/
+
+# Playwright MCP artifacts
+.playwright-mcp/
