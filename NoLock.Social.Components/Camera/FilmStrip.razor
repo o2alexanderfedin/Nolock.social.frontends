@@ -21,6 +21,7 @@
                                  class="film-thumbnail cursor-pointer" 
                                  alt="Captured image @(index + 1)"
                                  @onclick="() => HandleImageClick(image)"
+                                 @ondblclick="() => HandleImageDoubleClick(image)"
                                  @onkeydown="@((e) => HandleImageKeyDown(e, image))"
                                  tabindex="0" />
                             
@@ -253,6 +254,13 @@
     {
         // SIMPLIFIED: Single click always opens fullscreen
         // Selection is now handled exclusively by the checkbox
+        await ShowFullscreen(image);
+    }
+
+    private async Task HandleImageDoubleClick(CapturedImage image)
+    {
+        // Double-click opens fullscreen directly, same as single-click
+        // This ensures consistent behavior and works in all selection modes
         await ShowFullscreen(image);
     }
 
