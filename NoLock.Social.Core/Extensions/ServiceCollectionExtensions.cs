@@ -11,6 +11,7 @@ using NoLock.Social.Core.Accessibility.Interfaces;
 using NoLock.Social.Core.Accessibility.Services;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Services;
+using NoLock.Social.Core.Storage.Ipfs;
 
 namespace NoLock.Social.Core.Extensions
 {
@@ -151,6 +152,14 @@ namespace NoLock.Social.Core.Extensions
         public static IServiceCollection AddImageProcessingServices(this IServiceCollection services)
         {
             // No image processing services needed anymore - we only do OCR via external API
+            return services;
+        }
+        
+        public static IServiceCollection AddIpfsServices(this IServiceCollection services)
+        {
+            // IPFS file system service for decentralized storage
+            services.AddScoped<IIpfsFileSystem, IpfsFileSystemService>();
+            
             return services;
         }
         

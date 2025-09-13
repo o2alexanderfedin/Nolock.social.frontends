@@ -1,0 +1,12 @@
+{
+  "name": "nolock-social-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NoLock.Social Web Application",
+  "dependencies": {
+    "helia": "^5.1.0",
+    "@helia/unixfs": "^4.0.0",
+    "blockstore-idb": "^2.0.0",
+    "datastore-idb": "^3.0.0"
+  }
+}
