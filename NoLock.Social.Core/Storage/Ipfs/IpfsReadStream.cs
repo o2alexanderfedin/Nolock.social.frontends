@@ -13,7 +13,9 @@ namespace NoLock.Social.Core.Storage.Ipfs
     internal sealed class IpfsReadStream : Stream
     {
         private readonly IJSObjectReference _jsStream;
-        private readonly byte[] _buffer;
+        private readonly byte[] _internalBuffer;
+        private int _bufferOffset;
+        private int _bufferLength;
         private long _position;
         private long _length;
         private bool _disposed;
@@ -24,7 +26,9 @@ namespace NoLock.Social.Core.Storage.Ipfs
         public IpfsReadStream(IJSObjectReference jsStream, long length)
         {
             _jsStream = jsStream ?? throw new ArgumentNullException(nameof(jsStream));
-            _buffer = new byte[DefaultChunkSize];
+            _internalBuffer = new byte[DefaultChunkSize];
+            _bufferOffset = 0;
+            _bufferLength = 0;
             _length = length;
             _position = 0;
         }
@@ -40,7 +44,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
         }
 
         /// <summary>
-        /// Reads bytes from the IPFS stream.
+        /// Reads bytes from the IPFS stream with internal buffering for efficiency.
         /// </summary>
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
@@ -49,21 +53,54 @@ namespace NoLock.Social.Core.Storage.Ipfs
             if (_disposed)
                 throw new ObjectDisposedException(nameof(IpfsReadStream));
 
-            // Read next chunk from JavaScript stream
-            var chunk = await _jsStream.InvokeAsync<byte[]>(
+            int totalBytesRead = 0;
+
+            // Read from internal buffer first if available
+            if (_bufferLength > _bufferOffset)
+            {
+                int bytesFromBuffer = Math.Min(count, _bufferLength - _bufferOffset);
+                Array.Copy(_internalBuffer, _bufferOffset, buffer, offset, bytesFromBuffer);
+                _bufferOffset += bytesFromBuffer;
+                _position += bytesFromBuffer;
+                totalBytesRead = bytesFromBuffer;
+                
+                // If we satisfied the request from buffer, return early
+                if (totalBytesRead >= count)
+                    return totalBytesRead;
+                
+                // Adjust for remaining bytes to read
+                offset += bytesFromBuffer;
+                count -= bytesFromBuffer;
+            }
+
+            // Need more data - fetch next chunk from JavaScript stream
+            var chunk = await _jsStream.InvokeAsync<byte[]?>(
                 "readChunk", 
                 cancellationToken, 
-                Math.Min(count, DefaultChunkSize));
+                DefaultChunkSize);
 
             if (chunk == null || chunk.Length == 0)
-                return 0; // End of stream
+                return totalBytesRead; // End of stream
 
-            // Copy to output buffer
-            var bytesToCopy = Math.Min(chunk.Length, count);
-            Array.Copy(chunk, 0, buffer, offset, bytesToCopy);
-            _position += bytesToCopy;
+            // If chunk is smaller than requested, copy directly to output
+            if (chunk.Length <= count)
+            {
+                Array.Copy(chunk, 0, buffer, offset, chunk.Length);
+                _position += chunk.Length;
+                return totalBytesRead + chunk.Length;
+            }
 
-            return bytesToCopy;
+            // Chunk is larger than requested - buffer the excess
+            Array.Copy(chunk, 0, buffer, offset, count);
+            _position += count;
+            
+            // Store remaining data in internal buffer
+            int remainingBytes = chunk.Length - count;
+            Array.Copy(chunk, count, _internalBuffer, 0, remainingBytes);
+            _bufferOffset = 0;
+            _bufferLength = remainingBytes;
+            
+            return totalBytesRead + count;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
@@ -116,7 +153,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
             await base.DisposeAsync();
         }
 
-        private static void ValidateBufferArguments(byte[] buffer, int offset, int count)
+        private new static void ValidateBufferArguments(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));

@@ -152,27 +152,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
 
         protected override void Dispose(bool disposing)
         {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    // Complete and dispose JavaScript stream
-                    try
-                    {
-                        var task = CompleteAsync();
-                        task.GetAwaiter().GetResult();
-                    }
-                    catch
-                    {
-                        // Ignore errors during disposal
-                    }
-                    finally
-                    {
-                        _jsStream?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                    }
-                }
-                _disposed = true;
-            }
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
             base.Dispose(disposing);
         }
 
@@ -197,7 +177,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
             await base.DisposeAsync();
         }
 
-        private static void ValidateBufferArguments(byte[] buffer, int offset, int count)
+        private static new void ValidateBufferArguments(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
