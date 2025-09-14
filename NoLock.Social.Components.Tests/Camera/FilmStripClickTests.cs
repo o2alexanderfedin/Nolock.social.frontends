@@ -229,7 +229,7 @@ namespace NoLock.Social.Components.Tests.Camera
             fullscreenViewer.Should().NotBeEmpty("Rapid clicks should not close fullscreen");
         }
 
-        [Fact(Skip = "FullscreenImageViewer component doesn't currently display image metadata")]
+        [Fact]
         public void FullscreenViewer_DisplaysImageDetails()
         {
             // Arrange
@@ -338,7 +338,7 @@ namespace NoLock.Social.Components.Tests.Camera
             selectedImages.Should().BeEmpty("Double-click should not toggle selection");
         }
 
-        [Theory(Skip = "Double-click timing simulation not available in bUnit - functionality verified by actual double-click tests")]
+        [Theory]
         [InlineData(300, "Standard double-click timing")]
         [InlineData(500, "Slow double-click timing")]
         [InlineData(100, "Fast double-click timing")]
