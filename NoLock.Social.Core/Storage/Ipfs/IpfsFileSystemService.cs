@@ -340,7 +340,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
             if (_jsModule == null)
             {
                 _jsModule = await _jsRuntime.InvokeAsync<IJSObjectReference>(
-                    "import", 
+                    "import",
                     "./js/modules/ipfs-module.js");
             }
         }
