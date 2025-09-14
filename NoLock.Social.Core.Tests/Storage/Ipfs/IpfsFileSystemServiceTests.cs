@@ -28,14 +28,14 @@ namespace NoLock.Social.Core.Tests.Storage.Ipfs
             _jsRuntimeMock = new Mock<IJSRuntime>();
             _loggerMock = new Mock<ILogger<IpfsFileSystemService>>();
             _jsModuleMock = new Mock<IJSObjectReference>();
-            
+
             // Setup module import to match exact service call signature
             _jsRuntimeMock
                 .Setup(x => x.InvokeAsync<IJSObjectReference>(
                     "import",
                     It.Is<object[]>(args => args.Length == 1 && args[0].ToString() == "./js/modules/ipfs-module.js")))
                 .ReturnsAsync(_jsModuleMock.Object);
-                
+
             // Also setup generic import for other tests
             _jsRuntimeMock
                 .Setup(x => x.InvokeAsync<IJSObjectReference>(
@@ -47,7 +47,7 @@ namespace NoLock.Social.Core.Tests.Storage.Ipfs
             _jsModuleMock
                 .Setup(x => x.DisposeAsync())
                 .Returns(ValueTask.CompletedTask);
-                
+
             _sut = new IpfsFileSystemService(_jsRuntimeMock.Object, _loggerMock.Object);
         }
 
@@ -219,12 +219,30 @@ namespace NoLock.Social.Core.Tests.Storage.Ipfs
         {
             // Arrange
             var cid = "QmTest123";
-            var expectedContent = "file content"; // This matches what SetupReadOperation returns
-            
+            var expectedContent = "file content";
+            var contentBytes = System.Text.Encoding.UTF8.GetBytes(expectedContent);
+
+            // Create mock for IIpfsJsInterop
+            var jsInteropMock = new Mock<IIpfsJsInterop>();
+            jsInteropMock
+                .Setup(x => x.GetFileSizeAsync(It.IsAny<string>()))
+                .ReturnsAsync((long)contentBytes.Length);
+            jsInteropMock
+                .SetupSequence(x => x.ReadChunkAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<int>()))
+                .ReturnsAsync(contentBytes)  // First call returns content
+                .ReturnsAsync(new byte[0]);  // Second call returns EOF
+
+            // Create service with factory that returns our mock
+            var service = new IpfsFileSystemService(
+                _jsRuntimeMock.Object,
+                _loggerMock.Object,
+                jsObjectRef => jsInteropMock.Object);
+
+            // Setup metadata and beginRead operations
             SetupReadOperation(_jsModuleMock, expectedContent.Length);
 
             // Act
-            var result = await _sut.ReadFileAsync(cid);
+            var result = await service.ReadFileAsync(cid);
 
             // Assert
             result.Should().NotBeNull();
@@ -632,8 +650,8 @@ namespace NoLock.Social.Core.Tests.Storage.Ipfs
         private void SetupReadOperation(Mock<IJSObjectReference> jsModuleMock, long fileSize)
         {
             var readHandleMock = new Mock<IJSObjectReference>();
-            
-            // Setup metadata for the read operation  
+
+            // Setup metadata for the read operation
             var metadata = new IpfsFileSystemService.IpfsFileMetadataDto
             {
                 Path = "test.txt",
@@ -644,22 +662,34 @@ namespace NoLock.Social.Core.Tests.Storage.Ipfs
                 Created = null,
                 LastModified = null
             };
-            
+
             jsModuleMock
                 .Setup(x => x.InvokeAsync<IpfsFileSystemService.IpfsFileMetadataDto?>("ipfs.getMetadata", It.IsAny<CancellationToken>(), It.IsAny<object[]>()))
                 .ReturnsAsync(metadata);
-            
+
             jsModuleMock
                 .Setup(x => x.InvokeAsync<IJSObjectReference>("ipfs.beginRead", It.IsAny<CancellationToken>(), It.IsAny<object[]>()))
                 .ReturnsAsync(readHandleMock.Object);
-            
+
             // Setup to return actual file content then EOF
             var contentBytes = Encoding.UTF8.GetBytes("file content");
+
+            // Add mocks for IpfsJsInterop calls (without "ipfs." prefix)
+            jsModuleMock
+                .Setup(x => x.InvokeAsync<long>("getFileSize", It.IsAny<CancellationToken>(), It.IsAny<object[]>()))
+                .ReturnsAsync(fileSize);
+
+            jsModuleMock
+                .SetupSequence(x => x.InvokeAsync<byte[]>("readChunk", It.IsAny<CancellationToken>(), It.IsAny<object[]>()))
+                .ReturnsAsync(contentBytes) // First call returns content
+                .ReturnsAsync(new byte[0]);  // Second call returns EOF
+
+            // Keep existing mocks for compatibility with other tests
             readHandleMock
                 .SetupSequence(x => x.InvokeAsync<byte[]>("readChunk", It.IsAny<CancellationToken>(), It.IsAny<object[]>()))
                 .ReturnsAsync(contentBytes) // First call returns content
                 .ReturnsAsync(new byte[0]);  // Second call returns EOF
-            
+
             readHandleMock
                 .Setup(x => x.DisposeAsync())
                 .Returns(ValueTask.CompletedTask);

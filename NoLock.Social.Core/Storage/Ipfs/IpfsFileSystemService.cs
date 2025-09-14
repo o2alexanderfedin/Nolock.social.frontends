@@ -16,9 +16,10 @@ namespace NoLock.Social.Core.Storage.Ipfs
     public class IpfsFileSystemService : IIpfsFileSystem, IAsyncDisposable
     {
         private const int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256KB chunks
-        
+
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<IpfsFileSystemService> _logger;
+        private readonly Func<IJSObjectReference, IIpfsJsInterop>? _jsInteropFactory;
         private IJSObjectReference? _jsModule;
         private bool _disposed;
 
@@ -27,10 +28,15 @@ namespace NoLock.Social.Core.Storage.Ipfs
         /// </summary>
         /// <param name="jsRuntime">The JavaScript runtime for interop.</param>
         /// <param name="logger">The logger for diagnostic output.</param>
-        public IpfsFileSystemService(IJSRuntime jsRuntime, ILogger<IpfsFileSystemService> logger)
+        /// <param name="jsInteropFactory">Optional factory for creating IIpfsJsInterop instances (for testing).</param>
+        public IpfsFileSystemService(
+            IJSRuntime jsRuntime,
+            ILogger<IpfsFileSystemService> logger,
+            Func<IJSObjectReference, IIpfsJsInterop>? jsInteropFactory = null)
         {
             _jsRuntime = Guard.AgainstNull(jsRuntime);
             _logger = logger;
+            _jsInteropFactory = jsInteropFactory;
         }
 
         /// <summary>
@@ -146,14 +152,14 @@ namespace NoLock.Social.Core.Storage.Ipfs
                     return null;
                 }
                 
-                // Create read handle from JavaScript
-                var readHandle = await _jsModule!.InvokeAsync<IJSObjectReference>(
-                    "ipfs.beginRead", 
-                    cancellationToken, 
-                    path);
-                
-                // Return custom stream that reads from IPFS
-                return new IpfsReadStream(readHandle, metadata.Size);
+                // Return custom stream that reads from IPFS using the new IIpfsJsInterop
+                // The new IpfsReadStream takes: IIpfsJsInterop, string path, ILogger
+                // Create IpfsJsInterop instance to wrap our _jsModule
+                // Use factory if provided (for testing), otherwise create IpfsJsInterop
+                var jsInterop = _jsInteropFactory != null
+                    ? _jsInteropFactory(_jsModule!)
+                    : new IpfsJsInterop(_jsModule!);
+                return new IpfsReadStream(jsInterop, path, _logger!);
             }
             catch (JSException jsEx)
             {

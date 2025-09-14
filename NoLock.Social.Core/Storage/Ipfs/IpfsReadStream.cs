@@ -2,121 +2,125 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.JSInterop;
+using Microsoft.Extensions.Logging;
 
 namespace NoLock.Social.Core.Storage.Ipfs
 {
     /// <summary>
-    /// Stream implementation for reading IPFS content progressively.
-    /// Wraps JavaScript UnixFS cat operation with chunk-based streaming.
+    /// Stream implementation for reading content from IPFS with seek support.
+    /// Reads data in chunks from JavaScript interop.
     /// </summary>
-    internal sealed class IpfsReadStream : Stream
+    public sealed class IpfsReadStream : Stream
     {
-        private readonly IJSObjectReference _jsStream;
-        private readonly byte[] _internalBuffer;
-        private int _bufferOffset;
-        private int _bufferLength;
+        private readonly IIpfsJsInterop _jsInterop;
+        private readonly string _path;
+        private readonly ILogger _logger;
         private long _position;
-        private long _length;
+        private long _length = -1;
         private bool _disposed;
 
-        // Chunk size aligned with UnixFS defaults (256KB)
-        private const int DefaultChunkSize = 262144;
-
-        public IpfsReadStream(IJSObjectReference jsStream, long length)
+        public IpfsReadStream(IIpfsJsInterop jsInterop, string path, ILogger logger)
         {
-            _jsStream = jsStream ?? throw new ArgumentNullException(nameof(jsStream));
-            _internalBuffer = new byte[DefaultChunkSize];
-            _bufferOffset = 0;
-            _bufferLength = 0;
-            _length = length;
-            _position = 0;
+            _jsInterop = jsInterop ?? throw new ArgumentNullException(nameof(jsInterop));
+            _path = path ?? throw new ArgumentNullException(nameof(path));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public override bool CanRead => !_disposed;
-        public override bool CanSeek => false; // IPFS streams are forward-only
+        public override bool CanSeek => !_disposed;
         public override bool CanWrite => false;
-        public override long Length => _length;
+        
+        public override long Length
+        {
+            get
+            {
+                if (_length < 0)
+                {
+                    _length = _jsInterop.GetFileSizeAsync(_path).GetAwaiter().GetResult();
+                }
+                return _length;
+            }
+        }
+
         public override long Position
         {
             get => _position;
-            set => throw new NotSupportedException("IPFS streams do not support seeking");
+            set
+            {
+                if (value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(value), "Position cannot be negative");
+                _position = value;
+            }
         }
 
-        /// <summary>
-        /// Reads bytes from the IPFS stream with internal buffering for efficiency.
-        /// </summary>
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)
         {
             ValidateBufferArguments(buffer, offset, count);
             
             if (_disposed)
                 throw new ObjectDisposedException(nameof(IpfsReadStream));
 
-            int totalBytesRead = 0;
-
-            // Read from internal buffer first if available
-            if (_bufferLength > _bufferOffset)
+            // Initialize length if not already done
+            if (_length < 0)
             {
-                int bytesFromBuffer = Math.Min(count, _bufferLength - _bufferOffset);
-                Array.Copy(_internalBuffer, _bufferOffset, buffer, offset, bytesFromBuffer);
-                _bufferOffset += bytesFromBuffer;
-                _position += bytesFromBuffer;
-                totalBytesRead = bytesFromBuffer;
-                
-                // If we satisfied the request from buffer, return early
-                if (totalBytesRead >= count)
-                    return totalBytesRead;
-                
-                // Adjust for remaining bytes to read
-                offset += bytesFromBuffer;
-                count -= bytesFromBuffer;
+                _length = await _jsInterop.GetFileSizeAsync(_path);
             }
 
-            // Need more data - fetch next chunk from JavaScript stream
-            var chunk = await _jsStream.InvokeAsync<byte[]?>(
-                "readChunk", 
-                cancellationToken, 
-                DefaultChunkSize);
-
-            if (chunk == null || chunk.Length == 0)
-                return totalBytesRead; // End of stream
-
-            // If chunk is smaller than requested, copy directly to output
-            if (chunk.Length <= count)
+            // Check if we're at or past the end of file
+            if (_position >= _length)
             {
-                Array.Copy(chunk, 0, buffer, offset, chunk.Length);
-                _position += chunk.Length;
-                return totalBytesRead + chunk.Length;
+                return 0;
             }
 
-            // Chunk is larger than requested - buffer the excess
-            Array.Copy(chunk, 0, buffer, offset, count);
-            _position += count;
+            // Calculate how many bytes we can actually read
+            var bytesToRead = (int)Math.Min(count, _length - _position);
             
-            // Store remaining data in internal buffer
-            int remainingBytes = chunk.Length - count;
-            Array.Copy(chunk, count, _internalBuffer, 0, remainingBytes);
-            _bufferOffset = 0;
-            _bufferLength = remainingBytes;
+            // Read chunk from JavaScript
+            var data = await _jsInterop.ReadChunkAsync(_path, _position, bytesToRead);
             
-            return totalBytesRead + count;
+            // Copy data to the provided buffer
+            var actualBytesRead = Math.Min(data.Length, bytesToRead);
+            if (actualBytesRead > 0)
+            {
+                Array.Copy(data, 0, buffer, offset, actualBytesRead);
+                _position += actualBytesRead;
+            }
+            
+            return actualBytesRead;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            // Synchronous read not supported for IPFS
             return ReadAsync(buffer, offset, count).GetAwaiter().GetResult();
-        }
-
-        public override void Flush()
-        {
-            // No-op for read-only stream
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            throw new NotSupportedException("IPFS streams do not support seeking");
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(IpfsReadStream));
+
+            // Initialize length if seeking from end
+            if (origin == SeekOrigin.End && _length < 0)
+            {
+                _length = _jsInterop.GetFileSizeAsync(_path).GetAwaiter().GetResult();
+            }
+
+            switch (origin)
+            {
+                case SeekOrigin.Begin:
+                    Position = offset;
+                    break;
+                case SeekOrigin.Current:
+                    Position = _position + offset;
+                    break;
+                case SeekOrigin.End:
+                    Position = _length + offset;
+                    break;
+                default:
+                    throw new ArgumentException("Invalid seek origin", nameof(origin));
+            }
+
+            return _position;
         }
 
         public override void SetLength(long value)
@@ -129,15 +133,15 @@ namespace NoLock.Social.Core.Storage.Ipfs
             throw new NotSupportedException("Cannot write to read-only stream");
         }
 
+        public override void Flush()
+        {
+            // No-op for read-only stream
+        }
+
         protected override void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (disposing && !_disposed)
             {
-                if (disposing)
-                {
-                    // Dispose JavaScript stream reference
-                    _jsStream?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                }
                 _disposed = true;
             }
             base.Dispose(disposing);
@@ -147,13 +151,12 @@ namespace NoLock.Social.Core.Storage.Ipfs
         {
             if (!_disposed)
             {
-                await _jsStream.DisposeAsync();
                 _disposed = true;
             }
             await base.DisposeAsync();
         }
 
-        private new static void ValidateBufferArguments(byte[] buffer, int offset, int count)
+        private static new void ValidateBufferArguments(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));

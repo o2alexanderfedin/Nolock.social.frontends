@@ -2,34 +2,32 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.JSInterop;
+using Microsoft.Extensions.Logging;
 
 namespace NoLock.Social.Core.Storage.Ipfs
 {
     /// <summary>
     /// Stream implementation for writing content to IPFS progressively.
-    /// Wraps JavaScript UnixFS add operation with chunk-based uploading.
+    /// Buffers data in memory and flushes to JavaScript when threshold is reached.
     /// </summary>
-    internal sealed class IpfsWriteStream : Stream
+    public sealed class IpfsWriteStream : Stream
     {
-        private readonly IJSObjectReference _jsStream;
-        private readonly IProgress<long>? _progress;
-        private readonly byte[] _buffer;
-        private int _bufferPosition;
-        private long _totalBytesWritten;
+        private readonly IIpfsJsInterop _jsInterop;
+        private readonly string _path;
+        private readonly ILogger _logger;
+        private readonly MemoryStream _buffer;
         private bool _disposed;
-        private string? _resultCid;
+        private long _totalBytesWritten;
 
-        // Chunk size aligned with UnixFS defaults (256KB)
-        private const int DefaultChunkSize = 262144;
+        // Buffer threshold (256KB) - auto-flush when exceeded
+        private const int BufferThreshold = 256 * 1024;
 
-        public IpfsWriteStream(IJSObjectReference jsStream, IProgress<long>? progress = null)
+        public IpfsWriteStream(IIpfsJsInterop jsInterop, string path, ILogger logger)
         {
-            _jsStream = jsStream ?? throw new ArgumentNullException(nameof(jsStream));
-            _progress = progress;
-            _buffer = new byte[DefaultChunkSize];
-            _bufferPosition = 0;
-            _totalBytesWritten = 0;
+            _jsInterop = jsInterop ?? throw new ArgumentNullException(nameof(jsInterop));
+            _path = path ?? throw new ArgumentNullException(nameof(path));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _buffer = new MemoryStream();
         }
 
         public override bool CanRead => false;
@@ -43,12 +41,7 @@ namespace NoLock.Social.Core.Storage.Ipfs
         }
 
         /// <summary>
-        /// Gets the CID after the stream is closed.
-        /// </summary>
-        public string? ResultCid => _resultCid;
-
-        /// <summary>
-        /// Writes bytes to the IPFS stream.
+        /// Writes bytes to the IPFS stream buffer, auto-flushing when threshold is exceeded.
         /// </summary>
         public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
@@ -57,28 +50,15 @@ namespace NoLock.Social.Core.Storage.Ipfs
             if (_disposed)
                 throw new ObjectDisposedException(nameof(IpfsWriteStream));
 
-            var bytesRemaining = count;
-            var sourceOffset = offset;
-
-            while (bytesRemaining > 0)
-            {
-                // Fill internal buffer
-                var bytesToCopy = Math.Min(bytesRemaining, DefaultChunkSize - _bufferPosition);
-                Array.Copy(buffer, sourceOffset, _buffer, _bufferPosition, bytesToCopy);
-                
-                _bufferPosition += bytesToCopy;
-                sourceOffset += bytesToCopy;
-                bytesRemaining -= bytesToCopy;
-
-                // Flush buffer if full
-                if (_bufferPosition >= DefaultChunkSize)
-                {
-                    await FlushBufferAsync(cancellationToken);
-                }
-            }
-
+            // Write to internal buffer
+            await _buffer.WriteAsync(buffer, offset, count, cancellationToken);
             _totalBytesWritten += count;
-            _progress?.Report(_totalBytesWritten);
+
+            // Auto-flush if buffer exceeds threshold
+            if (_buffer.Length > BufferThreshold)
+            {
+                await FlushBufferAsync(cancellationToken, autoFlush: true);
+            }
         }
 
         public override void Write(byte[] buffer, int offset, int count)
@@ -88,9 +68,9 @@ namespace NoLock.Social.Core.Storage.Ipfs
 
         public override async Task FlushAsync(CancellationToken cancellationToken)
         {
-            if (_bufferPosition > 0)
+            if (_buffer.Length > 0)
             {
-                await FlushBufferAsync(cancellationToken);
+                await FlushBufferAsync(cancellationToken, autoFlush: false);
             }
         }
 
@@ -99,40 +79,51 @@ namespace NoLock.Social.Core.Storage.Ipfs
             FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
         }
 
-        /// <summary>
-        /// Completes the write operation and gets the resulting CID.
-        /// </summary>
-        public async Task<string> CompleteAsync(CancellationToken cancellationToken = default)
+        private async Task FlushBufferAsync(CancellationToken cancellationToken = default, bool autoFlush = false)
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(IpfsWriteStream));
-
-            // Flush any remaining data
-            await FlushAsync(cancellationToken);
-
-            // Complete the JavaScript stream and get CID
-            _resultCid = await _jsStream.InvokeAsync<string>("complete", cancellationToken);
-            
-            if (string.IsNullOrEmpty(_resultCid))
-                throw new InvalidOperationException("Failed to get CID from IPFS");
-
-            return _resultCid;
-        }
-
-        private async Task FlushBufferAsync(CancellationToken cancellationToken)
-        {
-            if (_bufferPosition == 0)
+            if (_buffer.Length == 0)
                 return;
 
-            // Create a properly sized array for the chunk
-            var chunk = new byte[_bufferPosition];
-            Array.Copy(_buffer, 0, chunk, 0, _bufferPosition);
-
-            // Send chunk to JavaScript
-            await _jsStream.InvokeVoidAsync("writeChunk", cancellationToken, chunk);
-
-            // Reset buffer
-            _bufferPosition = 0;
+            // Get current position before we start manipulating the buffer
+            var currentPosition = _buffer.Position;
+            
+            // Get data from buffer
+            var data = _buffer.ToArray();
+            
+            // Determine how many bytes to flush
+            int bytesToFlush;
+            if (autoFlush)
+            {
+                // For auto-flush, only flush exactly BufferThreshold bytes
+                bytesToFlush = Math.Min(data.Length, BufferThreshold);
+            }
+            else
+            {
+                // For manual flush, flush everything
+                bytesToFlush = data.Length;
+            }
+            
+            if (bytesToFlush > 0)
+            {
+                // Create array with exact size to flush
+                var chunkToFlush = new byte[bytesToFlush];
+                Array.Copy(data, 0, chunkToFlush, 0, bytesToFlush);
+                
+                // Call JavaScript to append data  
+                await _jsInterop.AppendDataAsync(_path, chunkToFlush);
+                
+                // Reset buffer with remaining data (if any)
+                _buffer.SetLength(0);
+                _buffer.Position = 0;
+                
+                if (data.Length > bytesToFlush)
+                {
+                    // Write remaining data back to buffer
+                    await _buffer.WriteAsync(data, bytesToFlush, data.Length - bytesToFlush, cancellationToken);
+                    // Restore position to account for all written data
+                    _buffer.Position = currentPosition - bytesToFlush;
+                }
+            }
         }
 
         public override long Seek(long offset, SeekOrigin origin)
@@ -152,7 +143,10 @@ namespace NoLock.Social.Core.Storage.Ipfs
 
         protected override void Dispose(bool disposing)
         {
-            DisposeAsync().AsTask().GetAwaiter().GetResult();
+            if (disposing && !_disposed)
+            {
+                DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
             base.Dispose(disposing);
         }
 
@@ -162,15 +156,20 @@ namespace NoLock.Social.Core.Storage.Ipfs
             {
                 try
                 {
-                    await CompleteAsync();
+                    // Flush any remaining buffered data
+                    if (_buffer.Length > 0)
+                    {
+                        var remainingData = _buffer.ToArray();
+                        await _jsInterop.AppendDataAsync(_path, remainingData);
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore errors during disposal
+                    _logger.LogError(ex, "Error flushing data during disposal");
                 }
                 finally
                 {
-                    await _jsStream.DisposeAsync();
+                    _buffer?.Dispose();
                     _disposed = true;
                 }
             }
