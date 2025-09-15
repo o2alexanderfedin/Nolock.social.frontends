@@ -9,7 +9,6 @@ using TG.Blazor.IndexedDB;
 using NoLock.Social.Core.Camera.Interfaces;
 using NoLock.Social.Core.Camera.Services;
 using BlazorPro.BlazorSize;
-using NoLock.Social.Core.Storage.Ipfs;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -47,9 +46,6 @@ builder.Services.AddAccessibilityServices();
 builder.Services.AddMinimalOCRServices();
 // Add BlazorSize services for responsive behavior
 builder.Services.AddScoped<IResizeListener, ResizeListener>();
-// Add IPFS MFS services for distributed file storage
-builder.Services.AddScoped<IIpfsJsInterop, IpfsJsInterop>();
-builder.Services.AddScoped<IIpfsFileSystem, IpfsFileSystemService>();
 
 var app = builder.Build();
 
