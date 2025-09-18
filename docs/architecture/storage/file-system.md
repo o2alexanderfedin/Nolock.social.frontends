@@ -30,6 +30,7 @@ classDiagram
         <<interface>>
         +Name: string
         +Path: string
+        +GetParentAsync(): ValueTask~IDirectoryInfo~
         +DeleteAsync(): ValueTask
         +ExistsAsync(): ValueTask~bool~
     }
@@ -41,16 +42,12 @@ classDiagram
         +OpenWriteAsync(): ValueTask~Stream~
     }
 
-    class IFileSystemEntriesContainer {
+    class IDirectoryInfo {
         <<interface>>
         +GetFiles(mask: string): IAsyncEnumerable~IFileInfo~
         +GetDirectories(mask: string): IAsyncEnumerable~IDirectoryInfo~
         +GetFileAsync(path: string): ValueTask~IFileInfo~
         +GetDirectoryAsync(path: string): ValueTask~IDirectoryInfo~
-    }
-
-    class IDirectoryInfo {
-        <<interface>>
     }
 
     class IFileSystem {
@@ -59,23 +56,17 @@ classDiagram
 
     IFileSystemEntry <|-- IFileInfo
     IFileSystemEntry <|-- IDirectoryInfo
-    IFileSystemEntriesContainer <|-- IDirectoryInfo
-    IFileSystemEntriesContainer <|-- IFileSystem
-
-    IFileSystem --> IDirectoryInfo : creates
-    IFileSystem --> IFileInfo : creates
-    IFileSystemEntriesContainer --> IFileInfo : contains
-    IFileSystemEntriesContainer --> IDirectoryInfo : contains
+    IDirectoryInfo <|-- IFileSystem
 ```
 
 ### Object Relationships
 
 ```mermaid
 graph TB
-    FS[IFileSystem<br/>Entry Point & Container]
-    Dir1[Directory<br/>IDirectoryInfo<br/>Container]
-    Dir2[Directory<br/>IDirectoryInfo<br/>Container]
-    SubDir[Subdirectory<br/>IDirectoryInfo<br/>Container]
+    FS[IFileSystem<br/>Root Directory]
+    Dir1[Directory<br/>IDirectoryInfo]
+    Dir2[Directory<br/>IDirectoryInfo]
+    SubDir[Subdirectory<br/>IDirectoryInfo]
     File1[File<br/>IFileInfo]
     File2[File<br/>IFileInfo]
     File3[File<br/>IFileInfo]
@@ -86,39 +77,50 @@ graph TB
     Dir1 --> File2
     Dir2 --> File3
 
-    FS -.->|implements| Container[IFileSystemEntriesContainer]
-    Dir1 -.->|implements| Container
-    Dir2 -.->|implements| Container
-    SubDir -.->|implements| Container
+    Dir1 -.->|GetParentAsync| FS
+    Dir2 -.->|GetParentAsync| FS
+    File1 -.->|GetParentAsync| FS
+    SubDir -.->|GetParentAsync| Dir1
+    File2 -.->|GetParentAsync| Dir1
+    File3 -.->|GetParentAsync| Dir2
 ```
 
 ### Design Principles
 
 **Object-Oriented Design:**
 - Each file and directory is a first-class object with its own behavior
-- Objects manage themselves (a file can delete itself, a directory can list its contents)
-- The file system acts as a factory for creating and retrieving these objects
+- Objects manage themselves (files can open streams, directories can list contents)
+- All entries can navigate to their parent directory via `GetParentAsync()`
+- The file system itself is just a special directory (the root)
+- Simple, flat inheritance hierarchy
 
 **Interface Segregation:**
-- `IFileSystemEntry` - Common behavior for all entries (files and directories)
-- `IFileInfo` - File-specific operations (read/write streams)
-- `IDirectoryInfo` - A directory entry that is also a container
-- `IFileSystemEntriesContainer` - Common container operations (listing, searching)
-- `IFileSystem` - The root container and entry point
+- `IFileSystemEntry` - Base for all entries with common properties and operations (Name, Path, GetParent, Delete, Exists)
+- `IFileInfo` - File entry with content operations (Length, OpenRead, OpenWrite)
+- `IDirectoryInfo` - Directory entry with container operations (GetFiles, GetDirectories, GetFile, GetDirectory)
+- `IFileSystem` - The root directory, inherits all directory capabilities
+
+**Simplified Hierarchy:**
+- `IFileSystem` inherits from `IDirectoryInfo` - the file system IS the root directory
+- No separate container interface needed - directories are containers by nature
+- Mask parameters in directory operations for pattern-based searches (e.g., "*.txt", "test*")
+- Uniform API - the root file system has the same operations as any directory
 
 **Async Patterns:**
-- Operations that may involve I/O use `ValueTask` for efficiency
-- Enumeration uses `IAsyncEnumerable` for lazy, memory-efficient iteration
-- Methods returning `IAsyncEnumerable` don't have the "Async" suffix (they return immediately)
-- Only methods that return `ValueTask/Task` have the "Async" suffix
+- `ValueTask` for potentially synchronous I/O operations (better performance)
+- `IAsyncEnumerable` for lazy enumeration (memory efficient, cancelable)
+- Methods returning `IAsyncEnumerable` omit "Async" suffix (return immediately)
+- Methods returning `ValueTask/Task` include "Async" suffix per .NET conventions
 
 ## Limitations (By Design)
 
-1. **No metadata** - No timestamps, permissions, attributes
-2. **No concurrency control** - Last write wins
-3. **No locking** - Any component can modify any file
-4. **No transactions** - No atomic multi-file operations
-5. **No watching** - No file system change notifications
+1. **No extended metadata** - No timestamps, permissions, or custom attributes
+2. **No concurrency control** - Last write wins, no conflict resolution
+3. **No file locking** - Any component can read/write simultaneously
+4. **No transactions** - Operations are not atomic across multiple files
+5. **No change notifications** - No file system watchers or events
+6. **No symbolic links** - No references or shortcuts
+7. **No compression** - Files stored as-is without compression
 
 ## What This Is
 
@@ -145,19 +147,33 @@ graph LR
 
 ## Error Handling
 
-Simple:
+**Strategy: Simple and predictable**
 
-1. File not found → Return null or empty
-2. Invalid name → Exception
+1. **Not found** → Return null from Get operations
+2. **Invalid paths** → Throw ArgumentException immediately
+3. **Container operations** → Return empty enumerables (never null)
+4. **I/O failures** → Let exceptions propagate
+5. **Out of space** → Throw appropriate exception
 
-Fail fast.
+Fail fast, fail clearly.
 
 ## Summary
 
-The simplest possible file system abstraction:
-- Minimal interface
-- No features beyond basics
-- No implementation details
-- Perfect starting point
+**A minimalist virtual file system design:**
+- Hierarchical structure with files and directories
+- Container pattern for unified navigation
+- Mask-based searching for flexible queries
+- Clean separation of concerns through interface inheritance
+- Async-first design for I/O operations
+- No unnecessary complexity or features
 
-Start here. Add complexity only when reality demands it.
+**Key Design Decisions:**
+- File system IS a directory (inheritance over composition)
+- Parent navigation built into base `IFileSystemEntry`
+- No artificial separation between containers - directories are naturally containers
+- `ValueTask` over `Task` for better performance
+- `IAsyncEnumerable` for memory-efficient enumeration
+- Mask parameters for pattern-based searches
+- Objects manage their own lifecycle (delete, exists)
+
+Start simple. Add complexity only when reality demands it.
